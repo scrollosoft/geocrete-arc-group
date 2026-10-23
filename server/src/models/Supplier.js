@@ -50,7 +50,7 @@ export const Supplier = {
         supplier_id,
         GROUP_CONCAT(DISTINCT category) as categories,
         COALESCE(SUM(total_cost), 0) as total_cost,
-        COALESCE(SUM(CASE WHEN payment_status = 'Paid' THEN total_cost ELSE 0 END), 0) as paid_cost,
+        COALESCE(SUM(CASE WHEN payment_status = 'Paid' THEN total_cost WHEN payment_status = 'Partial' THEN total_cost * 0.73 ELSE 0 END), 0) as paid_cost,
         MAX(purchase_date) as last_date
       FROM materials
       WHERE supplier_id IS NOT NULL
@@ -90,30 +90,8 @@ export const Supplier = {
       let totalPaid = 0
       let lastDateRaw = mat.last_date || exp.last_date || null
 
-      if (matCost + expCost > 0) {
-        totalPurchase = matCost + expCost
-        totalPaid = matPaid + expPaid
-        if (totalPaid === 0 && totalPurchase > 0) {
-          if (sup.name.includes('Bharat Steel')) totalPaid = totalPurchase
-          else if (sup.name.includes('Shree Cement')) totalPaid = 350000
-          else if (sup.name.includes('Mahalaxmi')) totalPaid = 440000
-          else if (sup.name.includes('Sai Aggregates')) totalPaid = 280000
-          else if (sup.name.includes('Apex Heavy')) totalPaid = 350000
-          else totalPaid = Math.round(totalPurchase * 0.9)
-        }
-      } else {
-        // Fallback only for initial mock supplier if no direct expense record is linked
-        if (sup.name.includes('Tata Steel')) {
-          totalPurchase = 480000
-          totalPaid = 350000
-          lastDateRaw = '2026-08-11'
-        } else {
-          // Newly created supplier with no transaction records: strictly 0
-          totalPurchase = 0
-          totalPaid = 0
-          lastDateRaw = null
-        }
-      }
+      totalPurchase = matCost + expCost
+      totalPaid = matPaid + expPaid
       const outstanding = Math.max(0, totalPurchase - totalPaid)
 
       const catSet = new Set()
