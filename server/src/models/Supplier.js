@@ -50,7 +50,8 @@ export const Supplier = {
         supplier_id,
         GROUP_CONCAT(DISTINCT category) as categories,
         COALESCE(SUM(total_cost), 0) as total_cost,
-        COALESCE(SUM(CASE WHEN payment_status = 'Paid' THEN total_cost WHEN payment_status = 'Partial' THEN total_cost * 0.73 ELSE 0 END), 0) as paid_cost,
+        COALESCE(SUM(LEAST(total_cost, COALESCE(paid_amount, CASE WHEN payment_status = 'Paid' THEN total_cost ELSE 0 END))), 0) as paid_cost,
+        COALESCE(SUM(GREATEST(0, total_cost - COALESCE(paid_amount, CASE WHEN payment_status = 'Paid' THEN total_cost ELSE 0 END))), 0) as outstanding_cost,
         MAX(purchase_date) as last_date
       FROM materials
       WHERE supplier_id IS NOT NULL
@@ -61,15 +62,18 @@ export const Supplier = {
       matMap[String(r.supplier_id)] = r
     }
 
+    // Exclude expenses already applied into materials so material purchases are not double-counted
     const [expRows] = await pool.query(`
       SELECT 
         supplier_id,
         GROUP_CONCAT(DISTINCT category) as categories,
         COALESCE(SUM(amount), 0) as total_amount,
-        COALESCE(SUM(paid_amount), 0) as paid_amount,
+        COALESCE(SUM(LEAST(amount, COALESCE(paid_amount, 0))), 0) as paid_amount,
+        COALESCE(SUM(GREATEST(0, amount - COALESCE(paid_amount, 0))), 0) as outstanding_amount,
         MAX(date) as last_date
       FROM expenses
       WHERE supplier_id IS NOT NULL
+        AND COALESCE(applied_to_material, 0) = 0
       GROUP BY supplier_id
     `)
     const expMap = {}
@@ -85,6 +89,8 @@ export const Supplier = {
       const expCost = Number(exp.total_amount || 0)
       const matPaid = Number(mat.paid_cost || 0)
       const expPaid = Number(exp.paid_amount || 0)
+      const matOutstanding = Number(mat.outstanding_cost || 0)
+      const expOutstanding = Number(exp.outstanding_amount || 0)
 
       let totalPurchase = 0
       let totalPaid = 0
@@ -92,7 +98,7 @@ export const Supplier = {
 
       totalPurchase = matCost + expCost
       totalPaid = matPaid + expPaid
-      const outstanding = Math.max(0, totalPurchase - totalPaid)
+      const outstanding = matOutstanding + expOutstanding
 
       const catSet = new Set()
       if (sup.categories) {
@@ -128,12 +134,14 @@ export const Supplier = {
     const activeCount = suppliers.filter((s) => s.isActive !== false).length
     let totalPurchases = 0
     let totalPaid = 0
+    let outstanding = 0
     let overdueCount = 0
     const catSet = new Set()
 
     for (const s of suppliers) {
       totalPurchases += Number(s.totalPurchase || 0)
       totalPaid += Number(s.totalPaid || 0)
+      outstanding += Number(s.outstanding || 0)
       if (Number(s.outstanding || 0) > 0) overdueCount++
       if (s.categories) {
         s.categories.split(',').forEach((c) => {
@@ -141,7 +149,6 @@ export const Supplier = {
         })
       }
     }
-    const outstanding = Math.max(0, totalPurchases - totalPaid)
     const categoriesCount = catSet.size > 0 ? catSet.size : 7
 
     return {

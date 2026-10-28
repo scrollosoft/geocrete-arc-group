@@ -21,7 +21,7 @@ const SECTIONS = [
   { id: 'notifications',        label: 'Notifications',         icon: Bell       },
 ]
 
-export default function SettingsPage({ showNotification }) {
+export default function SettingsPage({ showNotification, onProfileUpdated }) {
   const [settings, setSettings]     = useState(null)
   const [draft, setDraft]           = useState(null)
   const [activeSection, setActive]  = useState('ownerProfile')
@@ -50,9 +50,13 @@ export default function SettingsPage({ showNotification }) {
     setSaving(true)
     try {
       const result = await settingService.updateSettings(draft)
-      setSettings(result.settings || draft)
+      const updated = result.settings || draft
+      setSettings(updated)
       setSaveStatus('saved')
       if (showNotification) showNotification({ type: 'success', message: 'Settings saved successfully!' })
+      if (onProfileUpdated && updated?.ownerProfile) {
+        onProfileUpdated(updated.ownerProfile)
+      }
     } catch {
       setSaveStatus('error')
       if (showNotification) showNotification({ type: 'error', message: 'Failed to save settings' })

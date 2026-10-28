@@ -268,12 +268,14 @@
 }
 
 .user-profile {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 4px 6px;
   cursor: pointer;
   border-radius: var(--radius-sm);
+  user-select: none;
 }
 
 .user-profile:hover {
@@ -314,6 +316,65 @@
 
 .profile-chevron {
   color: #70829F;
+  transition: transform 0.2s ease;
+}
+
+.profile-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 180px;
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  padding: 6px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  animation: profileDropdownFade 0.15s ease-out;
+}
+
+@keyframes profileDropdownFade {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.profile-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.profile-dropdown-item:hover {
+  background-color: #F1F5F9;
+  color: var(--primary-btn);
+}
+
+.profile-dropdown-item svg {
+  color: #70829F;
+  transition: color 0.15s ease;
+}
+
+.profile-dropdown-item:hover svg {
+  color: var(--primary-btn);
 }
 
 /* ==========================================================================
@@ -617,11 +678,18 @@
 }
 
 .form-remark-group {
-  grid-column: span 3;
+  grid-column: span 1;
 }
 
 .form-submit-group {
   grid-column: span 1;
+}
+
+.expense-total-readonly {
+  background-color: #F0F6FF;
+  color: #0293DE;
+  font-weight: 600;
+  cursor: default;
 }
 
 .btn-add-expense-submit {
@@ -1284,6 +1352,12 @@
   }
   .form-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .form-bottom-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .form-remark-group {
+    grid-column: span 1;
   }
 }
 

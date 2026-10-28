@@ -11,7 +11,10 @@ export const supplierService = {
     return request(`/suppliers${query ? `?${query}` : ''}`)
   },
   getById: (id) => request(`/suppliers/${id}`),
-  getPurchases: (id) => request(`/suppliers/${id}/purchases`),
+  getPurchases: (id, siteId) => {
+    const query = siteId ? `?siteId=${siteId}` : ''
+    return request(`/suppliers/${id}/purchases${query}`)
+  },
   recordPayment: (data) => request('/suppliers/record-payment', { method: 'POST', body: JSON.stringify(data) }),
   create: (data) => request('/suppliers', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

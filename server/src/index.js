@@ -4,8 +4,10 @@ import express from 'express'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { connectDB } from './config/db.js'
+import { ensureSchema } from './ensureSchema.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { seedDatabase } from './seed.js'
+import { Material } from './models/Material.js'
 
 import bankAccountRoutes from './routes/bankAccountRoutes.js'
 import siteRoutes from './routes/siteRoutes.js'
@@ -77,8 +79,13 @@ app.use(errorHandler)
 const startServer = async () => {
   try {
     await connectDB()
+    await ensureSchema()
     // Safe auto-seed if empty
     await seedDatabase(false)
+    // Legacy startup tasks commented out to preserve individual purchase transactions and stock
+    // await Material.backfillUnappliedMaterialExpenses()
+    // await Material.consolidateAllDuplicates()
+    // await Material.syncUsedQuantityFromExpenses()
 
     app.listen(port, () => {
       console.log(`API listening on http://localhost:${port}`)

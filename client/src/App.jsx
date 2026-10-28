@@ -30,6 +30,7 @@ import { supplierService } from './services/supplierService.js'
 import { expenseService } from './services/expenseService.js'
 import { dashboardService } from './services/dashboardService.js'
 import { labourService } from './services/labourService.js'
+import { settingService } from './services/settingService.js'
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -56,10 +57,18 @@ export default function App() {
   const [isAddPurchaseOpen, setIsAddPurchaseOpen] = useState(false)
   const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false)
   const [supplierRefreshTrigger, setSupplierRefreshTrigger] = useState(0)
+  const [materialsRefreshTrigger, setMaterialsRefreshTrigger] = useState(0)
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
   const [clientRefreshTrigger, setClientRefreshTrigger] = useState(0)
   const [notification, setNotification] = useState(null)
   const [selectedSupplierId, setSelectedSupplierId] = useState(null)
+  const [settingsKey, setSettingsKey] = useState(0)
+  const [ownerProfile, setOwnerProfile] = useState(null)
+
+  const handleNavigateOwnerProfile = () => {
+    setActiveTab('settings')
+    setSettingsKey((k) => k + 1)
+  }
 
   // 1. Fetch Bank Accounts
   const loadBankAccounts = useCallback(async () => {
@@ -131,12 +140,13 @@ export default function App() {
     let active = true
     const init = async () => {
       try {
-        const [accData, allSites, overview, supData, labourData] = await Promise.all([
+        const [accData, allSites, overview, supData, labourData, settingsData] = await Promise.all([
           bankAccountService.getAll(),
           siteService.getAll(),
           dashboardService.getSiteOverview(),
           supplierService.getAll(),
           labourService.getAll(),
+          settingService.getSettings().catch(() => null),
         ])
         if (!active) return
         setAccounts(accData || [])
@@ -145,6 +155,9 @@ export default function App() {
         setSuppliers(supData || [])
         setWorkers(labourData?.workers || [])
         setLabourSummary(labourData?.summary || {})
+        if (settingsData?.ownerProfile) {
+          setOwnerProfile(settingsData.ownerProfile)
+        }
       } catch (e) {
         console.error('Initialization error:', e)
       } finally {
@@ -202,6 +215,8 @@ export default function App() {
     loadExpenses()
     loadSites()
     loadBankAccounts()
+    setSupplierRefreshTrigger((prev) => prev + 1)
+    setMaterialsRefreshTrigger((prev) => prev + 1)
   }
 
   const handleSiteCreated = (newSite) => {
@@ -226,6 +241,8 @@ export default function App() {
           setSearchQuery={setSearchQuery}
           onOpenAddExpense={handleScrollToAddExpense}
           onOpenAddSite={() => setIsAddSiteOpen(true)}
+          onNavigateOwnerProfile={handleNavigateOwnerProfile}
+          ownerProfile={ownerProfile}
         />
 
         {/* Dashboard, Sites or Expenses Page Body */}
@@ -261,6 +278,7 @@ export default function App() {
               suppliers={suppliers}
               onOpenAddPurchase={() => setIsAddPurchaseOpen(true)}
               showNotification={setNotification}
+              refreshTrigger={materialsRefreshTrigger}
             />
           ) : activeTab === 'suppliers' ? (
             <SuppliersPage
@@ -287,7 +305,11 @@ export default function App() {
               refreshTrigger={clientRefreshTrigger}
             />
           ) : activeTab === 'settings' ? (
-            <SettingsPage showNotification={setNotification} />
+            <SettingsPage
+              key={settingsKey}
+              showNotification={setNotification}
+              onProfileUpdated={setOwnerProfile}
+            />
           ) : (
             <>
               {/* Welcome Section */}
@@ -356,6 +378,10 @@ export default function App() {
         suppliers={suppliers}
         onPurchaseCreated={() => {
           loadSites()
+          loadExpenses()
+          loadBankAccounts()
+          setMaterialsRefreshTrigger((prev) => prev + 1)
+          setSupplierRefreshTrigger((prev) => prev + 1)
         }}
         showNotification={setNotification}
       />

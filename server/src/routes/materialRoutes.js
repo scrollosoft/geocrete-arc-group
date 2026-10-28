@@ -3,6 +3,7 @@ import {
   getMaterials,
   getMaterialSummary,
   getMaterialById,
+  getMaterialHistory,
   getNextRef,
   createMaterial,
   updateMaterial,
@@ -18,8 +19,14 @@ router.route('/')
 router.route('/summary')
   .get(getMaterialSummary)
 
+router.route('/history')
+  .get(getMaterialHistory)
+
 router.route('/next-ref')
   .get(getNextRef)
+
+router.route('/:id/history')
+  .get(getMaterialHistory)
 
 router.route('/:id')
   .get(getMaterialById)

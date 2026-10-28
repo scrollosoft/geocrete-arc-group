@@ -1,32 +1,105 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Calendar, Plus } from 'lucide-react'
 import { expenseService } from '../services/expenseService.js'
 
 const getTodayString = () => new Date().toISOString().split('T')[0]
+
+const ALL_MATERIALS = [
+  'Cement',
+  'Structural steel',
+  'Bricks & Blocks',
+  'River Sand',
+  'Aggregates',
+  'Ready-Mix Concrete',
+  'Masonry labour',
+  'Excavator rental',
+  'Plumbing Supplies',
+  'Electrical Cables',
+]
 
 export default function DailyExpenseForm({
   sites = [],
   suppliers = [],
   onExpenseCreated,
   showNotification,
+  initialData,
 }) {
   const [formData, setFormData] = useState(() => ({
-    date: getTodayString(),
-    site: '',
-    supplier: '',
-    material: 'Cement',
-    quantity: '',
-    unit: 'Bags',
-    ratePerUnit: '',
-    paymentMethod: 'Bank Transfer',
-    remark: '',
+    date: initialData?.date || getTodayString(),
+    site: initialData?.site?._id || initialData?.site || '',
+    supplier: initialData?.supplier?._id || initialData?.supplier || '',
+    material: initialData?.material || 'Cement',
+    quantity: initialData?.quantity ?? '',
+    unit: initialData?.unit || 'Bags',
+    ratePerUnit: initialData?.ratePerUnit ?? '',
+    paymentMethod: initialData?.paymentMethod || 'Bank Transfer',
+    paidAmount: initialData?.paidAmount ?? '',
+    remark: initialData?.remark || '',
   }))
+
+  // Derived: Total Amount = Quantity × Rate Per Unit
+  const totalAmount = (() => {
+    const q = Number(formData.quantity)
+    const r = Number(formData.ratePerUnit)
+    return q > 0 && r >= 0 ? Number((q * r).toFixed(2)) : 0
+  })()
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        date: initialData.date || getTodayString(),
+        site: initialData.site?._id || initialData.site || '',
+        supplier: initialData.supplier?._id || initialData.supplier || '',
+        material: initialData.material || 'Cement',
+        quantity: initialData.quantity ?? '',
+        unit: initialData.unit || 'Bags',
+        ratePerUnit: initialData.ratePerUnit ?? '',
+        paymentMethod: initialData.paymentMethod || 'Bank Transfer',
+        paidAmount: initialData.paidAmount ?? '',
+        remark: initialData.remark || '',
+      })
+    }
+  }, [initialData])
+
+  // Derive the list of materials to show based on selected supplier's categories
+  const materialOptions = useMemo(() => {
+    if (!formData.supplier) return ALL_MATERIALS
+    const selectedSupplier = suppliers.find(
+      (s) => String(s._id || s.id) === String(formData.supplier)
+    )
+    if (!selectedSupplier?.categories) return ALL_MATERIALS
+    const supplierCats = selectedSupplier.categories
+      .split(',')
+      .map((c) => c.trim())
+      .filter(Boolean)
+    if (supplierCats.length === 0) return ALL_MATERIALS
+    // Only show ALL_MATERIALS entries that exist in this supplier's categories
+    const filtered = ALL_MATERIALS.filter((m) => supplierCats.includes(m))
+    return filtered.length > 0 ? filtered : supplierCats
+  }, [formData.supplier, suppliers])
+
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormData((prev) => {
+      const updated = { ...prev, [name]: value }
+      // When supplier changes, clear material if it's no longer available
+      if (name === 'supplier') {
+        const newSupplier = suppliers.find(
+          (s) => String(s._id || s.id) === String(value)
+        )
+        const cats = newSupplier?.categories
+          ? newSupplier.categories.split(',').map((c) => c.trim()).filter(Boolean)
+          : []
+        const allFiltered = ALL_MATERIALS.filter((m) => cats.includes(m))
+        const available = allFiltered.length > 0 ? allFiltered : (cats.length > 0 ? cats : ALL_MATERIALS)
+        if (prev.material && !available.includes(prev.material)) {
+          updated.material = ''
+        }
+      }
+      return updated
+    })
     if (errorMessage) setErrorMessage('')
   }
 
@@ -49,20 +122,37 @@ export default function DailyExpenseForm({
       return
     }
 
+    const numQuantity = Number(formData.quantity)
+    const numRate = Number(formData.ratePerUnit)
+    const computedTotal = Number((numQuantity * numRate).toFixed(2))
+    const numPaid = formData.paidAmount !== '' && formData.paidAmount !== undefined
+      ? Number(formData.paidAmount)
+      : 0
+
+    if (numPaid < 0) {
+      setErrorMessage('Paid amount cannot be negative.')
+      return
+    }
+
+    if (numPaid > computedTotal) {
+      setErrorMessage('Paid amount cannot exceed total amount.')
+      return
+    }
+
     try {
       setSubmitting(true)
+
       const payload = {
         date: formData.date,
         site: formData.site,
         supplier: formData.supplier || undefined,
-        material: formData.material,
-        category: formData.material.toLowerCase().includes('labour') ? 'Labour' : 'Material',
-        quantity: Number(formData.quantity),
+        category: formData.material,
+        quantity: numQuantity,
         unit: formData.unit,
-        ratePerUnit: Number(formData.ratePerUnit),
+        ratePerUnit: numRate,
         paymentMethod: formData.paymentMethod,
         remark: formData.remark,
-        paidAmount: Number(formData.quantity) * Number(formData.ratePerUnit),
+        paidAmount: numPaid,
       }
 
       const created = await expenseService.create(payload)
@@ -70,7 +160,7 @@ export default function DailyExpenseForm({
       if (showNotification) {
         showNotification({
           type: 'success',
-          message: 'Expense added successfully and recorded to MongoDB!',
+          message: 'Expense recorded successfully!',
         })
       }
 
@@ -83,6 +173,7 @@ export default function DailyExpenseForm({
         unit: 'Bags',
         ratePerUnit: '',
         paymentMethod: 'Bank Transfer',
+        paidAmount: '',
         remark: '',
       })
 
@@ -180,16 +271,10 @@ export default function DailyExpenseForm({
               value={formData.material}
               onChange={handleChange}
             >
-              <option value="Cement">Cement</option>
-              <option value="Structural steel">Structural steel</option>
-              <option value="Bricks & Blocks">Bricks & Blocks</option>
-              <option value="River Sand">River Sand</option>
-              <option value="Aggregates">Aggregates</option>
-              <option value="Ready-Mix Concrete">Ready-Mix Concrete</option>
-              <option value="Masonry labour">Masonry labour</option>
-              <option value="Excavator rental">Excavator rental</option>
-              <option value="Plumbing Supplies">Plumbing Supplies</option>
-              <option value="Electrical Cables">Electrical Cables</option>
+              <option value="">-- Select material --</option>
+              {materialOptions.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
             </select>
           </div>
 
@@ -266,7 +351,7 @@ export default function DailyExpenseForm({
           </div>
         </div>
 
-        {/* Row 3: Remark spans 3 cols, Submit button in 4th col */}
+        {/* Row 3: Remark, Total Amount (read-only), Paid Amount, Submit */}
         <div className="form-bottom-row">
           <div className="form-group form-remark-group">
             <label className="form-label" htmlFor="expense-remark">Remark</label>
@@ -281,6 +366,41 @@ export default function DailyExpenseForm({
             />
           </div>
 
+          <div className="form-group">
+            <label className="form-label" htmlFor="expense-total-amount">Total Amount (₹)</label>
+            <div className="input-with-prefix">
+              <span className="input-prefix">₹</span>
+              <input
+                id="expense-total-amount"
+                type="text"
+                className="form-input with-prefix expense-total-readonly"
+                value={totalAmount > 0 ? totalAmount.toLocaleString('en-IN') : '0'}
+                readOnly
+                tabIndex={-1}
+                aria-label="Total Amount calculated automatically"
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="expense-paid-amount">Paid Amount (₹)</label>
+            <div className="input-with-prefix">
+              <span className="input-prefix">₹</span>
+              <input
+                id="expense-paid-amount"
+                type="number"
+                name="paidAmount"
+                className="form-input with-prefix"
+                placeholder="0"
+                min="0"
+                max={totalAmount > 0 ? totalAmount : undefined}
+                step="any"
+                value={formData.paidAmount}
+                onChange={handleChange}
+              />
+            </div>
+          </div>
+
           <div className="form-group form-submit-group">
             <button
               type="submit"
@@ -288,7 +408,7 @@ export default function DailyExpenseForm({
               disabled={submitting}
             >
               <Plus size={16} />
-              <span>{submitting ? 'Recording...' : '+ Add Expense'}</span>
+              <span>{submitting ? 'Recording...' : 'Add Expense'}</span>
             </button>
           </div>
         </div>

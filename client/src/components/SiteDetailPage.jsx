@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   ArrowLeft,
   MapPin,
@@ -11,6 +11,9 @@ import {
   Wrench,
   TrendingUp,
 } from 'lucide-react'
+import { materialService } from '../services/materialService.js'
+import { supplierService } from '../services/supplierService.js'
+import { expenseService } from '../services/expenseService.js'
 
 export default function SiteDetailPage({
   site,
@@ -19,6 +22,172 @@ export default function SiteDetailPage({
   onOpenAddExpense,
 }) {
   const [activeSubTab, setActiveSubTab] = useState('Overview')
+  const [siteMaterials, setSiteMaterials] = useState([])
+  const [allSuppliers, setAllSuppliers] = useState([])
+  const [siteExpensesData, setSiteExpensesData] = useState([])
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false)
+
+  // Load site-specific materials, suppliers, and all site expenses (hooks before any early return)
+  useEffect(() => {
+    let active = true
+    const siteId = site?._id || site?.id
+    if (!siteId) return
+
+    setLoadingSuppliers(true)
+    Promise.all([
+      materialService.getAll({ siteId }).catch(() => ({ materials: [] })),
+      supplierService.getAll().catch(() => []),
+      expenseService.getAll({ siteId }).catch(() => ({ expenses: [] })),
+    ])
+      .then(([matRes, supRes, expRes]) => {
+        if (!active) return
+        setSiteMaterials(matRes?.materials || (Array.isArray(matRes) ? matRes : []))
+        setAllSuppliers(Array.isArray(supRes) ? supRes : (supRes?.suppliers || []))
+        const loadedExpenses = expRes?.expenses || (Array.isArray(expRes) ? expRes : [])
+        if (loadedExpenses.length > 0) {
+          setSiteExpensesData(loadedExpenses)
+        }
+      })
+      .finally(() => {
+        if (active) setLoadingSuppliers(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [site?._id, site?.id])
+
+  // Filter site-specific expenses (uses fresh siteExpensesData if loaded)
+  const baseExpenses = siteExpensesData.length > 0 ? siteExpensesData : expenses
+  const siteExpenses = baseExpenses.filter((e) => {
+    if (!site || !e) return false
+    const eSiteId = e.site?._id || e.site
+    if (site._id && (eSiteId === site._id || String(eSiteId) === String(site._id))) {
+      return true
+    }
+    const eSiteName = (e.site?.name || '').trim().toLowerCase()
+    const targetName = (site.name || '').trim().toLowerCase()
+    return eSiteName && targetName && eSiteName === targetName
+  })
+
+  // Material purchase records for the Materials tab (siteMaterials is the primary source of truth)
+  const materialRecords = siteMaterials.length > 0
+    ? siteMaterials
+    : siteExpenses.filter((e) => e.category && !['labour', 'equipment', 'transport', 'fuel', 'utilities'].includes(e.category.toLowerCase()))
+
+  // Aggregate supplier records for this site across materials & expenses
+  const siteSuppliers = useMemo(() => {
+    if (!site) return []
+    const map = new Map()
+
+    const getSupplierKeyAndName = (sup) => {
+      if (!sup) return null
+      if (typeof sup === 'object') {
+        const id = sup._id || sup.id
+        const name = sup.name || ''
+        return { id: id ? String(id) : null, name }
+      }
+      return { id: null, name: String(sup) }
+    }
+
+    siteMaterials.forEach((m) => {
+      if (!m.supplier) return
+      const supInfo = getSupplierKeyAndName(m.supplier)
+      if (!supInfo || (!supInfo.id && !supInfo.name)) return
+
+      const key = supInfo.id || supInfo.name.toLowerCase()
+      if (!map.has(key)) {
+        const matchedSup = allSuppliers.find(
+          (s) => String(s._id || s.id) === String(supInfo.id) || s.name?.toLowerCase() === supInfo.name.toLowerCase()
+        )
+        map.set(key, {
+          id: supInfo.id || matchedSup?._id || matchedSup?.id,
+          name: supInfo.name || matchedSup?.name || 'Unknown Supplier',
+          companyName: matchedSup?.companyName || m.supplier?.companyName || '',
+          contactPerson: matchedSup?.contactPerson || '',
+          phone: matchedSup?.phone || '',
+          categories: new Set(),
+          totalPurchase: 0,
+          totalPaid: 0,
+          lastDate: null,
+        })
+      }
+
+      const entry = map.get(key)
+      if (m.category) entry.categories.add(m.category)
+      const cost = Number(m.totalCost || 0)
+      const rawPaid = m.paidAmount !== undefined && m.paidAmount !== null
+        ? Number(m.paidAmount)
+        : (m.paymentStatus === 'Paid' ? cost : 0)
+      const paid = Math.min(cost, Math.max(0, rawPaid))
+      const rowOutstanding = Math.max(0, cost - paid)
+
+      entry.totalPurchase += cost
+      entry.totalPaid += paid
+      entry.outstanding = (entry.outstanding || 0) + rowOutstanding
+      if (m.purchaseDate) {
+        if (!entry.lastDate || new Date(m.purchaseDate) > new Date(entry.lastDate)) {
+          entry.lastDate = m.purchaseDate
+        }
+      }
+    })
+
+    siteExpenses.forEach((e) => {
+      if (!e.supplier || e.appliedToMaterial) return
+      // Skip expenses that are already accounted for in material summaries for this site
+      const isAlreadyInMat = siteMaterials.some(
+        (m) =>
+          String(m._id) === `grp-exp-${e.id}` ||
+          (m.materialName && e.category && m.materialName.toLowerCase() === e.category.trim().toLowerCase() && String(m.supplier?.id || m.supplier?._id) === String(e.supplier?.id || e.supplier?._id || e.supplier))
+      )
+      if (isAlreadyInMat) return
+
+      const supInfo = getSupplierKeyAndName(e.supplier)
+      if (!supInfo || (!supInfo.id && !supInfo.name)) return
+
+      const key = supInfo.id || supInfo.name.toLowerCase()
+      if (!map.has(key)) {
+        const matchedSup = allSuppliers.find(
+          (s) => String(s._id || s.id) === String(supInfo.id) || s.name?.toLowerCase() === supInfo.name.toLowerCase()
+        )
+        map.set(key, {
+          id: supInfo.id || matchedSup?._id || matchedSup?.id,
+          name: supInfo.name || matchedSup?.name || 'Unknown Supplier',
+          companyName: matchedSup?.companyName || '',
+          contactPerson: matchedSup?.contactPerson || '',
+          phone: matchedSup?.phone || '',
+          categories: new Set(),
+          totalPurchase: 0,
+          totalPaid: 0,
+          outstanding: 0,
+          lastDate: null,
+        })
+      }
+
+      const entry = map.get(key)
+      if (e.category) entry.categories.add(e.category)
+
+      const amt = Number(e.amount || 0)
+      const rawPaid = Number(e.paidAmount || (e.status === 'Paid' ? amt : 0))
+      const paid = Math.min(amt, Math.max(0, rawPaid))
+      const rowOutstanding = Math.max(0, amt - paid)
+
+      entry.totalPurchase += amt
+      entry.totalPaid += paid
+      entry.outstanding = (entry.outstanding || 0) + rowOutstanding
+      if (e.date) {
+        if (!entry.lastDate || new Date(e.date) > new Date(entry.lastDate)) {
+          entry.lastDate = e.date
+        }
+      }
+    })
+
+    return Array.from(map.values()).map((entry) => ({
+      ...entry,
+      outstanding: entry.outstanding !== undefined ? entry.outstanding : Math.max(0, entry.totalPurchase - entry.totalPaid),
+      categoriesStr: Array.from(entry.categories).join(', ') || 'General',
+    }))
+  }, [site, siteMaterials, siteExpenses, allSuppliers])
 
   if (!site) return null
 
@@ -65,18 +234,6 @@ export default function SiteDetailPage({
   const clientReceived = Math.round(projectBudget * 0.73) // default ~1.35 Cr (73% collected)
   const balanceReceivable = Math.max(0, projectBudget - clientReceived)
 
-  // Filter site-specific expenses
-  const siteExpenses = expenses.filter((e) => {
-    if (!e) return false
-    const eSiteId = e.site?._id || e.site
-    if (site._id && (eSiteId === site._id || String(eSiteId) === String(site._id))) {
-      return true
-    }
-    const eSiteName = (e.site?.name || '').trim().toLowerCase()
-    const targetName = (site.name || '').trim().toLowerCase()
-    return eSiteName && targetName && eSiteName === targetName
-  })
-
   // Default sample transactions matching screenshot if site has few expenses
   const sampleTransactions = [
     {
@@ -116,7 +273,7 @@ export default function SiteDetailPage({
   const displayTransactions = siteExpenses.length > 0
     ? siteExpenses.slice(0, 5).map((e) => ({
         _id: e._id,
-        description: e.description || e.material || 'Expense Item',
+        description: e.category || e.remark || 'Expense Item',
         date: e.date,
         category: e.category || 'Material',
         amount: e.amount || 0,
@@ -352,7 +509,7 @@ export default function SiteDetailPage({
                       <td className="td-date">
                         {item.date ? new Date(item.date).toLocaleDateString('en-GB') : '-'}
                       </td>
-                      <td className="td-description">{item.description || item.material || '-'}</td>
+                      <td className="td-description">{item.category || item.remark || '-'}</td>
                       <td className="td-category">{item.category || 'Material'}</td>
                       <td className="td-amount">{formatExactCurrency(item.amount)}</td>
                       <td className="td-paid">
@@ -398,21 +555,29 @@ export default function SiteDetailPage({
                 </tr>
               </thead>
               <tbody>
-                {siteExpenses.filter((e) => (e.category || '').toLowerCase() === 'material').length > 0 ? (
-                  siteExpenses
-                    .filter((e) => (e.category || '').toLowerCase() === 'material')
-                    .map((item) => (
-                      <tr key={item._id} className="expense-row">
-                        <td className="td-date">
-                          {item.date ? new Date(item.date).toLocaleDateString('en-GB') : '-'}
-                        </td>
-                        <td className="td-description">{item.material || item.description || '-'}</td>
-                        <td className="td-amount">{item.quantity ? `${item.quantity} ${item.unit || ''}` : '-'}</td>
-                        <td className="td-amount">{item.ratePerUnit ? formatExactCurrency(item.ratePerUnit) : '-'}</td>
-                        <td className="td-amount">{formatExactCurrency(item.amount)}</td>
-                        <td className="td-paid">{item.paidAmount ? formatExactCurrency(item.paidAmount) : '-'}</td>
-                      </tr>
-                    ))
+                {materialRecords.length > 0 ? (
+                  materialRecords.map((item) => (
+                    <tr key={item._id || item.id} className="expense-row">
+                      <td className="td-date">
+                        {item.purchaseDate || item.date
+                          ? new Date(item.purchaseDate || item.date).toLocaleDateString('en-GB')
+                          : '-'}
+                      </td>
+                      <td className="td-description">{item.category || '-'}</td>
+                      <td className="td-amount">{item.quantity ? `${item.quantity} ${item.unit || ''}` : '-'}</td>
+                      <td className="td-amount">
+                        {item.ratePerUnit || item.unitPrice
+                          ? formatExactCurrency(item.ratePerUnit || item.unitPrice)
+                          : item.quantity && (item.totalCost || item.amount)
+                          ? formatExactCurrency((item.totalCost || item.amount) / item.quantity)
+                          : '-'}
+                      </td>
+                      <td className="td-amount">
+                        {formatExactCurrency(item.totalCost !== undefined ? item.totalCost : item.amount)}
+                      </td>
+                      <td className="td-paid">{item.paidAmount ? formatExactCurrency(item.paidAmount) : '-'}</td>
+                    </tr>
+                  ))
                 ) : (
                   <tr>
                     <td colSpan={6} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
@@ -449,7 +614,7 @@ export default function SiteDetailPage({
                         <td className="td-date">
                           {item.date ? new Date(item.date).toLocaleDateString('en-GB') : '-'}
                         </td>
-                        <td className="td-description">{item.description || item.material || 'Labour Charges'}</td>
+                        <td className="td-description">{item.remark || item.category || 'Labour Charges'}</td>
                         <td className="td-amount">{formatExactCurrency(item.amount)}</td>
                         <td className="td-paid">{item.paidAmount ? formatExactCurrency(item.paidAmount) : '-'}</td>
                         <td className="td-pending">
@@ -476,11 +641,85 @@ export default function SiteDetailPage({
         </div>
       )}
 
-      {/* Client Payments / Suppliers Tabs */}
-      {(activeSubTab === 'Client Payments' || activeSubTab === 'Suppliers') && (
+      {/* Suppliers Tab */}
+      {activeSubTab === 'Suppliers' && (
+        <div className="site-detail-box" style={{ padding: '0', overflow: 'hidden' }}>
+          <div className="sites-table-scroll">
+            <table className="expenses-table">
+              <thead>
+                <tr>
+                  <th className="th-desc" style={{ padding: '16px 20px', width: '22%' }}>SUPPLIER</th>
+                  <th className="th-cat" style={{ padding: '16px 20px', width: '18%' }}>CATEGORIES</th>
+                  <th className="th-desc" style={{ padding: '16px 20px', width: '16%' }}>CONTACT</th>
+                  <th className="th-amount" style={{ padding: '16px 20px', width: '14%', textAlign: 'right' }}>TOTAL PURCHASE</th>
+                  <th className="th-paid" style={{ padding: '16px 20px', width: '12%', textAlign: 'right' }}>TOTAL PAID</th>
+                  <th className="th-pending" style={{ padding: '16px 20px', width: '10%', textAlign: 'right' }}>OUTSTANDING</th>
+                  <th className="th-date" style={{ padding: '16px 20px', width: '8%', textAlign: 'center' }}>LAST</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingSuppliers ? (
+                  <tr>
+                    <td colSpan={7} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
+                      Loading suppliers for {siteName}...
+                    </td>
+                  </tr>
+                ) : siteSuppliers.length > 0 ? (
+                  siteSuppliers.map((item, idx) => (
+                    <tr key={item.id || idx} className="expense-row">
+                      <td className="td-description" style={{ padding: '16px 20px', fontWeight: 600, color: '#172033' }}>
+                        <div>{item.name}</div>
+                        {item.companyName && (
+                          <div style={{ fontSize: '12px', color: '#70829F', fontWeight: 400, marginTop: '2px' }}>
+                            {item.companyName}
+                          </div>
+                        )}
+                      </td>
+                      <td className="td-category" style={{ padding: '16px 20px', color: '#70829F' }}>
+                        {item.categoriesStr}
+                      </td>
+                      <td className="td-description" style={{ padding: '16px 20px', color: '#70829F' }}>
+                        <div>{item.phone || '—'}</div>
+                        {item.contactPerson && (
+                          <div style={{ fontSize: '12px', color: '#94A3B8' }}>{item.contactPerson}</div>
+                        )}
+                      </td>
+                      <td className="td-amount" style={{ padding: '16px 20px', fontWeight: 600, color: '#172033', textAlign: 'right' }}>
+                        {formatExactCurrency(item.totalPurchase)}
+                      </td>
+                      <td className="td-paid" style={{ padding: '16px 20px', fontWeight: 600, color: '#16A34A', textAlign: 'right' }}>
+                        {formatExactCurrency(item.totalPaid)}
+                      </td>
+                      <td className="td-pending" style={{ padding: '16px 20px', fontWeight: 600, textAlign: 'right' }}>
+                        {item.outstanding > 0 ? (
+                          <span style={{ color: '#E11D48' }}>{formatExactCurrency(item.outstanding)}</span>
+                        ) : (
+                          <span style={{ color: '#70829F' }}>—</span>
+                        )}
+                      </td>
+                      <td className="td-date" style={{ padding: '16px 20px', textAlign: 'center', color: '#70829F' }}>
+                        {item.lastDate ? new Date(item.lastDate).toLocaleDateString('en-GB') : '—'}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
+                      No suppliers currently associated with {siteName}.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Client Payments Tab */}
+      {activeSubTab === 'Client Payments' && (
         <div className="site-detail-box" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
           <p style={{ fontSize: '14px', margin: 0 }}>
-            Showing <strong>{activeSubTab}</strong> records for {siteName}.
+            Showing <strong>Client Payments</strong> records for {siteName}.
           </p>
         </div>
       )}

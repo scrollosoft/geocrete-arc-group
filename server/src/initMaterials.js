@@ -18,6 +18,7 @@ async function setup() {
       unit          VARCHAR(50)   NOT NULL DEFAULT 'Units',
       unit_price    DECIMAL(15,2) NOT NULL DEFAULT 0.00,
       total_cost    DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+      paid_amount   DECIMAL(15,2) NOT NULL DEFAULT 0.00,
       quantity_used DECIMAL(15,4) NOT NULL DEFAULT 0.0000,
       payment_status ENUM('Pending','Partial','Paid') NOT NULL DEFAULT 'Pending',
       notes         TEXT          NOT NULL DEFAULT '',

@@ -31,9 +31,7 @@ const toApi = (row) => {
     date:          fmtDateOnly(row.date),
     site,
     supplier,
-    material:      row.material || '',
     category:      row.category || 'Material',
-    description:   row.description || '',
     quantity:      Number(row.quantity),
     unit:          row.unit || 'Units',
     ratePerUnit:   Number(row.rate_per_unit),
@@ -43,6 +41,8 @@ const toApi = (row) => {
     paymentMethod: row.payment_method || 'Bank Transfer',
     remark:        row.remark || '',
     status:        row.status,
+    paymentStatus: row.status === 'Pending' ? 'Unpaid' : row.status,
+    appliedToMaterial: Boolean(row.applied_to_material),
     createdAt:     fmtDate(row.created_at),
     updatedAt:     fmtDate(row.updated_at),
   }
@@ -88,9 +88,9 @@ export const Expense = {
     }
 
     if (search) {
-      where += ' AND (e.description LIKE ? OR e.material LIKE ? OR e.remark LIKE ?)'
+      where += ' AND (e.category LIKE ? OR e.remark LIKE ?)'
       const like = `%${search}%`
-      params.push(like, like, like)
+      params.push(like, like)
     }
 
     const orderSql = ' ORDER BY e.date DESC, e.created_at DESC'
@@ -133,19 +133,26 @@ export const Expense = {
   },
 
   async create(data) {
+    const rawStatus = data.paymentStatus || data.status
+    let status = data.status || 'Completed'
+    if (rawStatus) {
+      if (rawStatus === 'Unpaid' || rawStatus === 'Pending') status = 'Pending'
+      else if (rawStatus === 'Partial') status = 'Partial'
+      else if (rawStatus === 'Paid') status = 'Paid'
+      else status = rawStatus
+    }
+
     const [result] = await getPool().query(
       `INSERT INTO expenses
-        (date, site_id, supplier_id, material, category, description,
+        (date, site_id, supplier_id, category,
          quantity, unit, rate_per_unit, amount, paid_amount, pending_amount,
          payment_method, remark, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.date ? new Date(data.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
         data.site || data.siteId,
         data.supplier || data.supplierId || null,
-        data.material || '',
         data.category || 'Material',
-        data.description || '',
         Number(data.quantity) || 0,
         data.unit || 'Units',
         Number(data.ratePerUnit) || 0,
@@ -154,7 +161,7 @@ export const Expense = {
         Number(data.pendingAmount) || 0,
         data.paymentMethod || 'Bank Transfer',
         data.remark || '',
-        data.status || 'Completed',
+        status,
       ],
     )
     return this.findById(result.insertId)
@@ -168,9 +175,7 @@ export const Expense = {
       date:          'date',
       site:          'site_id',
       supplier:      'supplier_id',
-      material:      'material',
       category:      'category',
-      description:   'description',
       quantity:      'quantity',
       unit:          'unit',
       ratePerUnit:   'rate_per_unit',
@@ -180,6 +185,7 @@ export const Expense = {
       paymentMethod: 'payment_method',
       remark:        'remark',
       status:        'status',
+      paymentStatus: 'status',
     }
 
     const sets = []
@@ -191,6 +197,7 @@ export const Expense = {
         if (apiKey === 'date') val = new Date(val).toISOString().slice(0, 10)
         if (['quantity','ratePerUnit','amount','paidAmount','pendingAmount'].includes(apiKey)) val = Number(val)
         if (apiKey === 'supplier' && !val) val = null
+        if ((apiKey === 'status' || apiKey === 'paymentStatus') && (val === 'Unpaid' || val === 'Pending')) val = 'Pending'
         params.push(val)
       }
     }

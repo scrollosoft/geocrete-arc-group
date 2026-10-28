@@ -14,6 +14,17 @@ export const materialService = {
   },
   getSummary: () => request('/materials/summary'),
   getNextRef: () => request('/materials/next-ref'),
+  getHistory: (id, params = {}) => {
+    const cleanParams = {}
+    Object.entries(params).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== '') {
+        cleanParams[key] = val
+      }
+    })
+    const query = new URLSearchParams(cleanParams).toString()
+    const endpoint = id ? `/materials/${id}/history` : '/materials/history'
+    return request(`${endpoint}${query ? `?${query}` : ''}`)
+  },
   create: (data) => request('/materials', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/materials/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/materials/${id}`, { method: 'DELETE' }),

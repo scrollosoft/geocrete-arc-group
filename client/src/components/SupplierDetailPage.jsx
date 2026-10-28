@@ -19,6 +19,7 @@ const PAGE_SIZE = 5
 
 export default function SupplierDetailPage({
   supplierId,
+  siteId,
   onBack,
   showNotification,
 }) {
@@ -37,14 +38,15 @@ export default function SupplierDetailPage({
     if (!supplierId) return
     setLoading(true)
     try {
-      const res = await supplierService.getPurchases(supplierId)
+      // Pass siteId when available to filter purchase history to this site only
+      const res = await supplierService.getPurchases(supplierId, siteId || null)
       setData(res)
     } catch {
       if (showNotification) showNotification({ type: 'error', message: 'Failed to load supplier details.' })
     } finally {
       setLoading(false)
     }
-  }, [supplierId])
+  }, [supplierId, siteId])
 
   useEffect(() => { load() }, [load])
 
@@ -77,7 +79,6 @@ export default function SupplierDetailPage({
     if (!n || isNaN(n) || Number(n) === 0) return '₹0'
     const num = Number(n)
     if (num >= 10000000) return `₹${(num / 10000000).toFixed(2).replace(/\.00$/, '')} Cr`
-    if (num >= 100000)   return `₹${(num / 100000).toFixed(1).replace(/\.0$/, '')} L`
     return `₹${num.toLocaleString('en-IN')}`
   }
 
@@ -209,60 +210,81 @@ export default function SupplierDetailPage({
           <table className="sites-table" style={{ width: '100%' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #E5EAF1' }}>
-                <th style={{ padding: '14px 20px', width: '14%' }}>DATE</th>
-                <th style={{ padding: '14px 20px', width: '28%' }}>DETAILS</th>
-                <th style={{ padding: '14px 20px', width: '14%' }}>REF NO.</th>
-                <th style={{ padding: '14px 20px', width: '16%', textAlign: 'right' }}>AMOUNT</th>
-                <th style={{ padding: '14px 20px', width: '14%', textAlign: 'center' }}>STATUS</th>
-                <th style={{ padding: '14px 20px', width: '14%', textAlign: 'center' }}>ACTION</th>
+                <th style={{ padding: '14px 20px', width: '11%' }}>DATE</th>
+                <th style={{ padding: '14px 20px', width: '20%' }}>DETAILS</th>
+                <th style={{ padding: '14px 20px', width: '12%' }}>REF NO.</th>
+                <th style={{ padding: '14px 20px', width: '12%', textAlign: 'right' }}>AMOUNT</th>
+                <th style={{ padding: '14px 20px', width: '12%', textAlign: 'right' }}>TOTAL PAID</th>
+                <th style={{ padding: '14px 20px', width: '12%', textAlign: 'right' }}>OUTSTANDING</th>
+                <th style={{ padding: '14px 20px', width: '10%', textAlign: 'center' }}>STATUS</th>
+                <th style={{ padding: '14px 20px', width: '11%', textAlign: 'center' }}>ACTION</th>
               </tr>
             </thead>
             <tbody>
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '48px 20px', color: '#70829F', fontSize: '14px' }}>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '48px 20px', color: '#70829F', fontSize: '14px' }}>
                     No purchase records found for this supplier.
                   </td>
                 </tr>
               ) : (
-                paginated.map((p) => (
-                  <tr key={p._id} className="site-data-row">
-                    <td style={{ padding: '14px 20px', color: '#70829F', fontSize: '13px' }}>
-                      {p.purchaseDate || '—'}
-                    </td>
-                    <td style={{ padding: '14px 20px', color: '#172033', fontWeight: 500, fontSize: '13.5px' }}>
-                      {p.materialName || '—'}
-                      {p.site && typeof p.site === 'object' && (
-                        <div style={{ fontSize: '12px', color: '#70829F', marginTop: '2px', fontWeight: 400 }}>
-                          {p.site.name}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '14px 20px', color: '#70829F', fontSize: '12.5px' }}>
-                      {p.refNumber || '—'}
-                    </td>
-                    <td style={{ padding: '14px 20px', color: '#172033', fontWeight: 600, textAlign: 'right', fontSize: '13.5px' }}>
-                      ₹{Number(p.totalCost || 0).toLocaleString('en-IN')}
-                    </td>
-                    <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                      {statusBadge(p.paymentStatus)}
-                    </td>
-                    <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                      {p.paymentStatus !== 'Paid' ? (
-                        <button
-                          type="button"
-                          className="sd-pay-btn"
-                          onClick={() => openPayModal(p)}
-                          title="Record payment for this purchase"
-                        >
-                          Pay
-                        </button>
-                      ) : (
-                        <span style={{ color: '#B0BFCF', fontSize: '12px' }}>—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                paginated.map((p) => {
+                  const cost = Number(p.totalCost || 0)
+                  const rawPaid = p.isExpense
+                    ? Number(p.paidAmount || 0)
+                    : Number(p.paidAmount !== undefined && p.paidAmount !== null ? p.paidAmount : (p.paymentStatus === 'Paid' ? cost : 0))
+                  const rowPaid = Math.min(cost, Math.max(0, rawPaid))
+                  const rowOutstanding = Math.max(0, cost - rowPaid)
+
+                  return (
+                    <tr key={p._id} className="site-data-row">
+                      <td style={{ padding: '14px 20px', color: '#70829F', fontSize: '13px' }}>
+                        {p.purchaseDate
+                          ? (p.purchaseDate.includes('T')
+                              ? new Date(p.purchaseDate).toLocaleDateString('en-GB')
+                              : p.purchaseDate)
+                          : '—'}
+                      </td>
+                      <td style={{ padding: '14px 20px', color: '#172033', fontWeight: 500, fontSize: '13.5px' }}>
+                        {p.materialName || '—'}
+                        {p.site && typeof p.site === 'object' && (
+                          <div style={{ fontSize: '12px', color: '#70829F', marginTop: '2px', fontWeight: 400 }}>
+                            {p.site.name}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '14px 20px', color: '#70829F', fontSize: '12.5px' }}>
+                        {p.refNumber || '—'}
+                      </td>
+                      <td style={{ padding: '14px 20px', color: '#172033', fontWeight: 600, textAlign: 'right', fontSize: '13.5px' }}>
+                        ₹{cost.toLocaleString('en-IN')}
+                      </td>
+                      <td style={{ padding: '14px 20px', color: '#16A34A', fontWeight: 600, textAlign: 'right', fontSize: '13.5px' }}>
+                        ₹{rowPaid.toLocaleString('en-IN')}
+                      </td>
+                      <td style={{ padding: '14px 20px', fontWeight: 600, textAlign: 'right', fontSize: '13.5px', color: rowOutstanding > 0 ? '#EF4444' : '#70829F' }}>
+                        {rowOutstanding > 0 ? `₹${rowOutstanding.toLocaleString('en-IN')}` : '—'}
+                      </td>
+                      <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                        {statusBadge(p.paymentStatus)}
+                      </td>
+                      <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                        {p.paymentStatus !== 'Paid' ? (
+                          <button
+                            type="button"
+                            className="sd-pay-btn"
+                            onClick={() => openPayModal(p)}
+                            title="Record payment for this purchase"
+                          >
+                            Pay
+                          </button>
+                        ) : (
+                          <span style={{ color: '#B0BFCF', fontSize: '12px' }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>

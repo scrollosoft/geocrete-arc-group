@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { X, Truck, Check } from 'lucide-react'
 import { supplierService } from '../services/supplierService.js'
 
@@ -38,6 +38,16 @@ export default function AddSupplierModal({
   const [customCategory, setCustomCategory] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  const containerRef = useRef(null)
+  const formRef = useRef(null)
+
+  useEffect(() => {
+    if (isOpen) {
+      if (containerRef.current) containerRef.current.scrollTop = 0
+      if (formRef.current) formRef.current.scrollTop = 0
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -171,18 +181,21 @@ export default function AddSupplierModal({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
+        ref={containerRef}
         className="modal-container"
         style={{
           maxWidth: '640px',
-          maxHeight: '92vh',
-          overflowY: 'auto',
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
           background: '#FFFFFF',
           borderRadius: '12px',
+          overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="modal-header" style={{ padding: '20px 24px', borderBottom: '1px solid #E5EAF1' }}>
+        <div className="modal-header" style={{ padding: '20px 24px', borderBottom: '1px solid #E5EAF1', flexShrink: 0 }}>
           <div className="modal-title-row" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               className="modal-icon-badge"
@@ -201,7 +214,7 @@ export default function AddSupplierModal({
             </div>
             <div>
               <h3 className="modal-title" style={{ fontSize: '18px', fontWeight: 700, color: '#172033', margin: 0 }}>
-                + Add New Supplier
+                Add New Supplier
               </h3>
               <p className="modal-subtitle" style={{ fontSize: '13px', color: '#70829F', margin: '4px 0 0 0' }}>
                 Enter supplier details, material categories, and payment terms
@@ -243,7 +256,17 @@ export default function AddSupplierModal({
         )}
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="modal-form" style={{ padding: '20px 24px' }}>
+        <form
+          ref={formRef}
+          onSubmit={handleSubmit}
+          className="modal-form"
+          style={{
+            padding: '20px 24px',
+            overflowY: 'auto',
+            flex: 1,
+            margin: 0,
+          }}
+        >
           <div className="modal-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             {/* 1. Supplier / Company Name */}
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
@@ -293,7 +316,7 @@ export default function AddSupplierModal({
                   marginBottom: '8px',
                 }}
               >
-                Supplier Categories * <span style={{ fontSize: '12px', fontWeight: 400, color: '#70829F' }}>(select one or more)</span>
+                Material Categories * <span style={{ fontSize: '12px', fontWeight: 400, color: '#70829F' }}>(select one or more)</span>
               </label>
               <div
                 style={{
@@ -457,63 +480,8 @@ export default function AddSupplierModal({
               />
             </div>
 
-            {/* 6. Payment Terms */}
+            {/* 6. Status */}
             <div className="form-group">
-              <label
-                className="form-label"
-                style={{
-                  display: 'block',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  lineHeight: '17.31px',
-                  color: '#172033',
-                  marginBottom: '6px',
-                }}
-              >
-                Payment Terms
-              </label>
-              <select
-                name="paymentTerms"
-                className="form-select"
-                value={formData.paymentTerms}
-                onChange={handleChange}
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: '8px',
-                  border: '1px solid #E5EAF1',
-                  fontSize: '14px',
-                  color: '#172033',
-                  background: '#FFFFFF',
-                }}
-              >
-                {PAYMENT_TERMS_OPTIONS.map((term) => (
-                  <option key={term} value={term}>
-                    {term}
-                  </option>
-                ))}
-              </select>
-              {formData.paymentTerms === 'Custom' && (
-                <input
-                  type="text"
-                  name="customPaymentTerms"
-                  placeholder="e.g. 45 Days net"
-                  value={formData.customPaymentTerms}
-                  onChange={handleChange}
-                  style={{
-                    width: '100%',
-                    marginTop: '6px',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #E5EAF1',
-                    fontSize: '13px',
-                  }}
-                />
-              )}
-            </div>
-
-            {/* 7. Status */}
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label
                 className="form-label"
                 style={{
@@ -527,7 +495,7 @@ export default function AddSupplierModal({
               >
                 Status
               </label>
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', height: '42px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: '#172033' }}>
                   <input
                     type="radio"
@@ -551,7 +519,7 @@ export default function AddSupplierModal({
               </div>
             </div>
 
-            {/* 8. Address */}
+            {/* 7. Address */}
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label
                 className="form-label"

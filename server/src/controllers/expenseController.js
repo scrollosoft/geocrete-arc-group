@@ -1,5 +1,6 @@
 import { Expense } from '../models/Expense.js'
 import { Site } from '../models/Site.js'
+import { Material, isQualifyingMaterialPurchase } from '../models/Material.js'
 import { getPool } from '../config/db.js'
 
 export const getExpenses = async (req, res, next) => {
@@ -38,14 +39,14 @@ export const createExpense = async (req, res, next) => {
       date,
       site,
       supplier,
-      material,
       category,
-      description,
       quantity,
       unit,
       ratePerUnit,
       paidAmount,
       paymentMethod,
+      paymentStatus,
+      status,
       remark,
     } = req.body
 
@@ -76,26 +77,34 @@ export const createExpense = async (req, res, next) => {
     }
 
     const calculatedPending = Number((calculatedAmount - parsedPaid).toFixed(2))
-    const finalDescription  = description || (material ? `${material} – ${numQuantity} ${unit || ''}`.trim() : 'Material Purchase')
 
-    // Use a transaction so expense insert + site totalSpent update are atomic
+    const expenseCategory = category || 'Material'
+    // Backend calculates payment status automatically from calculated total and actual paid amount
+    const expenseStatus =
+      calculatedAmount > 0 && parsedPaid >= calculatedAmount
+        ? 'Paid'
+        : parsedPaid > 0
+          ? 'Partial'
+          : 'Pending'
+    const shouldApplyToMaterial = isQualifyingMaterialPurchase(expenseCategory, expenseCategory)
+
     const conn = await getPool().getConnection()
     try {
       await conn.beginTransaction()
 
+      const expenseDate = date ? new Date(date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
+
       const [result] = await conn.query(
         `INSERT INTO expenses
-          (date, site_id, supplier_id, material, category, description,
+          (date, site_id, supplier_id, category,
            quantity, unit, rate_per_unit, amount, paid_amount, pending_amount,
-           payment_method, remark, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           payment_method, remark, status, applied_to_material)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          date ? new Date(date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+          expenseDate,
           site,
           supplier || null,
-          material || '',
-          category || 'Material',
-          finalDescription,
+          expenseCategory,
           numQuantity,
           unit || 'Units',
           numRate,
@@ -104,7 +113,8 @@ export const createExpense = async (req, res, next) => {
           calculatedPending,
           paymentMethod || 'Bank Transfer',
           remark || '',
-          calculatedPending === 0 ? 'Paid' : parsedPaid > 0 ? 'Partial' : 'Pending',
+          expenseStatus,
+          shouldApplyToMaterial ? 1 : 0,
         ],
       )
 
@@ -112,6 +122,22 @@ export const createExpense = async (req, res, next) => {
         'UPDATE sites SET total_spent = total_spent + ? WHERE id = ?',
         [calculatedAmount, site],
       )
+
+      if (shouldApplyToMaterial) {
+        await Material.applyExpensePurchase(conn, {
+          materialName: expenseCategory,
+          siteId: site,
+          supplierId: supplier || null,
+          quantity: numQuantity,
+          unit: unit || 'Units',
+          ratePerUnit: numRate,
+          amount: calculatedAmount,
+          paidAmount: parsedPaid,
+          purchaseDate: expenseDate,
+          category: expenseCategory,
+          notes: remark || '',
+        })
+      }
 
       await conn.commit()
       conn.release()
@@ -137,6 +163,11 @@ export const updateExpense = async (req, res, next) => {
 
     const oldAmount = existingExpense.amount
     const oldSiteId = existingExpense.site?._id || existingExpense.site
+    const oldSupplierId = existingExpense.supplier?._id || existingExpense.supplier || null
+    const oldCategory = existingExpense.category || 'Material'
+    const oldQuantity = existingExpense.quantity
+    const oldPaid = existingExpense.paidAmount
+    const wasApplied = Boolean(existingExpense.appliedToMaterial)
 
     const quantity    = req.body.quantity    !== undefined ? Number(req.body.quantity)    : existingExpense.quantity
     const ratePerUnit = req.body.ratePerUnit !== undefined ? Number(req.body.ratePerUnit) : existingExpense.ratePerUnit
@@ -144,6 +175,20 @@ export const updateExpense = async (req, res, next) => {
 
     const newAmount  = Number((quantity * ratePerUnit).toFixed(2))
     const newPending = Math.max(0, Number((newAmount - paidAmount).toFixed(2)))
+    const newCategory = req.body.category !== undefined ? req.body.category : oldCategory
+    const newSiteId = req.body.site !== undefined ? req.body.site : oldSiteId
+    const newSupplierId = req.body.supplier !== undefined ? (req.body.supplier || null) : oldSupplierId
+    const newUnit = req.body.unit !== undefined ? req.body.unit : existingExpense.unit
+    const newDate = req.body.date !== undefined ? req.body.date : existingExpense.date
+    const shouldApply = isQualifyingMaterialPurchase(newCategory, newCategory)
+
+    // Backend calculates payment status automatically from calculated total and actual paid amount
+    const newStatus =
+      newAmount > 0 && paidAmount >= newAmount
+        ? 'Paid'
+        : paidAmount > 0
+          ? 'Partial'
+          : 'Pending'
 
     const updateData = {
       ...req.body,
@@ -152,20 +197,33 @@ export const updateExpense = async (req, res, next) => {
       amount:        newAmount,
       paidAmount,
       pendingAmount: newPending,
-      status:        newPending === 0 ? 'Paid' : paidAmount > 0 ? 'Partial' : 'Pending',
+      status:        newStatus,
+      appliedToMaterial: shouldApply ? 1 : 0,
     }
 
     const conn = await getPool().getConnection()
     try {
       await conn.beginTransaction()
 
+      if (wasApplied) {
+        await Material.reverseExpensePurchase(conn, {
+          materialName: oldCategory,
+          siteId: oldSiteId,
+          supplierId: oldSupplierId,
+          quantity: oldQuantity,
+          amount: oldAmount,
+          paidAmount: oldPaid,
+        })
+      }
+
       // Build dynamic UPDATE for expenses
       const colMap = {
         date: 'date', site: 'site_id', supplier: 'supplier_id',
-        material: 'material', category: 'category', description: 'description',
+        category: 'category',
         quantity: 'quantity', unit: 'unit', ratePerUnit: 'rate_per_unit',
         amount: 'amount', paidAmount: 'paid_amount', pendingAmount: 'pending_amount',
         paymentMethod: 'payment_method', remark: 'remark', status: 'status',
+        appliedToMaterial: 'applied_to_material',
       }
       const sets = []
       const params = []
@@ -174,7 +232,7 @@ export const updateExpense = async (req, res, next) => {
           sets.push(`${col} = ?`)
           let val = updateData[apiKey]
           if (apiKey === 'date') val = new Date(val).toISOString().slice(0, 10)
-          if (['quantity','ratePerUnit','amount','paidAmount','pendingAmount'].includes(apiKey)) val = Number(val)
+          if (['quantity','ratePerUnit','amount','paidAmount','pendingAmount','appliedToMaterial'].includes(apiKey)) val = Number(val)
           if (apiKey === 'supplier' && !val) val = null
           params.push(val)
         }
@@ -185,8 +243,7 @@ export const updateExpense = async (req, res, next) => {
       }
 
       // Adjust site totalSpent
-      const newSiteId = String(req.body.site || oldSiteId)
-      if (newSiteId === String(oldSiteId)) {
+      if (String(newSiteId) === String(oldSiteId)) {
         const diff = newAmount - oldAmount
         if (diff !== 0) {
           await conn.query('UPDATE sites SET total_spent = total_spent + ? WHERE id = ?', [diff, oldSiteId])
@@ -194,6 +251,22 @@ export const updateExpense = async (req, res, next) => {
       } else {
         await conn.query('UPDATE sites SET total_spent = total_spent - ? WHERE id = ?', [oldAmount, oldSiteId])
         await conn.query('UPDATE sites SET total_spent = total_spent + ? WHERE id = ?', [newAmount, newSiteId])
+      }
+
+      if (shouldApply) {
+        await Material.applyExpensePurchase(conn, {
+          materialName: newCategory,
+          siteId: newSiteId,
+          supplierId: newSupplierId,
+          quantity,
+          unit: newUnit || 'Units',
+          ratePerUnit,
+          amount: newAmount,
+          paidAmount,
+          purchaseDate: newDate,
+          category: newCategory,
+          notes: existingExpense.remark || '',
+        })
       }
 
       await conn.commit()
@@ -219,10 +292,23 @@ export const deleteExpense = async (req, res, next) => {
     }
 
     const siteId = expense.site?._id || expense.site
+    const supplierId = expense.supplier?._id || expense.supplier || null
 
     const conn = await getPool().getConnection()
     try {
       await conn.beginTransaction()
+
+      if (expense.appliedToMaterial) {
+        await Material.reverseExpensePurchase(conn, {
+          materialName: expense.category,
+          siteId,
+          supplierId,
+          quantity: expense.quantity,
+          amount: expense.amount,
+          paidAmount: expense.paidAmount,
+        })
+      }
+
       await conn.query('DELETE FROM expenses WHERE id = ?', [req.params.id])
       await conn.query('UPDATE sites SET total_spent = total_spent - ? WHERE id = ?', [expense.amount, siteId])
       await conn.commit()

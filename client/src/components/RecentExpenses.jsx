@@ -101,7 +101,6 @@ export default function RecentExpenses({
           <thead>
             <tr>
               <th className="th-date">DATE</th>
-              <th className="th-desc">DESCRIPTION</th>
               <th className="th-site">SITE</th>
               <th className="th-cat">CATEGORY</th>
               <th className="th-amount">AMOUNT</th>
@@ -113,7 +112,7 @@ export default function RecentExpenses({
             {loading ? (
               [1, 2, 3, 4].map((i) => (
                 <tr key={i} className="skeleton-row">
-                  <td colSpan={7}>
+                  <td colSpan={6}>
                     <div className="skeleton-line" style={{ height: '24px', margin: '4px 0' }} />
                   </td>
                 </tr>
@@ -122,7 +121,6 @@ export default function RecentExpenses({
               expenses.map((item) => (
                 <tr key={item._id} className="expense-row">
                   <td className="td-date">{formatDate(item.date)}</td>
-                  <td className="td-description">{item.description}</td>
                   <td className="td-site">{item.site?.name || 'Aarav Heights'}</td>
                   <td className="td-category">{item.category || 'Material'}</td>
                   <td className="td-amount">{formatCurrency(item.amount)}</td>
@@ -132,7 +130,7 @@ export default function RecentExpenses({
               ))
             ) : (
               <tr>
-                <td colSpan={7} className="td-empty">
+                <td colSpan={6} className="td-empty">
                   No expense records match the selected filter.
                 </td>
               </tr>
