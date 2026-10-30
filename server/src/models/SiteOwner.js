@@ -1,6 +1,35 @@
 import { getPool } from '../config/db.js'
 import { withId, fmtDate } from './helpers.js'
 
+// Map a site row directly from the sites database table into the API shape
+const toApiFromSite = (row) => {
+  if (!row) return null
+  const id = String(row.site_id || row.id)
+  const budget = Number(row.total_budget || 0)
+  const advance = Number(row.advance_amount || 0)
+  const received = Number(row.total_received || 0)
+  const receivable = Math.max(0, budget - received)
+
+  return {
+    _id: id,
+    id,
+    name:          row.site_owner || '',
+    phone:         row.contact_number || '',
+    email:         row.email || '',
+    address:       row.address || '',
+    siteId:        id,
+    siteName:      row.name || row.site_name || '',
+    projectValue:  budget,
+    advanceAmount: advance,
+    totalReceived: received,
+    receivable:    receivable,
+    status:        row.status || 'Active',
+    notes:         row.description || '',
+    isActive:      true,
+    createdAt:     fmtDate(row.created_at),
+  }
+}
+
 const toApi = (row) => {
   if (!row) return null
   return {
@@ -29,35 +58,50 @@ const toApi = (row) => {
 
 export const SiteOwner = {
   async find({ search } = {}) {
+    // Read directly from the sites database table
     let sql = `
-      SELECT so.*, s.name AS site_name,
-        GREATEST(so.project_value - so.total_received, 0) AS receivable
-      FROM site_owners so
-      LEFT JOIN sites s ON s.id = so.site_id
-      WHERE so.is_active = 1
+      SELECT
+        s.id          AS site_id,
+        s.id          AS id,
+        s.name        AS site_name,
+        s.name,
+        s.site_owner,
+        s.contact_number,
+        s.email,
+        s.address,
+        s.total_budget,
+        s.advance_amount,
+        s.total_received,
+        s.status,
+        s.description,
+        s.created_at
+      FROM sites s
     `
     const params = []
     if (search) {
-      sql += ' AND (so.name LIKE ? OR s.name LIKE ? OR so.phone LIKE ?)'
-      const like = `%${search}%`
-      params.push(like, like, like)
+      sql += ` WHERE (
+        LOWER(s.name) LIKE ? OR
+        LOWER(s.site_owner) LIKE ? OR
+        s.contact_number LIKE ? OR
+        s.email LIKE ?
+      )`
+      const like = `%${search.toLowerCase()}%`
+      params.push(like, like, like, like)
     }
-    sql += ' ORDER BY so.created_at DESC'
+    sql += ' ORDER BY s.id DESC'
     const [rows] = await getPool().query(sql, params)
-    return rows.map(toApi)
+    return rows.map(toApiFromSite)
   },
 
   async getSummary() {
     const pool = getPool()
-    const [[countRow]] = await pool.query(
-      'SELECT COUNT(*) AS cnt FROM site_owners WHERE is_active = 1'
-    )
+    const [[countRow]] = await pool.query('SELECT COUNT(*) AS cnt FROM sites')
     const [[sumRow]] = await pool.query(`
       SELECT
-        COALESCE(SUM(project_value), 0) AS total_project,
+        COALESCE(SUM(total_budget), 0) AS total_project,
         COALESCE(SUM(total_received), 0) AS total_received,
-        COALESCE(SUM(GREATEST(project_value - total_received, 0)), 0) AS balance
-      FROM site_owners WHERE is_active = 1
+        COALESCE(SUM(GREATEST(total_budget - total_received, 0)), 0) AS balance
+      FROM sites
     `)
     return {
       count:         Number(countRow.cnt),
@@ -68,14 +112,37 @@ export const SiteOwner = {
   },
 
   async findById(id) {
+    const cleanId = String(id).replace(/^site-/, '')
     const [rows] = await getPool().query(`
+      SELECT
+        s.id AS site_id,
+        s.id,
+        s.name AS site_name,
+        s.name,
+        s.site_owner,
+        s.contact_number,
+        s.email,
+        s.address,
+        s.total_budget,
+        s.advance_amount,
+        s.total_received,
+        s.status,
+        s.description,
+        s.created_at
+      FROM sites s
+      WHERE s.id = ?
+    `, [cleanId])
+    if (rows.length > 0) {
+      return toApiFromSite(rows[0])
+    }
+    const [soRows] = await getPool().query(`
       SELECT so.*, s.name AS site_name,
         GREATEST(so.project_value - so.total_received, 0) AS receivable
       FROM site_owners so
       LEFT JOIN sites s ON s.id = so.site_id
       WHERE so.id = ?
     `, [id])
-    return toApi(rows[0] || null)
+    return toApi(soRows[0] || null)
   },
 
   async create(data) {
@@ -132,9 +199,10 @@ export const SiteOwner = {
 
   async getPayments(clientId) {
     const pool = getPool()
+    const cleanId = String(clientId).replace(/^site-/, '')
     const [rows] = await pool.query(
-      `SELECT * FROM client_payments WHERE client_id = ? ORDER BY payment_date DESC, id DESC`,
-      [clientId]
+      `SELECT * FROM client_payments WHERE client_id = ? OR site_id = ? ORDER BY payment_date DESC, id DESC`,
+      [clientId, cleanId]
     )
     return rows.map((r) => ({
       ...withId(r),

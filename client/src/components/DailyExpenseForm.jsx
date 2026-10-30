@@ -20,6 +20,7 @@ const ALL_MATERIALS = [
 export default function DailyExpenseForm({
   sites = [],
   suppliers = [],
+  bankAccounts = [],
   onExpenseCreated,
   showNotification,
   initialData,
@@ -33,6 +34,7 @@ export default function DailyExpenseForm({
     unit: initialData?.unit || 'Bags',
     ratePerUnit: initialData?.ratePerUnit ?? '',
     paymentMethod: initialData?.paymentMethod || 'Bank Transfer',
+    bankAccountId: initialData?.bankAccountId || initialData?.bankAccount || '',
     paidAmount: initialData?.paidAmount ?? '',
     remark: initialData?.remark || '',
   }))
@@ -57,6 +59,7 @@ export default function DailyExpenseForm({
         unit: initialData.unit || 'Bags',
         ratePerUnit: initialData.ratePerUnit ?? '',
         paymentMethod: initialData.paymentMethod || 'Bank Transfer',
+        bankAccountId: initialData.bankAccountId || initialData.bankAccount || '',
         paidAmount: initialData.paidAmount ?? '',
         remark: initialData.remark || '',
       })
@@ -139,6 +142,28 @@ export default function DailyExpenseForm({
       return
     }
 
+    if (numPaid > 0 && !formData.bankAccountId) {
+      setErrorMessage('Please select a bank account.')
+      return
+    }
+
+    if (formData.bankAccountId && numPaid > 0) {
+      const selectedBank = bankAccounts.find(
+        (b) => String(b._id || b.id) === String(formData.bankAccountId)
+      )
+      if (selectedBank) {
+        const bal = Number(selectedBank.balance || 0)
+        if (bal <= 0) {
+          setErrorMessage('This bank account has zero balance. Please select another bank account.')
+          return
+        }
+        if (bal < numPaid) {
+          setErrorMessage(`Insufficient bank balance. Available balance: ₹${bal.toLocaleString('en-IN')}.`)
+          return
+        }
+      }
+    }
+
     try {
       setSubmitting(true)
 
@@ -151,6 +176,7 @@ export default function DailyExpenseForm({
         unit: formData.unit,
         ratePerUnit: numRate,
         paymentMethod: formData.paymentMethod,
+        bankAccountId: numPaid > 0 ? (formData.bankAccountId || undefined) : undefined,
         remark: formData.remark,
         paidAmount: numPaid,
       }
@@ -173,6 +199,7 @@ export default function DailyExpenseForm({
         unit: 'Bags',
         ratePerUnit: '',
         paymentMethod: 'Bank Transfer',
+        bankAccountId: '',
         paidAmount: '',
         remark: '',
       })
@@ -351,8 +378,26 @@ export default function DailyExpenseForm({
           </div>
         </div>
 
-        {/* Row 3: Remark, Total Amount (read-only), Paid Amount, Submit */}
-        <div className="form-bottom-row">
+        {/* Row 3: Bank Account, Remark, Total Amount (read-only), Paid Amount, Submit */}
+        <div className="form-bottom-row form-bottom-row-5col">
+          <div className="form-group">
+            <label className="form-label" htmlFor="expense-bank">Bank Account</label>
+            <select
+              id="expense-bank"
+              name="bankAccountId"
+              className="form-select"
+              value={formData.bankAccountId}
+              onChange={handleChange}
+            >
+              <option value="">Select Bank</option>
+              {bankAccounts.map((b) => (
+                <option key={b._id || b.id} value={b._id || b.id}>
+                  {b.bankName} (₹{Number(b.balance || 0).toLocaleString('en-IN')})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="form-group form-remark-group">
             <label className="form-label" htmlFor="expense-remark">Remark</label>
             <input

@@ -111,7 +111,7 @@ export default function SiteOwnersPage({
     },
   ]
 
-  const displayList = clients.length > 0 ? clients : sampleClients
+  const displayList = clients.length > 0 ? clients : []
 
   // Filtering
   const filteredClients = displayList.filter((item) => {
@@ -273,9 +273,9 @@ export default function SiteOwnersPage({
             </div>
           </div>
           <div className="stat-value">
-            {summary?.count || (clients.length > 0 ? clients.length : 10)}
+            {summary?.count !== undefined ? summary.count : clients.length}
           </div>
-          <span className="stat-desc">Across 12 projects</span>
+          <span className="stat-desc">Across {summary?.count !== undefined ? summary.count : clients.length} projects</span>
         </div>
 
         {/* Card 2: Total Project Value */}
@@ -287,7 +287,7 @@ export default function SiteOwnersPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.totalProject, '₹6.84 Cr')}
+            {formatCostValue(summary?.totalProject, '₹0')}
           </div>
           <span className="stat-desc">Contracted value</span>
         </div>
@@ -301,9 +301,13 @@ export default function SiteOwnersPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.totalReceived, '₹5.32 Cr')}
+            {formatCostValue(summary?.totalReceived, '₹0')}
           </div>
-          <span className="stat-desc">77.8% collected</span>
+          <span className="stat-desc">
+            {summary?.totalProject > 0
+              ? `${Math.round(((summary?.totalReceived || 0) / summary.totalProject) * 100)}% collected`
+              : '0% collected'}
+          </span>
         </div>
 
         {/* Card 4: Balance Receivable */}
@@ -315,7 +319,7 @@ export default function SiteOwnersPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.balance, '₹1.52 Cr')}
+            {formatCostValue(summary?.balance, '₹0')}
           </div>
           <span className="stat-desc">Across active projects</span>
         </div>
@@ -351,8 +355,8 @@ export default function SiteOwnersPage({
               }}
             >
               <option value="All Status">All Status</option>
-              <option value="On schedule">On schedule</option>
-              <option value="Payment due">Payment due</option>
+              <option value="Active">Active</option>
+              <option value="On Hold">On Hold</option>
               <option value="Completed">Completed</option>
             </select>
             <ChevronDown size={14} className="site-select-arrow" />
@@ -430,25 +434,30 @@ export default function SiteOwnersPage({
                 </tr>
               ) : (
                 paginatedRecords.map((item) => {
-                  const isPaymentDue = (item.status || '').toLowerCase() === 'payment due'
-                  const statusBg = isPaymentDue ? '#FEF3C7' : '#D1FAE5'
-                  const statusColor = isPaymentDue ? '#D97706' : '#059669'
+                  const rawStatus = (item.status || 'Active').trim()
+                  const isCompleted = rawStatus.toLowerCase() === 'completed'
+                  const isOnHold = rawStatus.toLowerCase() === 'on hold'
+                  const pillClass = isCompleted
+                    ? 'status-completed'
+                    : isOnHold
+                    ? 'status-onhold'
+                    : 'status-inprogress'
 
                   return (
                     <tr key={item._id || item.id} className="site-data-row">
                       {/* CLIENT */}
                       <td style={{ padding: '16px 20px', color: '#172033', fontWeight: 500 }}>
-                        {item.name}
+                        {item.name || '-'}
                       </td>
 
                       {/* ASSOCIATED SITE */}
                       <td style={{ padding: '16px 20px', fontWeight: 700, color: '#172033' }}>
-                        {item.siteName || 'Aarav Heights'}
+                        {item.siteName || '-'}
                       </td>
 
                       {/* CONTACT */}
                       <td style={{ padding: '16px 20px', color: '#70829F', fontWeight: 400 }}>
-                        {item.phone || '+91234567892'}
+                        {item.phone || '-'}
                       </td>
 
                       {/* PROJECT VALUE */}
@@ -473,19 +482,8 @@ export default function SiteOwnersPage({
 
                       {/* STATUS */}
                       <td style={{ padding: '16px 20px' }}>
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            padding: '4px 12px',
-                            borderRadius: '16px',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            background: statusBg,
-                            color: statusColor,
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {item.status || 'On schedule'}
+                        <span className={`site-status-pill ${pillClass}`}>
+                          {item.status || 'Active'}
                         </span>
                       </td>
 

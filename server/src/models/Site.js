@@ -3,26 +3,44 @@ import { withId, fmtDate, fmtDateOnly } from './helpers.js'
 
 const toApi = (row) => {
   if (!row) return null
-  const totalBudget = Number(row.total_budget)
-  const totalSpent  = Number(row.total_spent)
+  const totalBudget = Number(row.total_budget || 0)
+  const totalSpent  = Number(row.total_spent || 0)
+  const advanceAmount = Number(row.advance_amount || 0)
+  const totalReceived = Number(
+    row.actual_received !== undefined
+      ? row.actual_received
+      : (row.total_received || 0)
+  )
+  const balanceReceivable = Math.max(0, totalBudget - totalReceived)
+
   return {
     ...withId(row),
     name:                    row.name,
     location:                row.location,
     siteOwner:               row.site_owner,
+    contactNumber:           row.contact_number || '',
+    email:                   row.email || '',
+    address:                 row.address || '',
     totalBudget,
+    projectValue:            totalBudget,
     totalSpent,
+    advanceAmount,
+    totalReceived,
+    balanceReceivable,
+    bankAccountId:           row.bank_account_id ? String(row.bank_account_id) : null,
     status:                  row.status,
     startDate:               fmtDateOnly(row.start_date),
     expectedCompletionDate:  fmtDateOnly(row.expected_completion_date),
     description:             row.description || '',
-    budgetAlertCount:        Number(row.budget_alert_count),
+    budgetAlertCount:        Number(row.budget_alert_count || 1),
     remainingBudget:         Math.max(0, totalBudget - totalSpent),
     budgetUtilization:       totalBudget > 0 ? Number(((totalSpent / totalBudget) * 100).toFixed(1)) : 0,
     createdAt:               fmtDate(row.created_at),
     updatedAt:               fmtDate(row.updated_at),
     // remove raw snake_case
-    site_owner: undefined, total_budget: undefined, total_spent: undefined,
+    site_owner: undefined, contact_number: undefined, advance_amount: undefined,
+    total_received: undefined, actual_received: undefined, bank_account_id: undefined,
+    total_budget: undefined, total_spent: undefined,
     start_date: undefined, expected_completion_date: undefined,
     budget_alert_count: undefined, created_at: undefined, updated_at: undefined,
   }
@@ -30,59 +48,99 @@ const toApi = (row) => {
 
 export const Site = {
   async find({ search, status, sort } = {}) {
-    let sql = 'SELECT * FROM sites WHERE 1=1'
+    let sql = `
+      SELECT s.*,
+        GREATEST(
+          COALESCE((SELECT SUM(amount) FROM client_payments WHERE site_id = s.id), 0),
+          COALESCE(s.total_received, 0)
+        ) AS actual_received
+      FROM sites s
+      WHERE 1=1
+    `
     const params = []
 
     if (status && status !== 'all') {
-      sql += ' AND status = ?'
+      sql += ' AND s.status = ?'
       params.push(status)
     }
 
     if (search) {
-      sql += ' AND (name LIKE ? OR location LIKE ? OR site_owner LIKE ?)'
+      sql += ' AND (s.name LIKE ? OR s.location LIKE ? OR s.site_owner LIKE ?)'
       const like = `%${search}%`
       params.push(like, like, like)
     }
 
     const sortMap = {
-      oldest: 'created_at ASC',
-      name:   'name ASC',
-      budget: 'total_budget DESC',
+      oldest: 's.created_at ASC',
+      name:   's.name ASC',
+      budget: 's.total_budget DESC',
     }
-    sql += ` ORDER BY ${sortMap[sort] || 'created_at DESC'}`
+    sql += ` ORDER BY ${sortMap[sort] || 's.created_at DESC'}`
 
     const [rows] = await getPool().query(sql, params)
     return rows.map(toApi)
   },
 
   async findById(id) {
-    const [rows] = await getPool().query('SELECT * FROM sites WHERE id = ?', [id])
+    const [rows] = await getPool().query(`
+      SELECT s.*,
+        GREATEST(
+          COALESCE((SELECT SUM(amount) FROM client_payments WHERE site_id = s.id), 0),
+          COALESCE(s.total_received, 0)
+        ) AS actual_received
+      FROM sites s
+      WHERE s.id = ?
+    `, [id])
     return toApi(rows[0] || null)
   },
 
   async findAll({ limit } = {}) {
-    let sql = 'SELECT * FROM sites ORDER BY created_at DESC'
+    let sql = `
+      SELECT s.*,
+        GREATEST(
+          COALESCE((SELECT SUM(amount) FROM client_payments WHERE site_id = s.id), 0),
+          COALESCE(s.total_received, 0)
+        ) AS actual_received
+      FROM sites s
+      ORDER BY s.created_at DESC
+    `
     if (limit) sql += ` LIMIT ${Number(limit)}`
     const [rows] = await getPool().query(sql)
     return rows.map(toApi)
   },
 
   async findActive() {
-    const [rows] = await getPool().query("SELECT * FROM sites WHERE status = 'Active'")
+    const [rows] = await getPool().query(`
+      SELECT s.*,
+        GREATEST(
+          COALESCE((SELECT SUM(amount) FROM client_payments WHERE site_id = s.id), 0),
+          COALESCE(s.total_received, 0)
+        ) AS actual_received
+      FROM sites s
+      WHERE s.status = 'Active'
+    `)
     return rows.map(toApi)
   },
 
   async create(data) {
+    const totalBudget = Number(data.totalBudget !== undefined ? data.totalBudget : (data.projectValue || 0))
     const [result] = await getPool().query(
       `INSERT INTO sites
-        (name, location, site_owner, total_budget, total_spent, status,
-         start_date, expected_completion_date, description, budget_alert_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (name, location, site_owner, contact_number, email, address,
+         total_budget, advance_amount, total_received, bank_account_id,
+         total_spent, status, start_date, expected_completion_date, description, budget_alert_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.name,
         data.location,
         data.siteOwner,
-        Number(data.totalBudget) || 0,
+        data.contactNumber || data.phone || '',
+        (data.email || '').toLowerCase(),
+        data.address || '',
+        totalBudget,
+        Number(data.advanceAmount || 0),
+        Number(data.totalReceived || 0),
+        data.bankAccountId ? Number(data.bankAccountId) : null,
         Number(data.totalSpent)  || 0,
         data.status || 'Active',
         data.startDate ? new Date(data.startDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -103,7 +161,14 @@ export const Site = {
       name:                    'name',
       location:                'location',
       siteOwner:               'site_owner',
+      contactNumber:           'contact_number',
+      email:                   'email',
+      address:                 'address',
       totalBudget:             'total_budget',
+      projectValue:            'total_budget',
+      advanceAmount:           'advance_amount',
+      totalReceived:           'total_received',
+      bankAccountId:           'bank_account_id',
       totalSpent:              'total_spent',
       status:                  'status',
       startDate:               'start_date',
@@ -118,7 +183,15 @@ export const Site = {
       if (data[apiKey] !== undefined) {
         sets.push(`${col} = ?`)
         let val = data[apiKey]
-        if (apiKey === 'totalBudget' || apiKey === 'totalSpent' || apiKey === 'budgetAlertCount') val = Number(val)
+        if (['totalBudget', 'projectValue', 'totalSpent', 'budgetAlertCount', 'advanceAmount', 'totalReceived'].includes(apiKey)) {
+          val = Number(val)
+        }
+        if (apiKey === 'bankAccountId') {
+          val = val ? Number(val) : null
+        }
+        if (apiKey === 'email') {
+          val = (val || '').toLowerCase()
+        }
         if (apiKey === 'startDate' || apiKey === 'expectedCompletionDate') {
           val = val ? new Date(val).toISOString().slice(0, 10) : null
         }

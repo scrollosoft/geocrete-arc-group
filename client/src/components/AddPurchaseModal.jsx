@@ -58,6 +58,7 @@ export default function AddPurchaseModal({
   onClose,
   sites = [],
   suppliers = [],
+  bankAccounts = [],
   onPurchaseCreated,
   showNotification,
 }) {
@@ -71,6 +72,7 @@ export default function AddPurchaseModal({
     unit: 'Bags',
     ratePerUnit: '',
     paymentMethod: 'Bank Transfer',
+    bankAccountId: '',
     paidAmount: '',
     remark: '',
   })
@@ -186,6 +188,22 @@ export default function AddPurchaseModal({
         newErrors.paidAmount = 'Paid amount cannot be negative.'
       } else if (p > totalAmount) {
         newErrors.paidAmount = 'Paid amount cannot exceed total amount.'
+      } else if (p > 0) {
+        if (!formData.bankAccountId) {
+          newErrors.bankAccountId = 'Please select a bank account.'
+        } else {
+          const selectedBank = bankAccounts.find(
+            (b) => String(b._id || b.id) === String(formData.bankAccountId)
+          )
+          if (selectedBank) {
+            const bal = Number(selectedBank.balance || 0)
+            if (bal <= 0) {
+              newErrors.bankAccountId = 'This bank account has zero balance. Please select another bank account.'
+            } else if (bal < p) {
+              newErrors.bankAccountId = `Insufficient bank balance. Available balance: ₹${bal.toLocaleString('en-IN')}.`
+            }
+          }
+        }
       }
     }
 
@@ -238,6 +256,7 @@ export default function AddPurchaseModal({
         totalAmount: computedTotal,
         totalCost: computedTotal,
         paidAmount: numPaid,
+        bankAccountId: numPaid > 0 ? (formData.bankAccountId || undefined) : undefined,
         paymentStatus,
         paymentMethod: formData.paymentMethod,
         remark: formData.remark,
@@ -262,6 +281,7 @@ export default function AddPurchaseModal({
         unit: 'Bags',
         ratePerUnit: '',
         paymentMethod: 'Bank Transfer',
+        bankAccountId: '',
         paidAmount: '',
         remark: '',
       })
@@ -467,7 +487,26 @@ export default function AddPurchaseModal({
               </select>
             </div>
 
-            {/* 10. Total Amount (₹) - Read-only calculated */}
+            {/* 10. Bank Account */}
+            <div className="form-group">
+              <label className="form-label labour-form-label">Bank Account</label>
+              <select
+                name="bankAccountId"
+                className={`form-select ${errors.bankAccountId ? 'input-error' : ''}`}
+                value={formData.bankAccountId}
+                onChange={handleChange}
+              >
+                <option value="">Select Bank Account</option>
+                {bankAccounts.map((b) => (
+                  <option key={b._id || b.id} value={b._id || b.id}>
+                    {b.bankName} (₹{Number(b.balance || 0).toLocaleString('en-IN')})
+                  </option>
+                ))}
+              </select>
+              {errors.bankAccountId && <span className="field-error-msg">{errors.bankAccountId}</span>}
+            </div>
+
+            {/* 11. Total Amount (₹) - Read-only calculated */}
             <div className="form-group">
               <label className="form-label labour-form-label">Total Amount (₹)</label>
               <div className="input-with-prefix">
@@ -484,7 +523,7 @@ export default function AddPurchaseModal({
               </div>
             </div>
 
-            {/* 11. Paid Amount (₹) */}
+            {/* 12. Paid Amount (₹) */}
             <div className="form-group">
               <label className="form-label labour-form-label">Paid Amount (₹)</label>
               <div className="input-with-prefix">
@@ -504,8 +543,8 @@ export default function AddPurchaseModal({
               {errors.paidAmount && <span className="field-error-msg">{errors.paidAmount}</span>}
             </div>
 
-            {/* 12. Remark */}
-            <div className="form-group">
+            {/* 13. Remark */}
+            <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label className="form-label labour-form-label">Remark</label>
               <input
                 type="text"

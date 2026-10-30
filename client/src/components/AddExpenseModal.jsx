@@ -31,6 +31,7 @@ export default function AddExpenseModal({
   onClose,
   sites = [],
   suppliers = [],
+  bankAccounts = [],
   onExpenseCreated,
   showNotification,
 }) {
@@ -44,6 +45,7 @@ export default function AddExpenseModal({
     ratePerUnit: '',
     paidAmount: '',
     paymentMethod: 'Bank Transfer',
+    bankAccountId: '',
     remark: '',
   })
 
@@ -213,6 +215,28 @@ export default function AddExpenseModal({
       return
     }
 
+    if (numPaid > 0 && !formData.bankAccountId) {
+      setError('Please select a bank account.')
+      return
+    }
+
+    if (formData.bankAccountId && numPaid > 0) {
+      const selectedBank = bankAccounts.find(
+        (b) => String(b._id || b.id) === String(formData.bankAccountId)
+      )
+      if (selectedBank) {
+        const bal = Number(selectedBank.balance || 0)
+        if (bal <= 0) {
+          setError('This bank account has zero balance. Please select another bank account.')
+          return
+        }
+        if (bal < numPaid) {
+          setError(`Insufficient bank balance. Available balance: ₹${bal.toLocaleString('en-IN')}.`)
+          return
+        }
+      }
+    }
+
     try {
       setSubmitting(true)
 
@@ -225,6 +249,7 @@ export default function AddExpenseModal({
         unit: formData.unit || 'Units',
         ratePerUnit: numRate,
         paidAmount: numPaid,
+        bankAccountId: numPaid > 0 ? (formData.bankAccountId || undefined) : undefined,
         paymentMethod: formData.paymentMethod || 'Bank Transfer',
         remark: formData.remark.trim(),
       }
@@ -249,6 +274,7 @@ export default function AddExpenseModal({
         ratePerUnit: '',
         paidAmount: '',
         paymentMethod: 'Bank Transfer',
+        bankAccountId: '',
         remark: '',
       })
 
@@ -547,7 +573,28 @@ export default function AddExpenseModal({
               </select>
             </div>
 
-            {/* 12. Remark / Notes */}
+            {/* 12. Bank Account */}
+            <div className="form-group">
+              <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#172033', marginBottom: '6px' }}>
+                Bank Account
+              </label>
+              <select
+                name="bankAccountId"
+                className="form-select"
+                value={formData.bankAccountId}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E5EAF1', fontSize: '14px', color: '#172033', background: '#FFFFFF' }}
+              >
+                <option value="">-- Select Bank --</option>
+                {bankAccounts.map((b) => (
+                  <option key={b._id || b.id} value={b._id || b.id}>
+                    {b.bankName} (₹{Number(b.balance || 0).toLocaleString('en-IN')})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 13. Remark / Notes */}
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#172033', marginBottom: '6px' }}>
                 Remark / Notes (Optional)

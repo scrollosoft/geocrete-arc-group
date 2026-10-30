@@ -677,6 +677,10 @@
   align-items: flex-end;
 }
 
+.form-bottom-row.form-bottom-row-5col {
+  grid-template-columns: repeat(5, 1fr);
+}
+
 .form-remark-group {
   grid-column: span 1;
 }
@@ -1353,7 +1357,8 @@
   .form-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  .form-bottom-row {
+  .form-bottom-row,
+  .form-bottom-row.form-bottom-row-5col {
     grid-template-columns: repeat(2, 1fr);
   }
   .form-remark-group {
@@ -1379,7 +1384,8 @@
   .form-grid {
     grid-template-columns: 1fr;
   }
-  .form-bottom-row {
+  .form-bottom-row,
+  .form-bottom-row.form-bottom-row-5col {
     grid-template-columns: 1fr;
   }
   .form-remark-group,
@@ -1715,6 +1721,11 @@
 }
 
 .td-site-budget {
+  font-weight: 400;
+  color: #172033;
+}
+
+.td-site-received {
   font-weight: 400;
   color: #172033;
 }
@@ -3938,6 +3949,1004 @@
   color: #70829F;
   font-size: 13.5px;
 }
+
+/* ==========================================================================
+   Payments Page
+   ========================================================================== */
+.payments-page-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding-bottom: 30px;
+}
+
+.payments-page-wrap .sites-header-wrap {
+  margin-bottom: 24px;
+}
+
+.payments-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1080px) {
+  .payments-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .payments-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.payment-bank-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E5EAF1;
+  border-radius: 12px;
+  padding: 16px 18px 14px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 140px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+.payment-bank-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+}
+
+.payment-bank-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.payment-bank-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #70829F;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.payment-bank-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.payment-bank-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #172033;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.payment-bank-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.payment-bank-accnum {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-bank-ifsc {
+  font-size: 11px;
+  font-weight: 500;
+  color: #70829F;
+  text-transform: uppercase;
+}
+
+.payment-bank-balance-wrap {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px dashed #E5EAF1;
+  margin-top: auto;
+}
+
+.payment-bank-balance-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #70829F;
+}
+
+.payment-bank-balance-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: #172033;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Empty Card Placeholder */
+.payment-bank-card-empty {
+  border: 1.5px dashed #CBD5E1;
+  background-color: #FAFCFF;
+  border-top: 1.5px dashed #CBD5E1 !important;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  gap: 8px;
+  text-align: center;
+  width: 100%;
+  font-family: inherit;
+}
+
+.payment-bank-card-empty:hover {
+  background-color: #F0F7FF;
+  border-color: #0293DE !important;
+}
+
+.payment-empty-icon-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background-color: #E0F2FE;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0293DE;
+  transition: transform 0.15s ease;
+}
+
+.payment-bank-card-empty:hover .payment-empty-icon-wrap {
+  transform: scale(1.08);
+}
+
+.payment-empty-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0293DE;
+}
+
+.payment-empty-desc {
+  font-size: 11.5px;
+  color: #70829F;
+}
+
+/* ==========================================================================
+   14. Google Pay-Style Bank Transaction History
+   ========================================================================== */
+.gpay-history-container {
+  background-color: #FFFFFF;
+  border: 1px solid #E5EAF1;
+  border-radius: 14px;
+  width: 100%;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-top: 24px;
+}
+
+/* Header & Quick Summary */
+.gpay-history-header {
+  padding: 24px 28px 18px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid #F1F5F9;
+  flex-wrap: wrap;
+}
+
+.gpay-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gpay-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gpay-history-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #172033;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.gpay-history-count-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0284C7;
+  background-color: #E0F2FE;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.gpay-history-subtitle {
+  font-size: 13px;
+  color: #70829F;
+  margin: 0;
+}
+
+.gpay-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gpay-summary-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  border-radius: 10px;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+}
+
+.gpay-pill-icon-bubble {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gpay-bubble-green {
+  background-color: #E6F4EA;
+  color: #1E8E3E;
+}
+
+.gpay-bubble-red {
+  background-color: #FCE8E6;
+  color: #D93025;
+}
+
+.gpay-pill-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.gpay-pill-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #70829F;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.gpay-pill-val {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #172033;
+}
+
+.gpay-pill-credit .gpay-pill-val {
+  color: #1E8E3E;
+}
+
+.gpay-pill-debit .gpay-pill-val {
+  color: #D93025;
+}
+
+/* Filter Bar */
+.gpay-filter-bar {
+  padding: 16px 28px;
+  background-color: #FAFCFE;
+  border-bottom: 1px solid #F1F5F9;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gpay-type-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gpay-type-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 18px;
+  border: 1px solid #DCE5E8;
+  background-color: #FFFFFF;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gpay-type-pill:hover {
+  background-color: #F1F5F9;
+  color: #172033;
+}
+
+.gpay-type-pill.active {
+  background-color: #172033;
+  color: #FFFFFF;
+  border-color: #172033;
+}
+
+.gpay-type-pill.active-credit {
+  background-color: #E6F4EA;
+  color: #137333;
+  border-color: #A8DAB5;
+}
+
+.gpay-type-pill.active-debit {
+  background-color: #FCE8E6;
+  color: #C5221F;
+  border-color: #F5C2C0;
+}
+
+.gpay-secondary-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.gpay-search-box {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+}
+
+.gpay-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94A3B8;
+  pointer-events: none;
+}
+
+.gpay-search-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 34px 0 36px;
+  border-radius: 8px;
+  border: 1px solid #DCE5E8;
+  background-color: #FFFFFF;
+  font-size: 13px;
+  color: #172033;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+.gpay-search-input:focus {
+  border-color: #0293DE;
+  box-shadow: 0 0 0 2px rgba(2, 147, 222, 0.15);
+}
+
+.gpay-search-clear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #94A3B8;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.gpay-search-clear:hover {
+  color: #172033;
+}
+
+.gpay-select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.gpay-select-icon {
+  position: absolute;
+  left: 12px;
+  color: #70829F;
+  pointer-events: none;
+}
+
+.gpay-select {
+  height: 38px;
+  padding: 0 16px 0 34px;
+  border-radius: 8px;
+  border: 1px solid #DCE5E8;
+  background-color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 500;
+  color: #172033;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.gpay-select:focus {
+  border-color: #0293DE;
+}
+
+.gpay-clear-filters-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 38px;
+  padding: 0 12px;
+  background-color: transparent;
+  border: 1px dashed #CBD5E1;
+  border-radius: 8px;
+  color: #64748B;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gpay-clear-filters-btn:hover {
+  background-color: #F1F5F9;
+  color: #172033;
+}
+
+.gpay-custom-date-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 6px;
+}
+
+.gpay-date-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gpay-date-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748B;
+}
+
+.gpay-date-input {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #DCE5E8;
+  font-size: 12.5px;
+  color: #172033;
+}
+
+/* Transactions List */
+.gpay-list-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+}
+
+.gpay-months-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.gpay-month-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.gpay-month-header {
+  padding: 14px 28px 10px 28px;
+  background-color: #F8FAFC;
+  border-top: 1px solid #F1F5F9;
+  border-bottom: 1px solid #F1F5F9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gpay-month-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gpay-month-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94A3B8;
+}
+
+.gpay-items-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.gpay-item-row {
+  padding: 16px 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid #F1F5F9;
+  background-color: #FFFFFF;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+  user-select: none;
+}
+
+.gpay-item-row:hover {
+  background-color: #F8FAFC;
+}
+
+.gpay-icon-bubble {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.gpay-bubble-credit {
+  background-color: #E6F4EA;
+  color: #1E8E3E;
+}
+
+.gpay-bubble-debit {
+  background-color: #FCE8E6;
+  color: #D93025;
+}
+
+.gpay-item-middle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.gpay-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gpay-item-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #172033;
+  line-height: 1.25;
+}
+
+.gpay-item-subtitle {
+  font-size: 12.5px;
+  color: #70829F;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gpay-item-datetime {
+  font-size: 11.5px;
+  color: #94A3B8;
+}
+
+.gpay-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.gpay-item-amount {
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.gpay-amount-credit {
+  color: #1E8E3E;
+}
+
+.gpay-amount-debit {
+  color: #172033;
+}
+
+.gpay-running-bal {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748B;
+  background-color: #F1F5F9;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.gpay-bal-icon {
+  color: #94A3B8;
+}
+
+.gpay-running-bal-empty {
+  font-size: 11px;
+  color: #94A3B8;
+}
+
+.gpay-chevron-hint {
+  color: #CBD5E1;
+  transition: transform 0.15s ease, color 0.15s ease;
+  margin-left: 4px;
+}
+
+.gpay-item-row:hover .gpay-chevron-hint {
+  color: #0293DE;
+  transform: translateX(2px);
+}
+
+/* Empty State */
+.gpay-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 24px;
+  text-align: center;
+}
+
+.gpay-empty-icon-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background-color: #F1F5F9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94A3B8;
+  margin-bottom: 16px;
+}
+
+.gpay-empty-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #172033;
+  margin: 0 0 6px 0;
+}
+
+.gpay-empty-subtitle {
+  font-size: 13px;
+  color: #70829F;
+  margin: 0 0 16px 0;
+  max-width: 360px;
+}
+
+.gpay-empty-reset-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+/* Loading Skeleton */
+.gpay-loading-skeleton {
+  padding: 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gpay-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.gpay-skeleton-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: #F1F5F9;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.gpay-skeleton-text-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gpay-skeleton-line {
+  height: 14px;
+  background-color: #F1F5F9;
+  border-radius: 4px;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+/* Google Pay Style Detail Modal */
+.gpay-detail-modal {
+  width: 520px;
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  background-color: #FFFFFF;
+  border-radius: 18px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  animation: modalSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.gpay-modal-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #F1F5F9;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 2;
+}
+
+.gpay-modal-close:hover {
+  background-color: #E2E8F0;
+  color: #172033;
+}
+
+/* Modal Hero */
+.gpay-modal-hero {
+  padding: 36px 28px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  border-bottom: 1px dashed #E2E8F0;
+}
+
+.gpay-hero-icon-bubble {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.gpay-hero-amount {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+
+.gpay-hero-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background-color: #E6F4EA;
+  color: #137333;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.gpay-hero-party {
+  font-size: 14px;
+  color: #64748B;
+}
+
+.gpay-hero-party strong {
+  color: #172033;
+}
+
+/* Receipt Card in Modal */
+.gpay-receipt-card {
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.gpay-receipt-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94A3B8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.gpay-receipt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+}
+
+.gpay-receipt-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748B;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.gpay-row-icon {
+  color: #94A3B8;
+}
+
+.gpay-receipt-val {
+  color: #172033;
+  font-weight: 600;
+  text-align: right;
+  word-break: break-word;
+}
+
+.gpay-ref-val {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gpay-ref-text {
+  font-family: monospace;
+  font-size: 12px;
+  color: #334155;
+  background-color: #F1F5F9;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.gpay-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0293DE;
+  background: #E0F2FE;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.gpay-copy-btn:hover {
+  background: #BAE6FD;
+}
+
+.gpay-receipt-balance-box {
+  margin-top: 10px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gpay-balance-box-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.gpay-balance-box-left svg {
+  color: #0293DE;
+}
+
+.gpay-balance-box-val {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0293DE;
+}
+
+/* Modal Footer */
+.gpay-modal-footer {
+  padding: 16px 28px 24px 28px;
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid #F1F5F9;
+}
+
+.gpay-done-btn {
+  width: 100%;
+  height: 42px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 10px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .gpay-history-header {
+    padding: 18px 20px;
+  }
+  .gpay-filter-bar {
+    padding: 14px 20px;
+  }
+  .gpay-month-header {
+    padding: 12px 20px 8px 20px;
+  }
+  .gpay-item-row {
+    padding: 14px 20px;
+  }
+  .gpay-header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .gpay-summary-pill {
+    flex: 1;
+  }
+  .gpay-secondary-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .gpay-search-box,
+  .gpay-select-wrap,
+  .gpay-select {
+    width: 100%;
+  }
+  .gpay-receipt-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .gpay-receipt-val {
+    text-align: left;
+  }
+}
+
+
 
 
 

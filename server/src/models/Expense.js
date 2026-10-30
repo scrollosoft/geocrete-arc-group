@@ -31,6 +31,7 @@ const toApi = (row) => {
     date:          fmtDateOnly(row.date),
     site,
     supplier,
+    bankAccountId: row.bank_account_id ? String(row.bank_account_id) : null,
     category:      row.category || 'Material',
     quantity:      Number(row.quantity),
     unit:          row.unit || 'Units',
@@ -144,14 +145,15 @@ export const Expense = {
 
     const [result] = await getPool().query(
       `INSERT INTO expenses
-        (date, site_id, supplier_id, category,
+        (date, site_id, supplier_id, bank_account_id, category,
          quantity, unit, rate_per_unit, amount, paid_amount, pending_amount,
          payment_method, remark, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.date ? new Date(data.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
         data.site || data.siteId,
         data.supplier || data.supplierId || null,
+        data.bankAccountId || data.bankAccount || null,
         data.category || 'Material',
         Number(data.quantity) || 0,
         data.unit || 'Units',
@@ -175,6 +177,8 @@ export const Expense = {
       date:          'date',
       site:          'site_id',
       supplier:      'supplier_id',
+      bankAccountId: 'bank_account_id',
+      bankAccount:   'bank_account_id',
       category:      'category',
       quantity:      'quantity',
       unit:          'unit',

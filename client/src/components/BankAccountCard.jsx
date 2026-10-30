@@ -7,8 +7,7 @@ export default function BankAccountCard({ account, index }) {
   const code = account.accountCode || `B${index + 1}`
 
   // Format number: if it's 100000, keep 100000 or clean number format as in reference image
-  const displayBalance = account.balance !== undefined ? account.balance : 100000
-  const displayCredit = account.credit !== undefined ? account.credit : 50000
+  const displayBalance = account.balance !== undefined ? account.balance : 0
 
   return (
     <div
@@ -37,10 +36,6 @@ export default function BankAccountCard({ account, index }) {
         <div className="account-fin-row">
           <span className="fin-label">bal.</span>
           <span className="fin-val bal-val">{displayBalance}</span>
-        </div>
-        <div className="account-fin-row">
-          <span className="fin-label">credit.</span>
-          <span className="fin-val credit-val">{displayCredit}</span>
         </div>
       </div>
     </div>

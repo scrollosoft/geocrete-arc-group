@@ -231,7 +231,7 @@ export default function SiteDetailPage({
   const spentPercent = projectBudget > 0 ? Math.min(100, Math.round((totalSpent / projectBudget) * 100)) : 67
 
   // Client Received & Balance Receivable calculations
-  const clientReceived = Math.round(projectBudget * 0.73) // default ~1.35 Cr (73% collected)
+  const clientReceived = site.totalReceived !== undefined ? Number(site.totalReceived) : Math.round(projectBudget * 0.73) // default ~1.35 Cr (73% collected)
   const balanceReceivable = Math.max(0, projectBudget - clientReceived)
 
   // Default sample transactions matching screenshot if site has few expenses

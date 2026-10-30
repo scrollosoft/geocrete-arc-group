@@ -65,6 +65,7 @@ const toApi = (row) => {
     outstandingAmount,
     quantityUsed,
     remainingStock,
+    bankAccountId: row.bank_account_id ? String(row.bank_account_id) : null,
     paymentStatus: row.payment_status,
     paymentMethod: row.payment_method || 'Bank Transfer',
     notes: row.notes || '',
@@ -702,14 +703,15 @@ export const Material = {
   /**
    * Save a purchase into materials table as its own transaction record (never overwrite existing).
    */
-  async upsertPurchase(data) {
-    const pool = getPool()
-    const conn = await pool.getConnection()
+  async upsertPurchase(data, externalConn) {
+    const conn = externalConn || (await getPool().getConnection())
+    const shouldManageTransaction = !externalConn
     try {
-      await conn.beginTransaction()
+      if (shouldManageTransaction) await conn.beginTransaction()
       const materialName = String(data.materialName || data.category || '').trim()
       const siteId = data.siteId || data.site
       const supplierId = data.supplierId || data.supplier || null
+      const bankAccountId = data.bankAccountId || data.bankAccount ? Number(data.bankAccountId || data.bankAccount) : null
       const qty = Number(data.quantity) || 0
       const cost = Number(data.totalCost) || (qty * Number(data.unitPrice || 0)) || 0
       let paid = 0
@@ -730,14 +732,15 @@ export const Material = {
       const paymentMethod = data.paymentMethod || data.payment_method || 'Bank Transfer'
       const [result] = await conn.query(
         `INSERT INTO materials
-          (ref_number, purchase_date, site_id, supplier_id, category,
+          (ref_number, purchase_date, site_id, supplier_id, bank_account_id, category,
            quantity, unit, unit_price, total_cost, paid_amount, quantity_used, payment_status, payment_method, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           refNumber,
           purchaseDate,
           siteId,
           supplierId || null,
+          bankAccountId,
           materialName || data.category || 'Other',
           qty,
           data.unit || 'Units',
@@ -750,13 +753,13 @@ export const Material = {
           data.notes || '',
         ],
       )
-      await conn.commit()
+      if (shouldManageTransaction) await conn.commit()
       return this.findById(result.insertId)
     } catch (err) {
-      await conn.rollback()
+      if (shouldManageTransaction) await conn.rollback()
       throw err
     } finally {
-      conn.release()
+      if (shouldManageTransaction) conn.release()
     }
   },
 

@@ -7,7 +7,7 @@ import BankAccounts from './components/BankAccounts.jsx'
 import DailyExpenseForm from './components/DailyExpenseForm.jsx'
 import RecentExpenses from './components/RecentExpenses.jsx'
 import SitesOverview from './components/SitesOverview.jsx'
-import AddSiteModal from './components/AddSiteModal.jsx'
+import AddClientSiteModal from './components/AddClientSiteModal.jsx'
 import AddWorkerModal from './components/AddWorkerModal.jsx'
 import NotificationToast from './components/NotificationToast.jsx'
 import SitesPage from './components/SitesPage.jsx'
@@ -18,11 +18,11 @@ import MaterialsPage from './components/MaterialsPage.jsx'
 import SuppliersPage from './components/SuppliersPage.jsx'
 import AddPurchaseModal from './components/AddPurchaseModal.jsx'
 import SiteOwnersPage from './components/SiteOwnersPage.jsx'
-import AddClientModal from './components/AddClientModal.jsx'
 import AddSupplierModal from './components/AddSupplierModal.jsx'
 import AddExpenseModal from './components/AddExpenseModal.jsx'
 import SettingsPage from './components/SettingsPage.jsx'
 import SupplierDetailPage from './components/SupplierDetailPage.jsx'
+import PaymentsPage from './components/PaymentsPage.jsx'
 
 import { bankAccountService } from './services/bankAccountService.js'
 import { siteService } from './services/siteService.js'
@@ -32,11 +32,60 @@ import { dashboardService } from './services/dashboardService.js'
 import { labourService } from './services/labourService.js'
 import { settingService } from './services/settingService.js'
 
+const getInitialTab = () => {
+  try {
+    const pathname = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase()
+    const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase()
+    const searchParams = new URLSearchParams(window.location.search)
+    const tabParam = searchParams.get('tab')?.toLowerCase()
+
+    const validTabs = [
+      'dashboard',
+      'sites',
+      'expenses',
+      'labour',
+      'materials',
+      'suppliers',
+      'site-owners',
+      'payments',
+      'reports',
+      'settings',
+    ]
+
+    if (validTabs.includes(tabParam)) return tabParam
+    if (validTabs.includes(pathname)) return pathname
+    if (validTabs.includes(hash)) return hash
+  } catch {
+    // fallback
+  }
+  return 'dashboard'
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeTab, setActiveTab] = useState(getInitialTab)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedSiteFilter, setSelectedSiteFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('')
+
+  const handleTabChange = useCallback((newTab) => {
+    setActiveTab(newTab)
+    try {
+      const newPath = newTab === 'dashboard' ? '/' : `/${newTab}`
+      if (window.location.pathname !== newPath) {
+        window.history.pushState({ tab: newTab }, '', newPath)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setActiveTab(getInitialTab())
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
 
   const [accounts, setAccounts] = useState([])
   const [sites, setSites] = useState([])
@@ -66,7 +115,7 @@ export default function App() {
   const [ownerProfile, setOwnerProfile] = useState(null)
 
   const handleNavigateOwnerProfile = () => {
-    setActiveTab('settings')
+    handleTabChange('settings')
     setSettingsKey((k) => k + 1)
   }
 
@@ -231,7 +280,7 @@ export default function App() {
   return (
     <div className="app-container">
       {/* 1. Left Sidebar */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar activeTab={activeTab} setActiveTab={handleTabChange} />
 
       {/* 2. Main Content Layout */}
       <div className="main-layout">
@@ -286,7 +335,7 @@ export default function App() {
               onOpenAddSupplier={() => setIsAddSupplierOpen(true)}
               onViewSupplier={(supplier) => {
                 setSelectedSupplierId(supplier._id || supplier.id)
-                setActiveTab('supplier-detail')
+                handleTabChange('supplier-detail')
               }}
               showNotification={setNotification}
               refreshTrigger={supplierRefreshTrigger}
@@ -294,7 +343,7 @@ export default function App() {
           ) : activeTab === 'supplier-detail' && selectedSupplierId ? (
             <SupplierDetailPage
               supplierId={selectedSupplierId}
-              onBack={() => setActiveTab('suppliers')}
+              onBack={() => handleTabChange('suppliers')}
               showNotification={setNotification}
             />
           ) : activeTab === 'site-owners' ? (
@@ -303,6 +352,13 @@ export default function App() {
               onOpenAddClient={() => setIsAddClientOpen(true)}
               showNotification={setNotification}
               refreshTrigger={clientRefreshTrigger}
+            />
+          ) : activeTab === 'payments' ? (
+            <PaymentsPage
+              accounts={accounts}
+              loading={loadingAccounts}
+              onRefreshAccounts={loadBankAccounts}
+              showNotification={setNotification}
             />
           ) : activeTab === 'settings' ? (
             <SettingsPage
@@ -325,6 +381,7 @@ export default function App() {
               <DailyExpenseForm
                 sites={sites}
                 suppliers={suppliers}
+                bankAccounts={accounts}
                 onExpenseCreated={handleExpenseCreated}
                 showNotification={setNotification}
               />
@@ -344,18 +401,29 @@ export default function App() {
               <SitesOverview
                 sites={siteOverview.length > 0 ? siteOverview : sites}
                 loading={loadingSites}
-                onNavigateSites={() => setActiveTab('sites')}
+                onNavigateSites={() => handleTabChange('sites')}
               />
             </>
           )}
         </main>
       </div>
 
-      {/* Add Site Modal */}
-      <AddSiteModal
-        isOpen={isAddSiteOpen}
-        onClose={() => setIsAddSiteOpen(false)}
-        onSiteCreated={handleSiteCreated}
+      {/* Unified Add Client / Site Owner & Construction Site Modal */}
+      <AddClientSiteModal
+        isOpen={isAddSiteOpen || isAddClientOpen}
+        onClose={() => {
+          setIsAddSiteOpen(false)
+          setIsAddClientOpen(false)
+        }}
+        bankAccounts={accounts}
+        onCreated={(newSite) => {
+          loadSites()
+          loadBankAccounts()
+          setClientRefreshTrigger((prev) => prev + 1)
+          if (newSite) {
+            setSelectedSiteFilter(newSite._id || newSite.id)
+          }
+        }}
         showNotification={setNotification}
       />
 
@@ -376,6 +444,7 @@ export default function App() {
         onClose={() => setIsAddPurchaseOpen(false)}
         sites={sites}
         suppliers={suppliers}
+        bankAccounts={accounts}
         onPurchaseCreated={() => {
           loadSites()
           loadExpenses()
@@ -383,15 +452,6 @@ export default function App() {
           setMaterialsRefreshTrigger((prev) => prev + 1)
           setSupplierRefreshTrigger((prev) => prev + 1)
         }}
-        showNotification={setNotification}
-      />
-
-      {/* Add Client Modal */}
-      <AddClientModal
-        isOpen={isAddClientOpen}
-        onClose={() => setIsAddClientOpen(false)}
-        sites={sites}
-        onClientCreated={() => setClientRefreshTrigger((prev) => prev + 1)}
         showNotification={setNotification}
       />
 
@@ -414,6 +474,7 @@ export default function App() {
         onClose={() => setIsAddExpenseOpen(false)}
         sites={sites}
         suppliers={suppliers}
+        bankAccounts={accounts}
         onExpenseCreated={handleExpenseCreated}
         showNotification={setNotification}
       />

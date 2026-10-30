@@ -44,6 +44,7 @@ export const createExpense = async (req, res, next) => {
       unit,
       ratePerUnit,
       paidAmount,
+      bankAccountId,
       paymentMethod,
       paymentStatus,
       status,
@@ -76,6 +77,11 @@ export const createExpense = async (req, res, next) => {
       return res.status(400).json({ error: 'Paid amount cannot exceed total amount' })
     }
 
+    // Bank account validation
+    if (parsedPaid > 0 && !bankAccountId) {
+      return res.status(400).json({ error: 'Please select a bank account.' })
+    }
+
     const calculatedPending = Number((calculatedAmount - parsedPaid).toFixed(2))
 
     const expenseCategory = category || 'Material'
@@ -92,14 +98,39 @@ export const createExpense = async (req, res, next) => {
     try {
       await conn.beginTransaction()
 
+      // Validate and deduct bank balance
+      if (bankAccountId && parsedPaid > 0) {
+        const [[bankRow]] = await conn.query(
+          'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+          [bankAccountId]
+        )
+        if (!bankRow) {
+          await conn.rollback()
+          conn.release()
+          return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+        }
+        const bankBalance = Number(bankRow.balance)
+        if (bankBalance <= 0) {
+          await conn.rollback()
+          conn.release()
+          return res.status(400).json({ error: 'This bank account has zero balance. Please select another bank account.' })
+        }
+        if (bankBalance < parsedPaid) {
+          await conn.rollback()
+          conn.release()
+          return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
+        }
+        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [parsedPaid, bankAccountId])
+      }
+
       const expenseDate = date ? new Date(date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
 
       const [result] = await conn.query(
         `INSERT INTO expenses
           (date, site_id, supplier_id, category,
            quantity, unit, rate_per_unit, amount, paid_amount, pending_amount,
-           payment_method, remark, status, applied_to_material)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           payment_method, remark, status, applied_to_material, bank_account_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           expenseDate,
           site,
@@ -115,6 +146,7 @@ export const createExpense = async (req, res, next) => {
           remark || '',
           expenseStatus,
           shouldApplyToMaterial ? 1 : 0,
+          bankAccountId || null,
         ],
       )
 
@@ -167,11 +199,13 @@ export const updateExpense = async (req, res, next) => {
     const oldCategory = existingExpense.category || 'Material'
     const oldQuantity = existingExpense.quantity
     const oldPaid = existingExpense.paidAmount
+    const oldBankAccountId = existingExpense.bankAccountId || null
     const wasApplied = Boolean(existingExpense.appliedToMaterial)
 
     const quantity    = req.body.quantity    !== undefined ? Number(req.body.quantity)    : existingExpense.quantity
     const ratePerUnit = req.body.ratePerUnit !== undefined ? Number(req.body.ratePerUnit) : existingExpense.ratePerUnit
     const paidAmount  = req.body.paidAmount  !== undefined ? Number(req.body.paidAmount)  : existingExpense.paidAmount
+    const newBankAccountId = req.body.bankAccountId !== undefined ? (req.body.bankAccountId || null) : oldBankAccountId
 
     const newAmount  = Number((quantity * ratePerUnit).toFixed(2))
     const newPending = Math.max(0, Number((newAmount - paidAmount).toFixed(2)))
@@ -199,11 +233,61 @@ export const updateExpense = async (req, res, next) => {
       pendingAmount: newPending,
       status:        newStatus,
       appliedToMaterial: shouldApply ? 1 : 0,
+      bankAccountId: newBankAccountId,
     }
 
     const conn = await getPool().getConnection()
     try {
       await conn.beginTransaction()
+
+      // Handle bank balance adjustments for edit
+      if (String(newBankAccountId || '') !== String(oldBankAccountId || '')) {
+        // Bank account changed — refund old, deduct new
+        if (oldBankAccountId && oldPaid > 0) {
+          await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [oldPaid, oldBankAccountId])
+        }
+        if (newBankAccountId && paidAmount > 0) {
+          const [[bankRow]] = await conn.query(
+            'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+            [newBankAccountId]
+          )
+          if (!bankRow) {
+            await conn.rollback(); conn.release()
+            return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+          }
+          const bankBalance = Number(bankRow.balance)
+          if (bankBalance <= 0) {
+            await conn.rollback(); conn.release()
+            return res.status(400).json({ error: 'This bank account has zero balance. Please select another bank account.' })
+          }
+          if (bankBalance < paidAmount) {
+            await conn.rollback(); conn.release()
+            return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
+          }
+          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [paidAmount, newBankAccountId])
+        }
+      } else if (newBankAccountId) {
+        // Same bank — adjust only the difference
+        const diff = paidAmount - oldPaid
+        if (diff > 0) {
+          const [[bankRow]] = await conn.query(
+            'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+            [newBankAccountId]
+          )
+          if (!bankRow) {
+            await conn.rollback(); conn.release()
+            return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+          }
+          const bankBalance = Number(bankRow.balance)
+          if (bankBalance < diff) {
+            await conn.rollback(); conn.release()
+            return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
+          }
+          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [diff, newBankAccountId])
+        } else if (diff < 0) {
+          await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [Math.abs(diff), newBankAccountId])
+        }
+      }
 
       if (wasApplied) {
         await Material.reverseExpensePurchase(conn, {
@@ -224,6 +308,7 @@ export const updateExpense = async (req, res, next) => {
         amount: 'amount', paidAmount: 'paid_amount', pendingAmount: 'pending_amount',
         paymentMethod: 'payment_method', remark: 'remark', status: 'status',
         appliedToMaterial: 'applied_to_material',
+        bankAccountId: 'bank_account_id',
       }
       const sets = []
       const params = []
@@ -233,7 +318,7 @@ export const updateExpense = async (req, res, next) => {
           let val = updateData[apiKey]
           if (apiKey === 'date') val = new Date(val).toISOString().slice(0, 10)
           if (['quantity','ratePerUnit','amount','paidAmount','pendingAmount','appliedToMaterial'].includes(apiKey)) val = Number(val)
-          if (apiKey === 'supplier' && !val) val = null
+          if ((apiKey === 'supplier' || apiKey === 'bankAccountId') && !val) val = null
           params.push(val)
         }
       }
@@ -311,6 +396,10 @@ export const deleteExpense = async (req, res, next) => {
 
       await conn.query('DELETE FROM expenses WHERE id = ?', [req.params.id])
       await conn.query('UPDATE sites SET total_spent = total_spent - ? WHERE id = ?', [expense.amount, siteId])
+
+      if (expense.bankAccountId && expense.paidAmount > 0) {
+        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [expense.paidAmount, expense.bankAccountId])
+      }
       await conn.commit()
       conn.release()
     } catch (err) {

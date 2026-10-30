@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { siteService } from '../services/siteService.js'
+import { bankAccountService } from '../services/bankAccountService.js'
 import SiteDetailPage from './SiteDetailPage.jsx'
 
 export default function SitesPage({
@@ -79,27 +80,47 @@ export default function SitesPage({
   ]
 
   const formatIndianBudget = (amount) => {
-    if (!amount && amount !== 0) return '₹42.0 L'
+    if (amount === undefined || amount === null || isNaN(amount)) return '₹0'
     const num = Number(amount)
-    if (num >= 10000000) return `₹${(num / 10000000).toFixed(2)} Cr`
+    if (num === 0) return '₹0'
+    if (num >= 10000000) return `₹${(num / 10000000).toFixed(1)} Cr`
     if (num >= 100000) return `₹${(num / 100000).toFixed(1)} L`
     return `₹${num.toLocaleString('en-IN')}`
   }
 
   // Combine MongoDB sites with reference structure
   const displayRows = sites.length > 0
-    ? sites.map((s, idx) => ({
-        _id: s._id || `site-${idx}`,
+    ? sites.map((s, idx) => {
+        const budget = Number(s.totalBudget !== undefined ? s.totalBudget : (s.projectValue || 0))
+        const received = Number(s.totalReceived || 0)
+        const spent = Number(s.totalSpent || 0)
+        const balanceReceivable = Math.max(0, budget - received)
+        const remainingBudget = Math.max(0, budget - spent)
+
+        return {
+          _id: s._id || `site-${idx}`,
+          raw: s,
+          date: s.startDate
+            ? new Date(s.startDate).toLocaleDateString('en-GB')
+            : s.createdAt
+            ? new Date(s.createdAt).toLocaleDateString('en-GB')
+            : '11/08/2026',
+          name: s.name || "Aarav Height's",
+          particulars: s.siteOwner || 'Shreedhar patil',
+          budget: formatIndianBudget(budget),
+          totalReceived: formatIndianBudget(received),
+          totalSpent: formatIndianBudget(spent),
+          balanceReceivable: formatIndianBudget(balanceReceivable),
+          remaining: formatIndianBudget(remainingBudget),
+          status: s.status === 'Completed' ? 'Completed' : (s.status === 'On Hold' || s.status === 'On hold') ? 'On hold' : 'In Progress',
+        }
+      })
+    : sampleSites.map((s) => ({
+        ...s,
         raw: s,
-        date: s.startDate ? new Date(s.startDate).toLocaleDateString('en-GB') : '11/08/2026',
-        name: s.name || "Aarav Height's",
-        particulars: s.siteOwner || 'Shreedhar patil',
-        budget: formatIndianBudget(s.totalBudget),
-        totalSpent: s.totalSpent ? `₹${(s.totalSpent / 100000).toFixed(1)} L` : '00',
-        remaining: s.totalBudget ? `₹${(Math.max(0, s.totalBudget - (s.totalSpent || 0)) / 100000).toFixed(1)} L` : '00',
-        status: s.status === 'Completed' ? 'Completed' : s.status === 'On Hold' ? 'On hold' : 'In Progress',
+        totalReceived: '₹0',
+        balanceReceivable: s.budget || '₹0',
       }))
-    : sampleSites.map((s) => ({ ...s, raw: s }))
 
   // Filter rows
   const filteredRows = displayRows.filter((row) => {
@@ -192,10 +213,21 @@ export default function SitesPage({
     name: '',
     location: '',
     siteOwner: '',
-    totalBudget: '',
+    contactNumber: '',
+    email: '',
+    address: '',
+    projectValue: '',
+    advanceAmount: '',
+    totalReceived: 0,
+    bankAccountId: '',
+    additionalReceived: '0',
+    startDate: '',
+    expectedCompletionDate: '',
     status: 'Active',
     description: '',
   })
+  const [editBankAccounts, setEditBankAccounts] = useState([])
+  const [editLoadingBanks, setEditLoadingBanks] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
 
@@ -205,45 +237,121 @@ export default function SitesPage({
   }
 
   // Edit handler
-  const handleEdit = (row) => {
+  const handleEdit = async (row) => {
     const raw = row.raw || row
     setEditingSite(raw)
     setEditFormData({
       name: raw.name || row.name || '',
       location: raw.location || '',
       siteOwner: raw.siteOwner || row.particulars || '',
-      totalBudget: raw.totalBudget !== undefined ? raw.totalBudget : (row.budget ? row.budget.replace(/[^0-9.]/g, '') : ''),
-      status: raw.status || (row.status === 'Completed' ? 'Completed' : row.status === 'On hold' ? 'On Hold' : 'Active'),
+      contactNumber: raw.contactNumber || '',
+      email: raw.email || '',
+      address: raw.address || '',
+      projectValue:
+        raw.totalBudget !== undefined && raw.totalBudget !== null
+          ? raw.totalBudget
+          : raw.projectValue !== undefined
+          ? raw.projectValue
+          : '',
+      advanceAmount: raw.advanceAmount || 0,
+      totalReceived: raw.totalReceived || 0,
+      bankAccountId: raw.bankAccountId || '',
+      additionalReceived: '0',
+      startDate: raw.startDate ? raw.startDate.slice(0, 10) : '',
+      expectedCompletionDate: raw.expectedCompletionDate
+        ? raw.expectedCompletionDate.slice(0, 10)
+        : '',
+      status:
+        raw.status || (row.status === 'Completed' ? 'Completed' : row.status === 'On hold' ? 'On Hold' : 'Active'),
       description: raw.description || '',
     })
+    // Load bank accounts
+    setEditLoadingBanks(true)
+    try {
+      const banks = await bankAccountService.getAll()
+      setEditBankAccounts(Array.isArray(banks) ? banks : [])
+    } catch (_) {
+      setEditBankAccounts([])
+    } finally {
+      setEditLoadingBanks(false)
+    }
   }
 
   // Submit Edit
   const handleUpdateSubmit = async (e) => {
     e.preventDefault()
     if (!editingSite) return
+
+    // --- Frontend validation ---
+    if (!editFormData.name.trim()) {
+      showNotification && showNotification({ type: 'error', message: 'Site name is required' })
+      return
+    }
+    if (!editFormData.siteOwner.trim()) {
+      showNotification && showNotification({ type: 'error', message: 'Site owner / client is required' })
+      return
+    }
+    if (!editFormData.contactNumber.trim()) {
+      showNotification && showNotification({ type: 'error', message: 'Contact number is required' })
+      return
+    }
+    if (!editFormData.location.trim()) {
+      showNotification && showNotification({ type: 'error', message: 'Location is required' })
+      return
+    }
+    if (editFormData.email && editFormData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(editFormData.email.trim())) {
+        showNotification && showNotification({ type: 'error', message: 'Invalid email address format' })
+        return
+      }
+    }
+    if (
+      editFormData.startDate &&
+      editFormData.expectedCompletionDate &&
+      editFormData.expectedCompletionDate < editFormData.startDate
+    ) {
+      showNotification && showNotification({ type: 'error', message: 'Expected completion date cannot be earlier than start date' })
+      return
+    }
+    const addlReceived = Number(editFormData.additionalReceived || 0)
+    if (addlReceived > 0 && !editFormData.bankAccountId) {
+      showNotification && showNotification({ type: 'error', message: 'Please select a bank account to record this payment' })
+      return
+    }
+
     try {
       setUpdating(true)
-      if (editingSite._id && !editingSite._id.startsWith('site-') && !editingSite._id.startsWith('s')) {
+      const isSample =
+        !editingSite._id ||
+        String(editingSite._id).startsWith('site-') ||
+        String(editingSite._id).startsWith('s')
+      if (!isSample) {
         await siteService.update(editingSite._id, {
-          ...editFormData,
-          totalBudget: Number(editFormData.totalBudget),
+          name: editFormData.name,
+          location: editFormData.location,
+          siteOwner: editFormData.siteOwner,
+          contactNumber: editFormData.contactNumber,
+          email: editFormData.email,
+          address: editFormData.address,
+          projectValue: Number(editFormData.projectValue),
+          advanceAmount: Number(editFormData.advanceAmount || 0),
+          bankAccountId: editFormData.bankAccountId || null,
+          additionalReceived: addlReceived,
+          startDate: editFormData.startDate || null,
+          expectedCompletionDate: editFormData.expectedCompletionDate || null,
+          status: editFormData.status,
+          description: editFormData.description,
         })
       }
       if (showNotification) {
-        showNotification({
-          type: 'success',
-          message: `Site "${editFormData.name}" updated successfully!`,
-        })
+        showNotification({ type: 'success', message: `Site "${editFormData.name}" updated successfully!` })
       }
       if (onSitesChanged) onSitesChanged()
       setEditingSite(null)
     } catch (err) {
       if (showNotification) {
-        showNotification({
-          type: 'error',
-          message: err.message || 'Failed to update site',
-        })
+        showNotification({ type: 'error', message: err.message || 'Failed to update site' })
       }
     } finally {
       setUpdating(false)
@@ -435,8 +543,9 @@ export default function SitesPage({
                 <th className="th-site-name">SITE</th>
                 <th className="th-site-owner">PARTICULAR'S</th>
                 <th className="th-site-budget">PROJECT BUDGET</th>
+                <th className="th-site-received">TOTAL RECEIVED</th>
                 <th className="th-site-spent">TOTAL SPENT</th>
-                <th className="th-site-rem">REMAINING</th>
+                <th className="th-site-rem">BALANCE RECEIVABLE</th>
                 <th className="th-site-status">STATUS</th>
                 <th className="th-site-actions">ACTION</th>
               </tr>
@@ -445,7 +554,7 @@ export default function SitesPage({
               {loading ? (
                 [1, 2, 3, 4].map((i) => (
                   <tr key={i} className="skeleton-row">
-                    <td colSpan={8}>
+                    <td colSpan={9}>
                       <div className="skeleton-line" style={{ height: '24px', margin: '6px 0' }} />
                     </td>
                   </tr>
@@ -457,8 +566,9 @@ export default function SitesPage({
                     <td className="td-site-name">{row.name}</td>
                     <td className="td-site-owner">{row.particulars}</td>
                     <td className="td-site-budget">{row.budget}</td>
+                    <td className="td-site-received">{row.totalReceived}</td>
                     <td className="td-site-spent">{row.totalSpent}</td>
-                    <td className="td-site-rem">{row.remaining}</td>
+                    <td className="td-site-rem">{row.balanceReceivable}</td>
                     <td className="td-site-status">
                       <span
                         className={`site-status-pill ${
@@ -639,11 +749,27 @@ export default function SitesPage({
                   </span>
                 </div>
                 <div className="site-view-item">
+                  <span className="site-view-label">Total Received</span>
+                  <span className="site-view-val">
+                    {formatIndianBudget(viewingSite.totalReceived || 0)}
+                  </span>
+                </div>
+                <div className="site-view-item">
                   <span className="site-view-label">Total Spent</span>
                   <span className="site-view-val">
-                    {viewingSite.totalSpent !== undefined
-                      ? `₹${((viewingSite.totalSpent || 0) / 100000).toFixed(1)} L`
-                      : '00'}
+                    {formatIndianBudget(viewingSite.totalSpent || 0)}
+                  </span>
+                </div>
+                <div className="site-view-item">
+                  <span className="site-view-label">Balance Receivable</span>
+                  <span className="site-view-val">
+                    {formatIndianBudget(
+                      Math.max(
+                        0,
+                        Number(viewingSite.totalBudget !== undefined ? viewingSite.totalBudget : (viewingSite.projectValue || 0)) -
+                          Number(viewingSite.totalReceived || 0)
+                      )
+                    )}
                   </span>
                 </div>
                 <div className="site-view-item full-width">
@@ -671,7 +797,7 @@ export default function SitesPage({
       {/* Edit / Update Site Modal */}
       {editingSite && (
         <div className="modal-overlay" onClick={() => setEditingSite(null)}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-container" style={{ maxWidth: 760 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title-row">
                 <div className="modal-icon-badge">
@@ -679,7 +805,7 @@ export default function SitesPage({
                 </div>
                 <div>
                   <h3 className="modal-title">Update Construction Site</h3>
-                  <p className="modal-subtitle">Modify site details and project budget</p>
+                  <p className="modal-subtitle">Modify site details, owner info, and project finances</p>
                 </div>
               </div>
               <button
@@ -692,12 +818,15 @@ export default function SitesPage({
             </div>
 
             <form onSubmit={handleUpdateSubmit} className="modal-form">
+              {/* ── Section A: Site & Owner Details ── */}
+              <p style={{ fontSize: 12, fontWeight: 600, color: '#0293DE', letterSpacing: '0.06em', marginBottom: 10, textTransform: 'uppercase' }}>
+                Site &amp; Owner Details
+              </p>
               <div className="modal-form-grid">
                 <div className="form-group">
                   <label className="form-label">Site Name *</label>
                   <input
                     type="text"
-                    name="name"
                     className="form-input"
                     value={editFormData.name}
                     onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
@@ -706,13 +835,34 @@ export default function SitesPage({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Location</label>
+                  <label className="form-label">Contact Number *</label>
+                  <input
+                    type="tel"
+                    className="form-input"
+                    value={editFormData.contactNumber}
+                    onChange={(e) => setEditFormData({ ...editFormData, contactNumber: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Email Address</label>
+                  <input
+                    type="email"
+                    className="form-input"
+                    value={editFormData.email}
+                    onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Location *</label>
                   <input
                     type="text"
-                    name="location"
                     className="form-input"
                     value={editFormData.location}
                     onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
+                    required
                   />
                 </div>
 
@@ -720,7 +870,6 @@ export default function SitesPage({
                   <label className="form-label">Site Owner / Client *</label>
                   <input
                     type="text"
-                    name="siteOwner"
                     className="form-input"
                     value={editFormData.siteOwner}
                     onChange={(e) => setEditFormData({ ...editFormData, siteOwner: e.target.value })}
@@ -729,37 +878,143 @@ export default function SitesPage({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Total Budget (₹) *</label>
+                  <label className="form-label">Address / City</label>
                   <input
-                    type="number"
-                    name="totalBudget"
+                    type="text"
                     className="form-input"
-                    value={editFormData.totalBudget}
-                    onChange={(e) => setEditFormData({ ...editFormData, totalBudget: e.target.value })}
-                    required
-                    min="0"
+                    value={editFormData.address}
+                    onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
                   />
                 </div>
 
                 <div className="form-group">
+                  <label className="form-label">Start Date</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={editFormData.startDate}
+                    onChange={(e) => setEditFormData({ ...editFormData, startDate: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Expected Completion</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={editFormData.expectedCompletionDate}
+                    onChange={(e) => setEditFormData({ ...editFormData, expectedCompletionDate: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label className="form-label">Project Status</label>
                   <select
-                    name="status"
                     className="form-select"
                     value={editFormData.status}
                     onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
                   >
                     <option value="Active">In Progress / Active</option>
-                    <option value="On Hold">On hold</option>
+                    <option value="On Hold">On Hold</option>
                     <option value="Completed">Completed</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* ── Section B: Project Financial Details ── */}
+              <p style={{ fontSize: 12, fontWeight: 600, color: '#0293DE', letterSpacing: '0.06em', margin: '18px 0 10px', textTransform: 'uppercase' }}>
+                Project Financial Details
+              </p>
+              <div className="modal-form-grid">
+                <div className="form-group">
+                  <label className="form-label">Project Value (₹) *</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editFormData.projectValue}
+                    onChange={(e) => setEditFormData({ ...editFormData, projectValue: e.target.value })}
+                    min="0"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Advance Amount (₹)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editFormData.advanceAmount}
+                    onChange={(e) => setEditFormData({ ...editFormData, advanceAmount: e.target.value })}
+                    min="0"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Total Received (₹)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editFormData.totalReceived}
+                    readOnly
+                    style={{ background: '#f5f7fa', cursor: 'not-allowed', color: '#6b7c96' }}
+                    tabIndex={-1}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Bank Account</label>
+                  <select
+                    className="form-select"
+                    value={editFormData.bankAccountId}
+                    onChange={(e) => setEditFormData({ ...editFormData, bankAccountId: e.target.value })}
+                    disabled={editLoadingBanks}
+                  >
+                    <option value="">
+                      {editLoadingBanks ? 'Loading banks...' : '— Select Bank Account —'}
+                    </option>
+                    {editBankAccounts.map((bank) => (
+                      <option key={bank._id || bank.id} value={bank._id || bank.id}>
+                        {bank.bankName} •••• {String(bank.accountNumber || '').slice(-4)}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div className="form-group">
+                  <label className="form-label">Additional Amount Received Now (₹)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editFormData.additionalReceived}
+                    onChange={(e) => setEditFormData({ ...editFormData, additionalReceived: e.target.value })}
+                    min="0"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Balance Receivable (₹)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={
+                      Math.max(
+                        0,
+                        Number(editFormData.projectValue || 0) -
+                          Number(editFormData.totalReceived || 0) -
+                          Number(editFormData.additionalReceived || 0)
+                      )
+                    }
+                    readOnly
+                    style={{ background: '#f5f7fa', cursor: 'not-allowed', color: '#6b7c96' }}
+                    tabIndex={-1}
+                  />
+                </div>
+
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label className="form-label">Description / Remarks</label>
                   <input
                     type="text"
-                    name="description"
                     className="form-input"
                     value={editFormData.description}
                     onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
