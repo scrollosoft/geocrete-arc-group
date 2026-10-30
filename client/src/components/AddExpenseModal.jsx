@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { X, Receipt, Calendar } from 'lucide-react'
+import { X, Receipt } from 'lucide-react'
 import { expenseService } from '../services/expenseService.js'
 import { materialService } from '../services/materialService.js'
 

@@ -112,7 +112,7 @@ export default function MaterialsPage({
   const [sortFilter, setSortFilter] = useState('Newest First')
 
   // Pagination
-  const [pageSize, setPageSize] = useState(5)
+  const pageSize = 5
   const [currentPage, setCurrentPage] = useState(1)
 
   // Action Modals State

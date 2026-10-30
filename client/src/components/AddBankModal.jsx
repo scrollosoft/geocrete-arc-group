@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, Wallet, Building2 } from 'lucide-react'
+import { X, Building2 } from 'lucide-react'
 import { bankAccountService } from '../services/bankAccountService.js'
 
 export default function AddBankModal({

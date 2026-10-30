@@ -5,11 +5,7 @@ import {
   User,
   Plus,
   Package,
-  HardHat,
-  Receipt,
-  Truck,
   Wrench,
-  TrendingUp,
 } from 'lucide-react'
 import { materialService } from '../services/materialService.js'
 import { supplierService } from '../services/supplierService.js'

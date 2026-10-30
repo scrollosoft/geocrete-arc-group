@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { X, Building2, IndianRupee, ShieldAlert } from 'lucide-react'
+import { X, Building2, ShieldAlert } from 'lucide-react'
 import { siteService } from '../services/siteService.js'
 import { bankAccountService } from '../services/bankAccountService.js'
 

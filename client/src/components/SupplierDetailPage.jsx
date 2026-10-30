@@ -8,8 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
-  Clock,
-  XCircle,
   Wallet,
   X,
 } from 'lucide-react'

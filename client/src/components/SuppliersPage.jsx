@@ -11,7 +11,6 @@ import {
   Pencil,
   Trash2,
   X,
-  Truck,
   Check,
 } from 'lucide-react'
 import { supplierService } from '../services/supplierService.js'
@@ -53,7 +52,7 @@ export default function SuppliersPage({
   const [sortFilter, setSortFilter] = useState('Newest First')
 
   // Pagination
-  const [pageSize, setPageSize] = useState(5)
+  const pageSize = 5
   const [currentPage, setCurrentPage] = useState(1)
 
   // Action modals

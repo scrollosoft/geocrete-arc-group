@@ -1,5 +1,5 @@
 import { getPool } from '../config/db.js'
-import { withId, fmtDate, fmtDateOnly } from './helpers.js'
+import { fmtDate, fmtDateOnly } from './helpers.js'
 
 /**
  * Convert a raw SQL expense row (with optional JOIN columns for site/supplier)

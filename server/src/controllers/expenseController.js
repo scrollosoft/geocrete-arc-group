@@ -1,5 +1,4 @@
 import { Expense } from '../models/Expense.js'
-import { Site } from '../models/Site.js'
 import { Material, isQualifyingMaterialPurchase } from '../models/Material.js'
 import { getPool } from '../config/db.js'
 
@@ -46,8 +45,6 @@ export const createExpense = async (req, res, next) => {
       paidAmount,
       bankAccountId,
       paymentMethod,
-      paymentStatus,
-      status,
       remark,
     } = req.body
 

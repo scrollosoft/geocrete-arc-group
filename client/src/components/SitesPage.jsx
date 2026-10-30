@@ -270,7 +270,7 @@ export default function SitesPage({
     try {
       const banks = await bankAccountService.getAll()
       setEditBankAccounts(Array.isArray(banks) ? banks : [])
-    } catch (_) {
+    } catch {
       setEditBankAccounts([])
     } finally {
       setEditLoadingBanks(false)

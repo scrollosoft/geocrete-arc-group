@@ -7,7 +7,6 @@ import { connectDB } from './config/db.js'
 import { ensureSchema } from './ensureSchema.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { seedDatabase } from './seed.js'
-import { Material } from './models/Material.js'
 
 import bankAccountRoutes from './routes/bankAccountRoutes.js'
 import siteRoutes from './routes/siteRoutes.js'

@@ -268,11 +268,6 @@ export default function App() {
     setMaterialsRefreshTrigger((prev) => prev + 1)
   }
 
-  const handleSiteCreated = (newSite) => {
-    loadSites()
-    setSelectedSiteFilter(newSite._id)
-  }
-
   const handleScrollToAddExpense = () => {
     setIsAddExpenseOpen(true)
   }

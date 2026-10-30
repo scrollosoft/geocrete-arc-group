@@ -3,7 +3,6 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Search,
-  Filter,
   Calendar,
   Landmark,
   X,

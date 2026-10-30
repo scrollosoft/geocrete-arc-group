@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
-  Pencil,
   Trash2,
 } from 'lucide-react'
 import { siteOwnerService } from '../services/siteOwnerService.js'
@@ -31,7 +30,7 @@ export default function SiteOwnersPage({
   const [sortFilter, setSortFilter] = useState('Newest First')
 
   // Pagination
-  const [pageSize, setPageSize] = useState(5)
+  const pageSize = 5
   const [currentPage, setCurrentPage] = useState(1)
 
   // View modal state
@@ -58,58 +57,6 @@ export default function SiteOwnersPage({
   useEffect(() => {
     fetchSiteOwners()
   }, [fetchSiteOwners, refreshTrigger])
-
-  // Fallback demo data matching the screenshot if DB is initially empty
-  const sampleClients = [
-    {
-      _id: 'c1',
-      id: 'c1',
-      name: 'Rajesh Mehta',
-      siteName: 'Aarav Heights',
-      phone: '+91234567892',
-      projectValue: 85000000,
-      advanceAmount: 6500000,
-      totalReceived: 13500000,
-      receivable: 5000000,
-      status: 'On schedule',
-    },
-    {
-      _id: 'c2',
-      id: 'c2',
-      name: 'Priya Shah',
-      siteName: 'Aarav Heights',
-      phone: '+91234567892',
-      projectValue: 9250000,
-      advanceAmount: 2500000,
-      totalReceived: 4800000,
-      receivable: 4400000,
-      status: 'On schedule',
-    },
-    {
-      _id: 'c3',
-      id: 'c3',
-      name: 'Vedanta',
-      siteName: 'Orchid Business Park',
-      phone: '+91234567892',
-      projectValue: 24000000,
-      advanceAmount: 8000000,
-      totalReceived: 21000000,
-      receivable: 3000000,
-      status: 'Payment due',
-    },
-    {
-      _id: 'c4',
-      id: 'c4',
-      name: 'Karan Malhotra',
-      siteName: 'Greenfield Villa',
-      phone: '+91234567892',
-      projectValue: 704000000,
-      advanceAmount: 2000000,
-      totalReceived: 6800000,
-      receivable: 6000000,
-      status: 'On schedule',
-    },
-  ]
 
   const displayList = clients.length > 0 ? clients : []
 

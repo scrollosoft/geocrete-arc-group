@@ -188,7 +188,7 @@ export const getSupplierPurchases = async (req, res, next) => {
 
 export const recordPayment = async (req, res, next) => {
   try {
-    const { materialId, amount } = req.body
+    const { materialId } = req.body
     if (!materialId) {
       return res.status(400).json({ error: 'materialId is required' })
     }

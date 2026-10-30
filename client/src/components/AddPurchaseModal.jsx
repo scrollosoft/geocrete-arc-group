@@ -41,18 +41,6 @@ const PAYMENT_METHODS = [
   'Cash',
 ]
 
-const getCategoryForMaterial = (mat = '') => {
-  const m = String(mat).toLowerCase()
-  if (m.includes('cement')) return 'Cement'
-  if (m.includes('steel')) return 'Steel'
-  if (m.includes('brick') || m.includes('block')) return 'Bricks'
-  if (m.includes('sand')) return 'Sand'
-  if (m.includes('aggregate')) return 'Aggregate'
-  if (m.includes('electric')) return 'Electrical Materials'
-  if (m.includes('plumb')) return 'Plumbing Materials'
-  return 'Other'
-}
-
 export default function AddPurchaseModal({
   isOpen,
   onClose,

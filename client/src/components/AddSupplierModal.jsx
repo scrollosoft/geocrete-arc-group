@@ -15,8 +15,6 @@ const AVAILABLE_CATEGORIES = [
   'Other',
 ]
 
-const PAYMENT_TERMS_OPTIONS = ['Immediate', '7 Days', '15 Days', '30 Days', 'Custom']
-
 export default function AddSupplierModal({
   isOpen,
   onClose,
