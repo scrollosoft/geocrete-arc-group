@@ -489,12 +489,12 @@ export default function MaterialsPage({
     }
     const num = Number(amount)
     if (num >= 10000000) {
-      return `â‚¹${(num / 10000000).toFixed(2).replace(/\.00$/, '')} Cr`
+      return `₹${(num / 10000000).toFixed(2).replace(/\.00$/, '')} Cr`
     }
     if (num >= 100000) {
-      return `â‚¹${(num / 100000).toFixed(1).replace(/\.0$/, '')} L`
+      return `₹${(num / 100000).toFixed(1).replace(/\.0$/, '')} L`
     }
-    return `â‚¹${num.toLocaleString('en-IN')}`
+    return `₹${num.toLocaleString('en-IN')}`
   }
 
   return (
@@ -507,7 +507,7 @@ export default function MaterialsPage({
             <span className="breadcrumb-slash">/</span>
             <span className="breadcrumb-active">MATERIAL'S</span>
           </div>
-          <h1 className="sites-title">Materialâ€™s</h1>
+          <h1 className="sites-title">Material’s</h1>
           <p className="sites-subtitle">
             Monitor purchases, consumption and stock across sites.
           </p>
@@ -534,7 +534,7 @@ export default function MaterialsPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.totalCost, 'â‚¹1.68 Cr')}
+            {formatCostValue(summary?.totalCost, '₹1.68 Cr')}
           </div>
           <span className="stat-desc">39.3% of investment</span>
         </div>
@@ -548,7 +548,7 @@ export default function MaterialsPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.monthCost, 'â‚¹18.6 L')}
+            {formatCostValue(summary?.monthCost, '₹18.6 L')}
           </div>
           <span className="stat-desc">
             {summary?.monthCount ? `${summary.monthCount} purchase records` : '42 purchase records'}
@@ -564,7 +564,7 @@ export default function MaterialsPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.pendingAmount, 'â‚¹8.4 L')}
+            {formatCostValue(summary?.pendingAmount, '₹8.4 L')}
           </div>
           <span className="stat-desc">
             {summary?.pendingSuppliersCount ? `Across ${summary.pendingSuppliersCount} suppliers` : 'Across 7 suppliers'}
@@ -708,9 +708,9 @@ export default function MaterialsPage({
                     ? Number(item.outstandingAmount)
                     : Math.max(0, cost - paid)
 
-                  const formattedCost = `â‚¹${cost.toLocaleString('en-IN')}`
-                  const formattedPaid = `â‚¹${paid.toLocaleString('en-IN')}`
-                  const formattedOutstanding = outstanding > 0 ? `â‚¹${outstanding.toLocaleString('en-IN')}` : 'â€”'
+                  const formattedCost = `₹${cost.toLocaleString('en-IN')}`
+                  const formattedPaid = `₹${paid.toLocaleString('en-IN')}`
+                  const formattedOutstanding = outstanding > 0 ? `₹${outstanding.toLocaleString('en-IN')}` : 'â€”'
 
                   return (
                     <tr key={item._id || item.id} className="site-data-row">
@@ -935,18 +935,18 @@ export default function MaterialsPage({
                 </div>
                 <div className="site-view-item">
                   <span className="site-view-label">Purchase Cost</span>
-                  <span className="site-view-val">â‚¹{Number(activeView.totalCost || 0).toLocaleString('en-IN')}</span>
+                  <span className="site-view-val">₹{Number(activeView.totalCost || 0).toLocaleString('en-IN')}</span>
                 </div>
                 <div className="site-view-item">
                   <span className="site-view-label">Paid Amount</span>
                   <span className="site-view-val" style={{ color: '#16A34A' }}>
-                    â‚¹{Number(activeView.paidAmount !== undefined && activeView.paidAmount !== null ? activeView.paidAmount : (activeView.paymentStatus === 'Paid' ? activeView.totalCost : 0)).toLocaleString('en-IN')}
+                    ₹{Number(activeView.paidAmount !== undefined && activeView.paidAmount !== null ? activeView.paidAmount : (activeView.paymentStatus === 'Paid' ? activeView.totalCost : 0)).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="site-view-item">
                   <span className="site-view-label">Outstanding Amount</span>
                   <span className="site-view-val" style={{ color: (activeView.outstandingAmount || 0) > 0 ? '#EF4444' : '#70829F' }}>
-                    â‚¹{Number(activeView.outstandingAmount !== undefined ? activeView.outstandingAmount : Math.max(0, (activeView.totalCost || 0) - (activeView.paidAmount || 0))).toLocaleString('en-IN')}
+                    ₹{Number(activeView.outstandingAmount !== undefined ? activeView.outstandingAmount : Math.max(0, (activeView.totalCost || 0) - (activeView.paidAmount || 0))).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="site-view-item">
@@ -1041,16 +1041,16 @@ export default function MaterialsPage({
                                 {Number(tx.quantity).toLocaleString('en-IN')} {tx.unit}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#475569' }}>
-                                â‚¹{Number(tx.ratePerUnit || 0).toLocaleString('en-IN')}
+                                ₹{Number(tx.ratePerUnit || 0).toLocaleString('en-IN')}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#0F172A', fontWeight: 600 }}>
-                                â‚¹{Number(tx.totalAmount || 0).toLocaleString('en-IN')}
+                                ₹{Number(tx.totalAmount || 0).toLocaleString('en-IN')}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#16A34A', fontWeight: 600 }}>
-                                â‚¹{Number(tx.paidAmount || 0).toLocaleString('en-IN')}
+                                ₹{Number(tx.paidAmount || 0).toLocaleString('en-IN')}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: tx.outstandingAmount > 0 ? '#EF4444' : '#64748B', fontWeight: tx.outstandingAmount > 0 ? 600 : 400 }}>
-                                {tx.outstandingAmount > 0 ? `â‚¹${Number(tx.outstandingAmount).toLocaleString('en-IN')}` : 'â€”'}
+                                {tx.outstandingAmount > 0 ? `₹${Number(tx.outstandingAmount).toLocaleString('en-IN')}` : 'â€”'}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                                 <span
@@ -1234,7 +1234,7 @@ export default function MaterialsPage({
 
                 {/* Unit Price */}
                 <div className="form-group">
-                  <label className="form-label">Unit Price (â‚¹)</label>
+                  <label className="form-label">Unit Price (₹)</label>
                   <input
                     type="number"
                     name="unitPrice"
@@ -1248,7 +1248,7 @@ export default function MaterialsPage({
 
                 {/* Total Cost */}
                 <div className="form-group">
-                  <label className="form-label">Total Cost (â‚¹)</label>
+                  <label className="form-label">Total Cost (₹)</label>
                   <input
                     type="number"
                     name="totalCost"
@@ -1262,7 +1262,7 @@ export default function MaterialsPage({
 
                 {/* Paid Amount */}
                 <div className="form-group">
-                  <label className="form-label">Paid Amount (â‚¹)</label>
+                  <label className="form-label">Paid Amount (₹)</label>
                   <input
                     type="number"
                     name="paidAmount"

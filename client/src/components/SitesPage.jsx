@@ -42,7 +42,7 @@ export default function SitesPage({
       date: '11/08/2026',
       name: 'Greenfield Villa',
       particulars: 'Shreedhar patil',
-      budget: 'â‚¹42.0 L',
+      budget: '₹42.0 L',
       totalSpent: '00',
       remaining: '00',
       status: 'In Progress',
@@ -52,7 +52,7 @@ export default function SitesPage({
       date: '11/08/2026',
       name: "Aarav Height's",
       particulars: 'Shreedhar patil',
-      budget: 'â‚¹42.0 L',
+      budget: '₹42.0 L',
       totalSpent: '00',
       remaining: '00',
       status: 'In Progress',
@@ -62,7 +62,7 @@ export default function SitesPage({
       date: '11/08/2026',
       name: "Aarav Height's",
       particulars: 'Shreedhar patil',
-      budget: 'â‚¹42.0 L',
+      budget: '₹42.0 L',
       totalSpent: '00',
       remaining: '00',
       status: 'In Progress',
@@ -72,7 +72,7 @@ export default function SitesPage({
       date: '11/08/2026',
       name: "Aarav Height's",
       particulars: 'Shreedhar patil',
-      budget: 'â‚¹42.0 L',
+      budget: '₹42.0 L',
       totalSpent: '00',
       remaining: '00',
       status: 'Completed',
@@ -80,12 +80,12 @@ export default function SitesPage({
   ]
 
   const formatIndianBudget = (amount) => {
-    if (amount === undefined || amount === null || isNaN(amount)) return 'â‚¹0'
+    if (amount === undefined || amount === null || isNaN(amount)) return '₹0'
     const num = Number(amount)
-    if (num === 0) return 'â‚¹0'
-    if (num >= 10000000) return `â‚¹${(num / 10000000).toFixed(1)} Cr`
-    if (num >= 100000) return `â‚¹${(num / 100000).toFixed(1)} L`
-    return `â‚¹${num.toLocaleString('en-IN')}`
+    if (num === 0) return '₹0'
+    if (num >= 10000000) return `₹${(num / 10000000).toFixed(1)} Cr`
+    if (num >= 100000) return `₹${(num / 100000).toFixed(1)} L`
+    return `₹${num.toLocaleString('en-IN')}`
   }
 
   // Combine MongoDB sites with reference structure
@@ -118,8 +118,8 @@ export default function SitesPage({
     : sampleSites.map((s) => ({
         ...s,
         raw: s,
-        totalReceived: 'â‚¹0',
-        balanceReceivable: s.budget || 'â‚¹0',
+        totalReceived: '₹0',
+        balanceReceivable: s.budget || '₹0',
       }))
 
   // Filter rows
@@ -648,8 +648,8 @@ export default function SitesPage({
             </div>
             <span className="pagination-range-text">
               {totalRecords === 0
-                ? '0â€“0 of 0'
-                : `${startIndex + 1}â€“${endIndex} of ${totalRecords.toLocaleString('en-IN')}`}
+                ? '0—0 of 0'
+                : `${startIndex + 1}—${endIndex} of ${totalRecords.toLocaleString('en-IN')}`}
             </span>
           </div>
 
@@ -928,7 +928,7 @@ export default function SitesPage({
               </p>
               <div className="modal-form-grid">
                 <div className="form-group">
-                  <label className="form-label">Project Value (â‚¹) *</label>
+                  <label className="form-label">Project Value (₹) *</label>
                   <input
                     type="number"
                     className="form-input"
@@ -940,7 +940,7 @@ export default function SitesPage({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Advance Amount (â‚¹)</label>
+                  <label className="form-label">Advance Amount (₹)</label>
                   <input
                     type="number"
                     className="form-input"
@@ -951,7 +951,7 @@ export default function SitesPage({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Total Received (â‚¹)</label>
+                  <label className="form-label">Total Received (₹)</label>
                   <input
                     type="number"
                     className="form-input"
@@ -982,7 +982,7 @@ export default function SitesPage({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Additional Amount Received Now (â‚¹)</label>
+                  <label className="form-label">Additional Amount Received Now (₹)</label>
                   <input
                     type="number"
                     className="form-input"
@@ -994,7 +994,7 @@ export default function SitesPage({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Balance Receivable (â‚¹)</label>
+                  <label className="form-label">Balance Receivable (₹)</label>
                   <input
                     type="number"
                     className="form-input"

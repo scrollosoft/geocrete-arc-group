@@ -318,9 +318,9 @@ export default function SuppliersPage({
 
   const formatCurrency = (val) => {
     const num = Number(val || 0)
-    if (num >= 10000000) return `â‚¹${(num / 10000000).toFixed(2)} Cr`
-    if (num >= 100000) return `â‚¹${(num / 100000).toFixed(1)} L`
-    return `â‚¹${num.toLocaleString('en-IN')}`
+    if (num >= 10000000) return `₹${(num / 10000000).toFixed(2)} Cr`
+    if (num >= 100000) return `₹${(num / 100000).toFixed(1)} L`
+    return `₹${num.toLocaleString('en-IN')}`
   }
 
   return (
@@ -515,10 +515,10 @@ export default function SuppliersPage({
                 </tr>
               ) : (
                 paginatedRecords.map((item) => {
-                  const formattedPurchase = `â‚¹${Number(item.totalPurchase || 0).toLocaleString('en-IN')}`
-                  const formattedPaid = `â‚¹${Number(item.totalPaid || 0).toLocaleString('en-IN')}`
+                  const formattedPurchase = `₹${Number(item.totalPurchase || 0).toLocaleString('en-IN')}`
+                  const formattedPaid = `₹${Number(item.totalPaid || 0).toLocaleString('en-IN')}`
                   const currentOutstanding = Number(item.outstanding || 0)
-                  const formattedOutstanding = currentOutstanding > 0 ? `â‚¹${currentOutstanding.toLocaleString('en-IN')}` : '-'
+                  const formattedOutstanding = currentOutstanding > 0 ? `₹${currentOutstanding.toLocaleString('en-IN')}` : '-'
                   const contactPhone = item.phone || '-'
                   const lastDate = item.lastDate && item.lastDate !== '-' ? item.lastDate : '-'
 
@@ -985,7 +985,7 @@ export default function SuppliersPage({
                     opacity: editLoading ? 0.7 : 1,
                   }}
                 >
-                  {editLoading ? 'Savingâ€¦' : 'Save Changes'}
+                  {editLoading ? 'Saving…' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -1077,7 +1077,7 @@ export default function SuppliersPage({
                   opacity: deleteLoading ? 0.7 : 1,
                 }}
               >
-                {deleteLoading ? 'Deletingâ€¦' : 'Yes, Delete'}
+                {deleteLoading ? 'Deleting…' : 'Yes, Delete'}
               </button>
             </div>
           </div>
