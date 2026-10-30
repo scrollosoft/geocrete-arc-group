@@ -971,7 +971,7 @@ export default function SitesPage({
                     disabled={editLoadingBanks}
                   >
                     <option value="">
-                      {editLoadingBanks ? 'Loading banks...' : 'â€” Select Bank Account â€”'}
+                      {editLoadingBanks ? 'Loading banks...' : '— Select Bank Account —'}
                     </option>
                     {editBankAccounts.map((bank) => (
                       <option key={bank._id || bank.id} value={bank._id || bank.id}>

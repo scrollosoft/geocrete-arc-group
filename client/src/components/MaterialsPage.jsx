@@ -695,7 +695,7 @@ export default function MaterialsPage({
               ) : (
                 paginatedRecords.map((item) => {
                   const siteName = item.site?.name || item.siteName || 'N/A'
-                  const supplierName = item.supplier?.name || item.supplierName || 'â€”'
+                  const supplierName = item.supplier?.name || item.supplierName || '—'
                   const formattedQty = `${Number(item.quantity || 0).toLocaleString('en-IN')} ${item.unit || ''}`
 
                   const cost = Number(item.totalCost || 0)
@@ -710,7 +710,7 @@ export default function MaterialsPage({
 
                   const formattedCost = `₹${cost.toLocaleString('en-IN')}`
                   const formattedPaid = `₹${paid.toLocaleString('en-IN')}`
-                  const formattedOutstanding = outstanding > 0 ? `₹${outstanding.toLocaleString('en-IN')}` : 'â€”'
+                  const formattedOutstanding = outstanding > 0 ? `₹${outstanding.toLocaleString('en-IN')}` : '—'
 
                   return (
                     <tr key={item._id || item.id} className="site-data-row">
@@ -911,7 +911,7 @@ export default function MaterialsPage({
                 </div>
                 <div className="site-view-item">
                   <span className="site-view-label">Supplier</span>
-                  <span className="site-view-val">{activeView.supplier?.name || activeView.supplierName || 'â€”'}</span>
+                  <span className="site-view-val">{activeView.supplier?.name || activeView.supplierName || '—'}</span>
                 </div>
                 <div className="site-view-item">
                   <span className="site-view-label">Purchased Quantity</span>
@@ -952,7 +952,7 @@ export default function MaterialsPage({
                 <div className="site-view-item">
                   <span className="site-view-label">Purchase Date</span>
                   <span className="site-view-val">
-                    {activeView.purchaseDate ? new Date(activeView.purchaseDate).toLocaleDateString('en-GB') : 'â€”'}
+                    {activeView.purchaseDate ? new Date(activeView.purchaseDate).toLocaleDateString('en-GB') : '—'}
                   </span>
                 </div>
                 {activeView.notes && (
@@ -1023,19 +1023,19 @@ export default function MaterialsPage({
                               }}
                             >
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#1E293B', fontWeight: 500 }}>
-                                {tx.purchaseDate ? new Date(tx.purchaseDate).toLocaleDateString('en-GB') : 'â€”'}
+                                {tx.purchaseDate ? new Date(tx.purchaseDate).toLocaleDateString('en-GB') : '—'}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#64748B', fontFamily: 'monospace', fontSize: '11px' }}>
-                                {tx.refNumber || 'â€”'}
+                                {tx.refNumber || '—'}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#0F172A', fontWeight: 600 }}>
                                 {tx.materialName}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#64748B' }}>
-                                {tx.site?.name || 'â€”'}
+                                {tx.site?.name || '—'}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#64748B' }}>
-                                {tx.supplier?.name || 'â€”'}
+                                {tx.supplier?.name || '—'}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#0F172A', fontWeight: 600 }}>
                                 {Number(tx.quantity).toLocaleString('en-IN')} {tx.unit}
@@ -1050,7 +1050,7 @@ export default function MaterialsPage({
                                 ₹{Number(tx.paidAmount || 0).toLocaleString('en-IN')}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: tx.outstandingAmount > 0 ? '#EF4444' : '#64748B', fontWeight: tx.outstandingAmount > 0 ? 600 : 400 }}>
-                                {tx.outstandingAmount > 0 ? `₹${Number(tx.outstandingAmount).toLocaleString('en-IN')}` : 'â€”'}
+                                {tx.outstandingAmount > 0 ? `₹${Number(tx.outstandingAmount).toLocaleString('en-IN')}` : '—'}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                                 <span
