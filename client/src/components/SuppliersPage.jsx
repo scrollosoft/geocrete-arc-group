@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+﻿import React, { useState, useEffect, useCallback } from 'react'
 import {
   CreditCard,
   AlertTriangle,
@@ -85,7 +85,7 @@ export default function SuppliersPage({
     fetchSuppliers()
   }, [fetchSuppliers, refreshTrigger])
 
-  // ── Action handlers ────────────────────────────
+  // â”€â”€ Action handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleView = (item) => {
     if (onViewSupplier) {
       onViewSupplier(item)
@@ -318,9 +318,9 @@ export default function SuppliersPage({
 
   const formatCurrency = (val) => {
     const num = Number(val || 0)
-    if (num >= 10000000) return `₹${(num / 10000000).toFixed(2)} Cr`
-    if (num >= 100000) return `₹${(num / 100000).toFixed(1)} L`
-    return `₹${num.toLocaleString('en-IN')}`
+    if (num >= 10000000) return `â‚¹${(num / 10000000).toFixed(2)} Cr`
+    if (num >= 100000) return `â‚¹${(num / 100000).toFixed(1)} L`
+    return `â‚¹${num.toLocaleString('en-IN')}`
   }
 
   return (
@@ -515,10 +515,10 @@ export default function SuppliersPage({
                 </tr>
               ) : (
                 paginatedRecords.map((item) => {
-                  const formattedPurchase = `₹${Number(item.totalPurchase || 0).toLocaleString('en-IN')}`
-                  const formattedPaid = `₹${Number(item.totalPaid || 0).toLocaleString('en-IN')}`
+                  const formattedPurchase = `â‚¹${Number(item.totalPurchase || 0).toLocaleString('en-IN')}`
+                  const formattedPaid = `â‚¹${Number(item.totalPaid || 0).toLocaleString('en-IN')}`
                   const currentOutstanding = Number(item.outstanding || 0)
-                  const formattedOutstanding = currentOutstanding > 0 ? `₹${currentOutstanding.toLocaleString('en-IN')}` : '-'
+                  const formattedOutstanding = currentOutstanding > 0 ? `â‚¹${currentOutstanding.toLocaleString('en-IN')}` : '-'
                   const contactPhone = item.phone || '-'
                   const lastDate = item.lastDate && item.lastDate !== '-' ? item.lastDate : '-'
 
@@ -687,12 +687,12 @@ export default function SuppliersPage({
         </div>
       </div>
 
-      {/* ── EDIT SUPPLIER MODAL ── */}
+      {/* â”€â”€ EDIT SUPPLIER MODAL â”€â”€ */}
       {editSupplier && editFormData && (
         <div className="modal-overlay" onClick={() => setEditSupplier(null)}>
           <div
             className="modal-container"
-            style={{ maxWidth: '640px', maxHeight: '92vh', overflowY: 'auto' }}
+            style={{ maxWidth: '640px' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
@@ -746,7 +746,8 @@ export default function SuppliersPage({
               </div>
             )}
 
-            <form onSubmit={handleEditSave} style={{ padding: '20px 24px' }}>
+            <form onSubmit={handleEditSave} className="modal-form">
+              <div className="modal-body">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 {/* Supplier Name */}
                 <div style={{ gridColumn: 'span 2' }}>
@@ -949,7 +950,9 @@ export default function SuppliersPage({
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #E5EAF1' }}>
+              </div>{/* end modal-body */}
+
+              <div className="modal-footer">
                 <button
                   type="button"
                   onClick={() => setEditSupplier(null)}
@@ -982,7 +985,7 @@ export default function SuppliersPage({
                     opacity: editLoading ? 0.7 : 1,
                   }}
                 >
-                  {editLoading ? 'Saving…' : 'Save Changes'}
+                  {editLoading ? 'Savingâ€¦' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -990,7 +993,7 @@ export default function SuppliersPage({
         </div>
       )}
 
-      {/* ── DELETE CONFIRMATION MODAL ── */}
+      {/* â”€â”€ DELETE CONFIRMATION MODAL â”€â”€ */}
       {deleteSupplier && (
         <div className="modal-overlay" onClick={() => setDeleteSupplier(null)}>
           <div
@@ -1074,7 +1077,7 @@ export default function SuppliersPage({
                   opacity: deleteLoading ? 0.7 : 1,
                 }}
               >
-                {deleteLoading ? 'Deleting…' : 'Yes, Delete'}
+                {deleteLoading ? 'Deletingâ€¦' : 'Yes, Delete'}
               </button>
             </div>
           </div>

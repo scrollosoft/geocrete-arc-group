@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+﻿import React, { useState } from 'react'
 import { X, Building2 } from 'lucide-react'
 import { bankAccountService } from '../services/bankAccountService.js'
 
@@ -159,6 +159,7 @@ export default function AddBankModal({
 
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="modal-form">
+          <div className="modal-body">
           {error && <div className="modal-error">{error}</div>}
 
           <div className="modal-form-grid">
@@ -228,7 +229,7 @@ export default function AddBankModal({
             {/* 5. Initial Deposit / Opening Balance */}
             <div className="form-group">
               <label className="form-label">
-                Initial Deposit / Opening Balance (₹) <span style={{ color: '#EF4444' }}>*</span>
+                Initial Deposit / Opening Balance (â‚¹) <span style={{ color: '#EF4444' }}>*</span>
               </label>
               <input
                 type="number"
@@ -242,6 +243,7 @@ export default function AddBankModal({
               />
             </div>
           </div>
+          </div>{/* end modal-body */}
 
           {/* Modal Footer */}
           <div className="modal-footer">

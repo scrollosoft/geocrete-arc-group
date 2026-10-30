@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+﻿import React, { useState } from 'react'
 import {
   Building2,
   TrendingUp,
@@ -42,7 +42,7 @@ export default function SitesPage({
       date: '11/08/2026',
       name: 'Greenfield Villa',
       particulars: 'Shreedhar patil',
-      budget: '₹42.0 L',
+      budget: 'â‚¹42.0 L',
       totalSpent: '00',
       remaining: '00',
       status: 'In Progress',
@@ -52,7 +52,7 @@ export default function SitesPage({
       date: '11/08/2026',
       name: "Aarav Height's",
       particulars: 'Shreedhar patil',
-      budget: '₹42.0 L',
+      budget: 'â‚¹42.0 L',
       totalSpent: '00',
       remaining: '00',
       status: 'In Progress',
@@ -62,7 +62,7 @@ export default function SitesPage({
       date: '11/08/2026',
       name: "Aarav Height's",
       particulars: 'Shreedhar patil',
-      budget: '₹42.0 L',
+      budget: 'â‚¹42.0 L',
       totalSpent: '00',
       remaining: '00',
       status: 'In Progress',
@@ -72,7 +72,7 @@ export default function SitesPage({
       date: '11/08/2026',
       name: "Aarav Height's",
       particulars: 'Shreedhar patil',
-      budget: '₹42.0 L',
+      budget: 'â‚¹42.0 L',
       totalSpent: '00',
       remaining: '00',
       status: 'Completed',
@@ -80,12 +80,12 @@ export default function SitesPage({
   ]
 
   const formatIndianBudget = (amount) => {
-    if (amount === undefined || amount === null || isNaN(amount)) return '₹0'
+    if (amount === undefined || amount === null || isNaN(amount)) return 'â‚¹0'
     const num = Number(amount)
-    if (num === 0) return '₹0'
-    if (num >= 10000000) return `₹${(num / 10000000).toFixed(1)} Cr`
-    if (num >= 100000) return `₹${(num / 100000).toFixed(1)} L`
-    return `₹${num.toLocaleString('en-IN')}`
+    if (num === 0) return 'â‚¹0'
+    if (num >= 10000000) return `â‚¹${(num / 10000000).toFixed(1)} Cr`
+    if (num >= 100000) return `â‚¹${(num / 100000).toFixed(1)} L`
+    return `â‚¹${num.toLocaleString('en-IN')}`
   }
 
   // Combine MongoDB sites with reference structure
@@ -118,8 +118,8 @@ export default function SitesPage({
     : sampleSites.map((s) => ({
         ...s,
         raw: s,
-        totalReceived: '₹0',
-        balanceReceivable: s.budget || '₹0',
+        totalReceived: 'â‚¹0',
+        balanceReceivable: s.budget || 'â‚¹0',
       }))
 
   // Filter rows
@@ -648,8 +648,8 @@ export default function SitesPage({
             </div>
             <span className="pagination-range-text">
               {totalRecords === 0
-                ? '0–0 of 0'
-                : `${startIndex + 1}–${endIndex} of ${totalRecords.toLocaleString('en-IN')}`}
+                ? '0â€“0 of 0'
+                : `${startIndex + 1}â€“${endIndex} of ${totalRecords.toLocaleString('en-IN')}`}
             </span>
           </div>
 
@@ -818,7 +818,8 @@ export default function SitesPage({
             </div>
 
             <form onSubmit={handleUpdateSubmit} className="modal-form">
-              {/* ── Section A: Site & Owner Details ── */}
+              <div className="modal-body">
+                {/* â”€â”€ Section A: Site & Owner Details â”€â”€ */}
               <p style={{ fontSize: 12, fontWeight: 600, color: '#0293DE', letterSpacing: '0.06em', marginBottom: 10, textTransform: 'uppercase' }}>
                 Site &amp; Owner Details
               </p>
@@ -921,13 +922,13 @@ export default function SitesPage({
                 </div>
               </div>
 
-              {/* ── Section B: Project Financial Details ── */}
+              {/* â”€â”€ Section B: Project Financial Details â”€â”€ */}
               <p style={{ fontSize: 12, fontWeight: 600, color: '#0293DE', letterSpacing: '0.06em', margin: '18px 0 10px', textTransform: 'uppercase' }}>
                 Project Financial Details
               </p>
               <div className="modal-form-grid">
                 <div className="form-group">
-                  <label className="form-label">Project Value (₹) *</label>
+                  <label className="form-label">Project Value (â‚¹) *</label>
                   <input
                     type="number"
                     className="form-input"
@@ -939,7 +940,7 @@ export default function SitesPage({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Advance Amount (₹)</label>
+                  <label className="form-label">Advance Amount (â‚¹)</label>
                   <input
                     type="number"
                     className="form-input"
@@ -950,7 +951,7 @@ export default function SitesPage({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Total Received (₹)</label>
+                  <label className="form-label">Total Received (â‚¹)</label>
                   <input
                     type="number"
                     className="form-input"
@@ -970,18 +971,18 @@ export default function SitesPage({
                     disabled={editLoadingBanks}
                   >
                     <option value="">
-                      {editLoadingBanks ? 'Loading banks...' : '— Select Bank Account —'}
+                      {editLoadingBanks ? 'Loading banks...' : 'â€” Select Bank Account â€”'}
                     </option>
                     {editBankAccounts.map((bank) => (
                       <option key={bank._id || bank.id} value={bank._id || bank.id}>
-                        {bank.bankName} •••• {String(bank.accountNumber || '').slice(-4)}
+                        {bank.bankName} â€¢â€¢â€¢â€¢ {String(bank.accountNumber || '').slice(-4)}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Additional Amount Received Now (₹)</label>
+                  <label className="form-label">Additional Amount Received Now (â‚¹)</label>
                   <input
                     type="number"
                     className="form-input"
@@ -993,7 +994,7 @@ export default function SitesPage({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Balance Receivable (₹)</label>
+                  <label className="form-label">Balance Receivable (â‚¹)</label>
                   <input
                     type="number"
                     className="form-input"
@@ -1021,6 +1022,7 @@ export default function SitesPage({
                   />
                 </div>
               </div>
+              </div>{/* end modal-body */}
 
               <div className="modal-footer">
                 <button

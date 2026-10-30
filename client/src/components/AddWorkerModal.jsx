@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+﻿import React, { useState } from 'react'
 import { X, HardHat } from 'lucide-react'
 import { labourService } from '../services/labourService.js'
 
@@ -169,6 +169,7 @@ export default function AddWorkerModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="modal-form">
+          <div className="modal-body">
           <div className="modal-form-grid">
             {/* 1. Worker Full Name * */}
             <div className="form-group">
@@ -264,11 +265,11 @@ export default function AddWorkerModal({
               {errors.joiningDate && <span className="field-error-msg">{errors.joiningDate}</span>}
             </div>
 
-            {/* 6. Daily Wage * with ₹ prefix */}
+            {/* 6. Daily Wage * with â‚¹ prefix */}
             <div className="form-group">
               <label className="form-label labour-form-label">Daily Wage *</label>
               <div className="input-with-currency-wrap">
-                <span className="input-currency-prefix">₹</span>
+                <span className="input-currency-prefix">â‚¹</span>
                 <input
                   type="number"
                   name="dailyRate"
@@ -341,6 +342,7 @@ export default function AddWorkerModal({
               />
             </div>
           </div>
+          </div>{/* end modal-body */}
 
           {/* Buttons at the bottom: Cancel and Add Worker */}
           <div className="modal-footer">

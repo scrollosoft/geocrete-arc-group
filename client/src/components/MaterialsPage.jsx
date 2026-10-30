@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   CreditCard,
   AlertTriangle,
@@ -231,7 +231,7 @@ export default function MaterialsPage({
     fetchMaterials()
   }, [fetchMaterials, refreshTrigger])
 
-  // ── Actions ──
+  // â”€â”€ Actions â”€â”€
   const handleView = (item) => {
     setViewingMaterial(item)
   }
@@ -489,12 +489,12 @@ export default function MaterialsPage({
     }
     const num = Number(amount)
     if (num >= 10000000) {
-      return `₹${(num / 10000000).toFixed(2).replace(/\.00$/, '')} Cr`
+      return `â‚¹${(num / 10000000).toFixed(2).replace(/\.00$/, '')} Cr`
     }
     if (num >= 100000) {
-      return `₹${(num / 100000).toFixed(1).replace(/\.0$/, '')} L`
+      return `â‚¹${(num / 100000).toFixed(1).replace(/\.0$/, '')} L`
     }
-    return `₹${num.toLocaleString('en-IN')}`
+    return `â‚¹${num.toLocaleString('en-IN')}`
   }
 
   return (
@@ -507,7 +507,7 @@ export default function MaterialsPage({
             <span className="breadcrumb-slash">/</span>
             <span className="breadcrumb-active">MATERIAL'S</span>
           </div>
-          <h1 className="sites-title">Material’s</h1>
+          <h1 className="sites-title">Materialâ€™s</h1>
           <p className="sites-subtitle">
             Monitor purchases, consumption and stock across sites.
           </p>
@@ -534,7 +534,7 @@ export default function MaterialsPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.totalCost, '₹1.68 Cr')}
+            {formatCostValue(summary?.totalCost, 'â‚¹1.68 Cr')}
           </div>
           <span className="stat-desc">39.3% of investment</span>
         </div>
@@ -548,7 +548,7 @@ export default function MaterialsPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.monthCost, '₹18.6 L')}
+            {formatCostValue(summary?.monthCost, 'â‚¹18.6 L')}
           </div>
           <span className="stat-desc">
             {summary?.monthCount ? `${summary.monthCount} purchase records` : '42 purchase records'}
@@ -564,7 +564,7 @@ export default function MaterialsPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.pendingAmount, '₹8.4 L')}
+            {formatCostValue(summary?.pendingAmount, 'â‚¹8.4 L')}
           </div>
           <span className="stat-desc">
             {summary?.pendingSuppliersCount ? `Across ${summary.pendingSuppliersCount} suppliers` : 'Across 7 suppliers'}
@@ -695,7 +695,7 @@ export default function MaterialsPage({
               ) : (
                 paginatedRecords.map((item) => {
                   const siteName = item.site?.name || item.siteName || 'N/A'
-                  const supplierName = item.supplier?.name || item.supplierName || '—'
+                  const supplierName = item.supplier?.name || item.supplierName || 'â€”'
                   const formattedQty = `${Number(item.quantity || 0).toLocaleString('en-IN')} ${item.unit || ''}`
 
                   const cost = Number(item.totalCost || 0)
@@ -708,9 +708,9 @@ export default function MaterialsPage({
                     ? Number(item.outstandingAmount)
                     : Math.max(0, cost - paid)
 
-                  const formattedCost = `₹${cost.toLocaleString('en-IN')}`
-                  const formattedPaid = `₹${paid.toLocaleString('en-IN')}`
-                  const formattedOutstanding = outstanding > 0 ? `₹${outstanding.toLocaleString('en-IN')}` : '—'
+                  const formattedCost = `â‚¹${cost.toLocaleString('en-IN')}`
+                  const formattedPaid = `â‚¹${paid.toLocaleString('en-IN')}`
+                  const formattedOutstanding = outstanding > 0 ? `â‚¹${outstanding.toLocaleString('en-IN')}` : 'â€”'
 
                   return (
                     <tr key={item._id || item.id} className="site-data-row">
@@ -871,7 +871,7 @@ export default function MaterialsPage({
         </div>
       </div>
 
-      {/* ── VIEW MATERIAL MODAL ── */}
+      {/* â”€â”€ VIEW MATERIAL MODAL â”€â”€ */}
       {viewingMaterial && activeView && (
         <div className="modal-overlay" onClick={() => setViewingMaterial(null)}>
           <div className="modal-container" style={{ maxWidth: '920px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
@@ -911,7 +911,7 @@ export default function MaterialsPage({
                 </div>
                 <div className="site-view-item">
                   <span className="site-view-label">Supplier</span>
-                  <span className="site-view-val">{activeView.supplier?.name || activeView.supplierName || '—'}</span>
+                  <span className="site-view-val">{activeView.supplier?.name || activeView.supplierName || 'â€”'}</span>
                 </div>
                 <div className="site-view-item">
                   <span className="site-view-label">Purchased Quantity</span>
@@ -935,24 +935,24 @@ export default function MaterialsPage({
                 </div>
                 <div className="site-view-item">
                   <span className="site-view-label">Purchase Cost</span>
-                  <span className="site-view-val">₹{Number(activeView.totalCost || 0).toLocaleString('en-IN')}</span>
+                  <span className="site-view-val">â‚¹{Number(activeView.totalCost || 0).toLocaleString('en-IN')}</span>
                 </div>
                 <div className="site-view-item">
                   <span className="site-view-label">Paid Amount</span>
                   <span className="site-view-val" style={{ color: '#16A34A' }}>
-                    ₹{Number(activeView.paidAmount !== undefined && activeView.paidAmount !== null ? activeView.paidAmount : (activeView.paymentStatus === 'Paid' ? activeView.totalCost : 0)).toLocaleString('en-IN')}
+                    â‚¹{Number(activeView.paidAmount !== undefined && activeView.paidAmount !== null ? activeView.paidAmount : (activeView.paymentStatus === 'Paid' ? activeView.totalCost : 0)).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="site-view-item">
                   <span className="site-view-label">Outstanding Amount</span>
                   <span className="site-view-val" style={{ color: (activeView.outstandingAmount || 0) > 0 ? '#EF4444' : '#70829F' }}>
-                    ₹{Number(activeView.outstandingAmount !== undefined ? activeView.outstandingAmount : Math.max(0, (activeView.totalCost || 0) - (activeView.paidAmount || 0))).toLocaleString('en-IN')}
+                    â‚¹{Number(activeView.outstandingAmount !== undefined ? activeView.outstandingAmount : Math.max(0, (activeView.totalCost || 0) - (activeView.paidAmount || 0))).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="site-view-item">
                   <span className="site-view-label">Purchase Date</span>
                   <span className="site-view-val">
-                    {activeView.purchaseDate ? new Date(activeView.purchaseDate).toLocaleDateString('en-GB') : '—'}
+                    {activeView.purchaseDate ? new Date(activeView.purchaseDate).toLocaleDateString('en-GB') : 'â€”'}
                   </span>
                 </div>
                 {activeView.notes && (
@@ -1023,34 +1023,34 @@ export default function MaterialsPage({
                               }}
                             >
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#1E293B', fontWeight: 500 }}>
-                                {tx.purchaseDate ? new Date(tx.purchaseDate).toLocaleDateString('en-GB') : '—'}
+                                {tx.purchaseDate ? new Date(tx.purchaseDate).toLocaleDateString('en-GB') : 'â€”'}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#64748B', fontFamily: 'monospace', fontSize: '11px' }}>
-                                {tx.refNumber || '—'}
+                                {tx.refNumber || 'â€”'}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#0F172A', fontWeight: 600 }}>
                                 {tx.materialName}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#64748B' }}>
-                                {tx.site?.name || '—'}
+                                {tx.site?.name || 'â€”'}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#64748B' }}>
-                                {tx.supplier?.name || '—'}
+                                {tx.supplier?.name || 'â€”'}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#0F172A', fontWeight: 600 }}>
                                 {Number(tx.quantity).toLocaleString('en-IN')} {tx.unit}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#475569' }}>
-                                ₹{Number(tx.ratePerUnit || 0).toLocaleString('en-IN')}
+                                â‚¹{Number(tx.ratePerUnit || 0).toLocaleString('en-IN')}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#0F172A', fontWeight: 600 }}>
-                                ₹{Number(tx.totalAmount || 0).toLocaleString('en-IN')}
+                                â‚¹{Number(tx.totalAmount || 0).toLocaleString('en-IN')}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#16A34A', fontWeight: 600 }}>
-                                ₹{Number(tx.paidAmount || 0).toLocaleString('en-IN')}
+                                â‚¹{Number(tx.paidAmount || 0).toLocaleString('en-IN')}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: tx.outstandingAmount > 0 ? '#EF4444' : '#64748B', fontWeight: tx.outstandingAmount > 0 ? 600 : 400 }}>
-                                {tx.outstandingAmount > 0 ? `₹${Number(tx.outstandingAmount).toLocaleString('en-IN')}` : '—'}
+                                {tx.outstandingAmount > 0 ? `â‚¹${Number(tx.outstandingAmount).toLocaleString('en-IN')}` : 'â€”'}
                               </td>
                               <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                                 <span
@@ -1091,7 +1091,7 @@ export default function MaterialsPage({
         </div>
       )}
 
-      {/* ── EDIT / UPDATE MATERIAL MODAL ── */}
+      {/* â”€â”€ EDIT / UPDATE MATERIAL MODAL â”€â”€ */}
       {editingMaterial && (
         <div className="modal-overlay" onClick={() => setEditingMaterial(null)}>
           <div className="modal-container" style={{ maxWidth: '620px' }} onClick={(e) => e.stopPropagation()}>
@@ -1120,7 +1120,8 @@ export default function MaterialsPage({
               </div>
             )}
 
-            <form onSubmit={handleEditSave} style={{ padding: '20px 24px', overflowY: 'auto', maxHeight: 'calc(80vh - 120px)' }}>
+            <form onSubmit={handleEditSave} className="modal-form">
+              <div className="modal-body">
               <div className="modal-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 {/* Material Name */}
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
@@ -1233,7 +1234,7 @@ export default function MaterialsPage({
 
                 {/* Unit Price */}
                 <div className="form-group">
-                  <label className="form-label">Unit Price (₹)</label>
+                  <label className="form-label">Unit Price (â‚¹)</label>
                   <input
                     type="number"
                     name="unitPrice"
@@ -1247,7 +1248,7 @@ export default function MaterialsPage({
 
                 {/* Total Cost */}
                 <div className="form-group">
-                  <label className="form-label">Total Cost (₹)</label>
+                  <label className="form-label">Total Cost (â‚¹)</label>
                   <input
                     type="number"
                     name="totalCost"
@@ -1261,7 +1262,7 @@ export default function MaterialsPage({
 
                 {/* Paid Amount */}
                 <div className="form-group">
-                  <label className="form-label">Paid Amount (₹)</label>
+                  <label className="form-label">Paid Amount (â‚¹)</label>
                   <input
                     type="number"
                     name="paidAmount"
@@ -1302,7 +1303,9 @@ export default function MaterialsPage({
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #E5EAF1' }}>
+              </div>{/* end modal-body */}
+
+              <div className="modal-footer">
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -1326,7 +1329,7 @@ export default function MaterialsPage({
         </div>
       )}
 
-      {/* ── DELETE MATERIAL MODAL ── */}
+      {/* â”€â”€ DELETE MATERIAL MODAL â”€â”€ */}
       {deletingMaterial && (
         <div className="modal-overlay" onClick={() => setDeletingMaterial(null)}>
           <div className="modal-container" style={{ maxWidth: '440px' }} onClick={(e) => e.stopPropagation()}>

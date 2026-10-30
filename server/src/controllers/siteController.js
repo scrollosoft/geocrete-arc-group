@@ -440,3 +440,61 @@ export const deleteSite = async (req, res, next) => {
     next(error)
   }
 }
+
+export const getSitePayments = async (req, res, next) => {
+  try {
+    const siteId = req.params.id
+    const pool = getPool()
+    const [rows] = await pool.query(
+      `SELECT 
+         cp.id,
+         cp.client_id,
+         cp.site_id,
+         cp.bank_account_id,
+         cp.amount,
+         CAST(cp.payment_date AS CHAR) AS payment_date_str,
+         CAST(cp.created_at AS CHAR) AS created_at_str,
+         cp.payment_date,
+         cp.title,
+         cp.payment_method,
+         cp.reference,
+         cp.status,
+         cp.created_at,
+         COALESCE(so.name, s.site_owner) AS client_name,
+         ba.bank_name,
+         ba.account_number
+       FROM client_payments cp
+       INNER JOIN sites s ON s.id = cp.site_id
+       LEFT JOIN site_owners so ON so.id = cp.client_id
+       LEFT JOIN bank_accounts ba ON ba.id = cp.bank_account_id
+       WHERE cp.site_id = ?
+       ORDER BY cp.payment_date DESC, cp.id DESC`,
+      [siteId]
+    )
+
+    const payments = rows.map((r) => {
+      const dateVal = r.payment_date_str || (r.payment_date ? String(r.payment_date).slice(0, 10) : '')
+      return {
+        id: r.id,
+        _id: String(r.id),
+        siteId: r.site_id,
+        clientId: r.client_id,
+        clientName: r.client_name || 'Client',
+        amount: Number(r.amount || 0),
+        paymentDate: dateVal,
+        paymentMethod: r.payment_method || 'Bank transfer',
+        bankName: r.bank_name || 'Bank Transfer',
+        accountNumber: r.account_number || '',
+        reference: r.reference || '',
+        title: r.title || 'Client Payment',
+        remark: r.reference || r.title || '',
+        status: r.status || 'Paid',
+        createdAt: r.created_at_str || r.created_at,
+      }
+    })
+
+    res.json(payments)
+  } catch (error) {
+    next(error)
+  }
+}

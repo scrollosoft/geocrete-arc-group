@@ -1239,12 +1239,22 @@
 }
 
 .modal-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow-y: auto;
-  flex: 1;
 }
 
 .modal-form-grid {
@@ -1254,17 +1264,14 @@
 }
 
 .modal-footer {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: auto;
-  padding-top: 14px;
+  padding: 14px 24px;
   border-top: 1px solid #E5EAF1;
-  position: sticky;
-  bottom: 0;
   background-color: #FFFFFF;
-  z-index: 2;
 }
 
 /* ==========================================================================
@@ -2158,10 +2165,10 @@
   background-color: #0369A1;
 }
 
-/* 5 Stat Cards in a row */
+/* 4 Stat Cards in a row */
 .site-detail-stat-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
 }
 
@@ -2414,7 +2421,7 @@
 
 @media (max-width: 1200px) {
   .site-detail-stat-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
   }
   .site-detail-overview-grid {
     grid-template-columns: 1fr;

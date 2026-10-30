@@ -10,6 +10,7 @@ import {
 import { materialService } from '../services/materialService.js'
 import { supplierService } from '../services/supplierService.js'
 import { expenseService } from '../services/expenseService.js'
+import { siteService } from '../services/siteService.js'
 
 export default function SiteDetailPage({
   site,
@@ -21,21 +22,25 @@ export default function SiteDetailPage({
   const [siteMaterials, setSiteMaterials] = useState([])
   const [allSuppliers, setAllSuppliers] = useState([])
   const [siteExpensesData, setSiteExpensesData] = useState([])
+  const [clientPayments, setClientPayments] = useState([])
   const [loadingSuppliers, setLoadingSuppliers] = useState(false)
+  const [loadingPayments, setLoadingPayments] = useState(false)
 
-  // Load site-specific materials, suppliers, and all site expenses (hooks before any early return)
+  // Load site-specific materials, suppliers, expenses, and client payments
   useEffect(() => {
     let active = true
     const siteId = site?._id || site?.id
     if (!siteId) return
 
     setLoadingSuppliers(true)
+    setLoadingPayments(true)
     Promise.all([
       materialService.getAll({ siteId }).catch(() => ({ materials: [] })),
       supplierService.getAll().catch(() => []),
       expenseService.getAll({ siteId }).catch(() => ({ expenses: [] })),
+      siteService.getPayments(siteId).catch(() => []),
     ])
-      .then(([matRes, supRes, expRes]) => {
+      .then(([matRes, supRes, expRes, payRes]) => {
         if (!active) return
         setSiteMaterials(matRes?.materials || (Array.isArray(matRes) ? matRes : []))
         setAllSuppliers(Array.isArray(supRes) ? supRes : (supRes?.suppliers || []))
@@ -43,9 +48,13 @@ export default function SiteDetailPage({
         if (loadedExpenses.length > 0) {
           setSiteExpensesData(loadedExpenses)
         }
+        setClientPayments(Array.isArray(payRes) ? payRes : [])
       })
       .finally(() => {
-        if (active) setLoadingSuppliers(false)
+        if (active) {
+          setLoadingSuppliers(false)
+          setLoadingPayments(false)
+        }
       })
 
     return () => {
@@ -223,7 +232,6 @@ export default function SiteDetailPage({
     ? site.totalSpent
     : expenses.filter((e) => e.site?._id === site._id || e.site === site._id).reduce((s, e) => s + (e.amount || 0), 0) || 12400000 // default 1.24 Cr
 
-  const remainingBudget = Math.max(0, projectBudget - totalSpent)
   const spentPercent = projectBudget > 0 ? Math.min(100, Math.round((totalSpent / projectBudget) * 100)) : 67
 
   // Client Received & Balance Receivable calculations
@@ -358,7 +366,7 @@ export default function SiteDetailPage({
         </div>
       </div>
 
-      {/* 3. Top Summary Metric Cards (5 Cards in a Row) */}
+      {/* 3. Top Summary Metric Cards (4 Cards in a Row) */}
       <div className="site-detail-stat-grid">
         {/* Card 1: Project Budget */}
         <div className="site-detail-card">
@@ -374,21 +382,14 @@ export default function SiteDetailPage({
           <span className="site-card-desc">{spentPercent}% utilized</span>
         </div>
 
-        {/* Card 3: Remaining Budget */}
-        <div className="site-detail-card">
-          <span className="site-card-label">Remaining Budget</span>
-          <div className="site-card-val">{formatIndianCurrency(remainingBudget)}</div>
-          <span className="site-card-desc">Available to spend</span>
-        </div>
-
-        {/* Card 4: Client Received */}
+        {/* Card 3: Client Received */}
         <div className="site-detail-card">
           <span className="site-card-label">Client Received</span>
           <div className="site-card-val">{formatIndianCurrency(clientReceived)}</div>
           <span className="site-card-desc">73% collected</span>
         </div>
 
-        {/* Card 5: Balance Receivable (Highlighted in Teal/Blue) */}
+        {/* Card 4: Balance Receivable (Highlighted in Teal/Blue) */}
         <div className="site-detail-card site-card-highlight">
           <span className="site-card-label">Balance Receivable</span>
           <div className="site-card-val site-card-val-cyan">{formatIndianCurrency(balanceReceivable)}</div>
@@ -711,12 +712,66 @@ export default function SiteDetailPage({
         </div>
       )}
 
-      {/* Client Payments Tab */}
+      {/* Client Payments Tab: Shows actual client payment records for this site */}
       {activeSubTab === 'Client Payments' && (
-        <div className="site-detail-box" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
-          <p style={{ fontSize: '14px', margin: 0 }}>
-            Showing <strong>Client Payments</strong> records for {siteName}.
-          </p>
+        <div className="site-detail-box" style={{ padding: '0', overflow: 'hidden' }}>
+          <div className="sites-table-scroll">
+            <table className="expenses-table">
+              <thead>
+                <tr>
+                  <th className="th-date" style={{ padding: '16px 20px', width: '15%' }}>PAYMENT DATE</th>
+                  <th className="th-desc" style={{ padding: '16px 20px', width: '20%' }}>CLIENT NAME</th>
+                  <th className="th-amount" style={{ padding: '16px 20px', width: '15%', textAlign: 'right' }}>AMOUNT</th>
+                  <th className="th-cat" style={{ padding: '16px 20px', width: '16%' }}>PAYMENT METHOD</th>
+                  <th className="th-desc" style={{ padding: '16px 20px', width: '18%' }}>BANK ACCOUNT</th>
+                  <th className="th-desc" style={{ padding: '16px 20px', width: '16%' }}>REMARKS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingPayments ? (
+                  <tr>
+                    <td colSpan={6} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
+                      Loading client payments for {siteName}...
+                    </td>
+                  </tr>
+                ) : clientPayments.length > 0 ? (
+                  clientPayments.map((payment) => (
+                    <tr key={payment.id || payment._id} className="expense-row">
+                      <td className="td-date" style={{ padding: '16px 20px' }}>
+                        {payment.paymentDate ? formatTransactionDate(payment.paymentDate) : '—'}
+                      </td>
+                      <td className="td-description" style={{ padding: '16px 20px', fontWeight: 600, color: '#172033' }}>
+                        {payment.clientName || clientName || '—'}
+                      </td>
+                      <td className="td-amount" style={{ padding: '16px 20px', fontWeight: 600, color: '#16A34A', textAlign: 'right' }}>
+                        +{formatExactCurrency(payment.amount)}
+                      </td>
+                      <td className="td-category" style={{ padding: '16px 20px', color: '#70829F' }}>
+                        {payment.paymentMethod || 'Bank transfer'}
+                      </td>
+                      <td className="td-description" style={{ padding: '16px 20px', color: '#172033' }}>
+                        <div>{payment.bankName || '—'}</div>
+                        {payment.accountNumber && (
+                          <div style={{ fontSize: '12px', color: '#70829F', marginTop: '2px' }}>
+                            •••• {String(payment.accountNumber).slice(-4)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="td-description" style={{ padding: '16px 20px', color: '#70829F' }}>
+                        {payment.remark || payment.reference || payment.title || '—'}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
+                      No client payments found for this site.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

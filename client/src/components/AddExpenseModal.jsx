@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+﻿import React, { useState, useEffect, useMemo } from 'react'
 import { X, Receipt } from 'lucide-react'
 import { expenseService } from '../services/expenseService.js'
 import { materialService } from '../services/materialService.js'
@@ -80,8 +80,8 @@ export default function AddExpenseModal({
   }, [isOpen, sites, formData.site])
 
   // Material options for the dropdown:
-  // - If a supplier is selected → show ALL of that supplier's saved categories directly
-  // - If no supplier → show unique categories from materialsList purchase records
+  // - If a supplier is selected â†’ show ALL of that supplier's saved categories directly
+  // - If no supplier â†’ show unique categories from materialsList purchase records
   const filteredMaterialsList = useMemo(() => {
     if (formData.supplier) {
       const selectedSupplier = suppliers.find(
@@ -107,7 +107,7 @@ export default function AddExpenseModal({
       // Supplier selected but has no categories saved
       return []
     }
-    // No supplier — show all unique categories from purchase records
+    // No supplier â€” show all unique categories from purchase records
     const seen = new Set()
     const unique = []
     for (const m of materialsList) {
@@ -130,7 +130,7 @@ export default function AddExpenseModal({
       // Changing supplier: re-filter material dropdown and clear selection if no longer valid
       if (name === 'supplier') {
         if (value) {
-          // Supplier selected — clear category if it's not in the new supplier's categories
+          // Supplier selected â€” clear category if it's not in the new supplier's categories
           const newSupplier = suppliers.find(
             (s) => String(s._id || s.id) === String(value)
           )
@@ -144,7 +144,7 @@ export default function AddExpenseModal({
             }
           }
         } else {
-          // No supplier (Direct Expense) — clear category so user picks fresh from full list
+          // No supplier (Direct Expense) â€” clear category so user picks fresh from full list
           updated.category = ''
         }
       }
@@ -231,7 +231,7 @@ export default function AddExpenseModal({
           return
         }
         if (bal < numPaid) {
-          setError(`Insufficient bank balance. Available balance: ₹${bal.toLocaleString('en-IN')}.`)
+          setError(`Insufficient bank balance. Available balance: â‚¹${bal.toLocaleString('en-IN')}.`)
           return
         }
       }
@@ -296,8 +296,6 @@ export default function AddExpenseModal({
         className="modal-container"
         style={{
           maxWidth: '640px',
-          maxHeight: '92vh',
-          overflowY: 'auto',
           background: '#FFFFFF',
           borderRadius: '12px',
         }}
@@ -365,7 +363,8 @@ export default function AddExpenseModal({
         )}
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="modal-form" style={{ padding: '20px 24px' }}>
+        <form onSubmit={handleSubmit} className="modal-form">
+          <div className="modal-body">
           <div className="modal-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             {/* 1. Date */}
             <div className="form-group">
@@ -405,7 +404,7 @@ export default function AddExpenseModal({
               </select>
             </div>
 
-            {/* 3. Material — filtered by supplier's categories when a supplier is selected */}
+            {/* 3. Material â€” filtered by supplier's categories when a supplier is selected */}
             <div className="form-group">
               <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#172033', marginBottom: '6px' }}>
                 Material *
@@ -419,7 +418,7 @@ export default function AddExpenseModal({
                 style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E5EAF1', fontSize: '14px', color: '#172033', background: '#FFFFFF' }}
               >
                 {filteredMaterialsList.length === 0 ? (
-                  <option value="">No materials match this supplier — add a purchase first</option>
+                  <option value="">No materials match this supplier â€” add a purchase first</option>
                 ) : (
                   <>
                     <option value="">-- Select material --</option>
@@ -497,7 +496,7 @@ export default function AddExpenseModal({
             {/* 8. Rate per Unit */}
             <div className="form-group">
               <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#172033', marginBottom: '6px' }}>
-                Rate per Unit (₹) *
+                Rate per Unit (â‚¹) *
               </label>
               <input
                 type="number"
@@ -516,7 +515,7 @@ export default function AddExpenseModal({
             {/* 9. Total Calculated Amount */}
             <div className="form-group">
               <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#70829F', marginBottom: '6px' }}>
-                Total Amount (₹)
+                Total Amount (â‚¹)
               </label>
               <div
                 style={{
@@ -530,14 +529,14 @@ export default function AddExpenseModal({
                   color: '#0293DE',
                 }}
               >
-                ₹{calculatedTotal > 0 ? calculatedTotal.toLocaleString('en-IN') : '0'}
+                â‚¹{calculatedTotal > 0 ? calculatedTotal.toLocaleString('en-IN') : '0'}
               </div>
             </div>
 
             {/* 10. Paid Amount */}
             <div className="form-group">
               <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#172033', marginBottom: '6px' }}>
-                Paid Amount (₹)
+                Paid Amount (â‚¹)
               </label>
               <input
                 type="number"
@@ -588,7 +587,7 @@ export default function AddExpenseModal({
                 <option value="">-- Select Bank --</option>
                 {bankAccounts.map((b) => (
                   <option key={b._id || b.id} value={b._id || b.id}>
-                    {b.bankName} (₹{Number(b.balance || 0).toLocaleString('en-IN')})
+                    {b.bankName} (â‚¹{Number(b.balance || 0).toLocaleString('en-IN')})
                   </option>
                 ))}
               </select>
@@ -610,19 +609,10 @@ export default function AddExpenseModal({
               />
             </div>
           </div>
+          </div>{/* end modal-body */}
 
           {/* Modal Actions */}
-          <div
-            className="modal-actions"
-            style={{
-              marginTop: '24px',
-              paddingTop: '16px',
-              borderTop: '1px solid #E5EAF1',
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '12px',
-            }}
-          >
+          <div className="modal-footer">
             <button
               type="button"
               className="btn btn-secondary"

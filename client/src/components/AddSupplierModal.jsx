@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+﻿import React, { useState, useRef, useEffect } from 'react'
 import { X, Truck, Check } from 'lucide-react'
 import { supplierService } from '../services/supplierService.js'
 
@@ -258,13 +258,8 @@ export default function AddSupplierModal({
           ref={formRef}
           onSubmit={handleSubmit}
           className="modal-form"
-          style={{
-            padding: '20px 24px',
-            overflowY: 'auto',
-            flex: 1,
-            margin: 0,
-          }}
         >
+          <div className="modal-body">
           <div className="modal-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             {/* 1. Supplier / Company Name */}
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
@@ -552,18 +547,10 @@ export default function AddSupplierModal({
             </div>
           </div>
 
+          </div>{/* end modal-body */}
+
           {/* Modal Actions */}
-          <div
-            className="modal-actions"
-            style={{
-              marginTop: '24px',
-              paddingTop: '16px',
-              borderTop: '1px solid #E5EAF1',
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '12px',
-            }}
-          >
+          <div className="modal-footer">
             <button
               type="button"
               className="btn btn-secondary"
