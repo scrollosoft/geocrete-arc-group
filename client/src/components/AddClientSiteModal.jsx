@@ -6,9 +6,9 @@ import { bankAccountService } from '../services/bankAccountService.js'
 const getTodayString = () => new Date().toISOString().split('T')[0]
 
 const maskAccountNumber = (accNum) => {
-  if (!accNum) return 'â€¢â€¢â€¢â€¢'
+  if (!accNum) return '••••'
   const str = String(accNum).trim()
-  return `â€¢â€¢â€¢â€¢ ${str.slice(-4)}`
+  return `•••• ${str.slice(-4)}`
 }
 
 export default function AddClientSiteModal({
@@ -132,7 +132,7 @@ export default function AddClientSiteModal({
         return 'No bank accounts exist. Please add a bank account in the Payments page first before receiving payments.'
       }
       if (!formData.bankAccountId) {
-        return 'Bank Account selection is required when Total Received is greater than â‚¹0.'
+        return 'Bank Account selection is required when Total Received is greater than ₹0.'
       }
     }
 
@@ -420,7 +420,7 @@ export default function AddClientSiteModal({
               {/* 10. Project Value */}
               <div className="form-group">
                 <label className="form-label">
-                  Project Value (â‚¹) <span style={{ color: '#EF4444' }}>*</span>
+                  Project Value (₹) <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="number"
@@ -436,7 +436,7 @@ export default function AddClientSiteModal({
 
               {/* 11. Advance Amount */}
               <div className="form-group">
-                <label className="form-label">Advance Amount (â‚¹)</label>
+                <label className="form-label">Advance Amount (₹)</label>
                 <input
                   type="number"
                   name="advanceAmount"
@@ -451,7 +451,7 @@ export default function AddClientSiteModal({
 
               {/* 12. Total Received */}
               <div className="form-group">
-                <label className="form-label">Total Received (â‚¹)</label>
+                <label className="form-label">Total Received (₹)</label>
                 <input
                   type="number"
                   name="totalReceived"
@@ -499,7 +499,7 @@ export default function AddClientSiteModal({
               {/* Calculated Read-Only Balance Receivable */}
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
                 <label className="form-label">
-                  Balance Receivable (â‚¹) <span style={{ color: '#94A3B8' }}>(Calculated)</span>
+                  Balance Receivable (₹) <span style={{ color: '#94A3B8' }}>(Calculated)</span>
                 </label>
                 <div
                   style={{
@@ -513,7 +513,7 @@ export default function AddClientSiteModal({
                   }}
                 >
                   <span style={{ fontSize: '12px', color: '#70829F', fontWeight: 600 }}>
-                    Project Value âˆ’ Total Actual Received:
+                    Project Value − Total Actual Received:
                   </span>
                   <span
                     style={{

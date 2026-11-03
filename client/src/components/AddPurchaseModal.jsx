@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { X, Package } from 'lucide-react'
 import { materialService } from '../services/materialService.js'
 
@@ -69,7 +69,7 @@ export default function AddPurchaseModal({
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState('')
 
-  // Derived: Total Amount = Quantity Ã— Rate Per Unit
+  // Derived: Total Amount = Quantity × Rate Per Unit
   const totalAmount = (() => {
     const q = Number(formData.quantity)
     const r = Number(formData.ratePerUnit)
@@ -188,7 +188,7 @@ export default function AddPurchaseModal({
             if (bal <= 0) {
               newErrors.bankAccountId = 'This bank account has zero balance. Please select another bank account.'
             } else if (bal < p) {
-              newErrors.bankAccountId = `Insufficient bank balance. Available balance: â‚¹${bal.toLocaleString('en-IN')}.`
+              newErrors.bankAccountId = `Insufficient bank balance. Available balance: ₹${bal.toLocaleString('en-IN')}.`
             }
           }
         }
@@ -440,11 +440,11 @@ export default function AddPurchaseModal({
               </select>
             </div>
 
-            {/* 8. Rate Per Unit (â‚¹) * */}
+            {/* 8. Rate Per Unit (₹) * */}
             <div className="form-group">
-              <label className="form-label labour-form-label">Rate Per Unit (â‚¹) *</label>
+              <label className="form-label labour-form-label">Rate Per Unit (₹) *</label>
               <div className="input-with-prefix">
-                <span className="input-prefix">â‚¹</span>
+                <span className="input-prefix">₹</span>
                 <input
                   type="number"
                   name="ratePerUnit"
@@ -488,18 +488,18 @@ export default function AddPurchaseModal({
                 <option value="">Select Bank Account</option>
                 {bankAccounts.map((b) => (
                   <option key={b._id || b.id} value={b._id || b.id}>
-                    {b.bankName} (â‚¹{Number(b.balance || 0).toLocaleString('en-IN')})
+                    {b.bankName} (₹{Number(b.balance || 0).toLocaleString('en-IN')})
                   </option>
                 ))}
               </select>
               {errors.bankAccountId && <span className="field-error-msg">{errors.bankAccountId}</span>}
             </div>
 
-            {/* 11. Total Amount (â‚¹) - Read-only calculated */}
+            {/* 11. Total Amount (₹) - Read-only calculated */}
             <div className="form-group">
-              <label className="form-label labour-form-label">Total Amount (â‚¹)</label>
+              <label className="form-label labour-form-label">Total Amount (₹)</label>
               <div className="input-with-prefix">
-                <span className="input-prefix">â‚¹</span>
+                <span className="input-prefix">₹</span>
                 <input
                   type="text"
                   className="form-input with-prefix"
@@ -512,11 +512,11 @@ export default function AddPurchaseModal({
               </div>
             </div>
 
-            {/* 12. Paid Amount (â‚¹) */}
+            {/* 12. Paid Amount (₹) */}
             <div className="form-group">
-              <label className="form-label labour-form-label">Paid Amount (â‚¹)</label>
+              <label className="form-label labour-form-label">Paid Amount (₹)</label>
               <div className="input-with-prefix">
-                <span className="input-prefix">â‚¹</span>
+                <span className="input-prefix">₹</span>
                 <input
                   type="number"
                   name="paidAmount"
