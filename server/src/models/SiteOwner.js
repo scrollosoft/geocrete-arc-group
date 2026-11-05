@@ -208,12 +208,14 @@ export const SiteOwner = {
       ...withId(r),
       clientId: r.client_id,
       siteId: r.site_id,
+      bankAccountId: r.bank_account_id,
       amount: Number(r.amount || 0),
       paymentDate: fmtDate(r.payment_date),
       title: r.title,
       paymentMethod: r.payment_method,
       reference: r.reference,
       status: r.status,
+      type: r.type || 'credit',
       createdAt: fmtDate(r.created_at),
     }))
   },
@@ -221,22 +223,94 @@ export const SiteOwner = {
   async recordPayment(clientId, data) {
     const pool = getPool()
     const amount = Number(data.amount || 0)
+    if (isNaN(amount) || amount <= 0) {
+      throw new Error('Payment amount must be greater than zero.')
+    }
+    const bankAccountId = data.bankAccountId ? Number(data.bankAccountId) : null
+    if (!bankAccountId) {
+      throw new Error('Bank account is required.')
+    }
+
     const date = data.paymentDate || new Date().toISOString().slice(0, 10)
     const title = data.title || 'Project milestone payment'
     const method = data.paymentMethod || 'Bank transfer'
     const ref = data.reference || 'Reference verified'
-    const siteId = data.siteId || null
 
-    await pool.query(
-      `INSERT INTO client_payments (client_id, site_id, amount, payment_date, title, payment_method, reference, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'Paid')`,
-      [clientId, siteId, amount, date, title, method, ref]
-    )
+    const cleanId = String(clientId).replace(/^site-/, '')
+    let targetClientId = null
+    let targetSiteId = data.siteId ? Number(String(data.siteId).replace(/^site-/, '')) : null
 
-    await pool.query(
-      `UPDATE site_owners SET total_received = total_received + ? WHERE id = ?`,
-      [amount, clientId]
-    )
+    const conn = await pool.getConnection()
+    try {
+      await conn.beginTransaction()
+
+      // 1. Verify bank exists with row lock
+      const [bankRows] = await conn.query(
+        'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? FOR UPDATE',
+        [bankAccountId]
+      )
+      if (bankRows.length === 0) {
+        throw new Error('Selected bank account not found.')
+      }
+
+      // 2. Add (credit) to selected bank account
+      await conn.query(
+        'UPDATE bank_accounts SET balance = balance + ? WHERE id = ?',
+        [amount, bankAccountId]
+      )
+
+      // 3. Resolve target site and client owner
+      const [siteRows] = await conn.query('SELECT id, site_owner FROM sites WHERE id = ?', [cleanId])
+      if (siteRows.length > 0) {
+        targetSiteId = siteRows[0].id
+        const [soRows] = await conn.query(
+          'SELECT id FROM site_owners WHERE site_id = ? OR id = ?',
+          [cleanId, cleanId]
+        )
+        if (soRows.length > 0) targetClientId = soRows[0].id
+      } else {
+        const [soRows] = await conn.query('SELECT id, site_id FROM site_owners WHERE id = ?', [cleanId])
+        if (soRows.length > 0) {
+          targetClientId = soRows[0].id
+          if (!targetSiteId && soRows[0].site_id) {
+            targetSiteId = soRows[0].site_id
+          }
+        }
+      }
+
+      if (!targetClientId && !isNaN(Number(cleanId))) {
+        targetClientId = Number(cleanId)
+      }
+
+      // 4. Save payment record in client_payments with type 'credit'
+      await conn.query(
+        `INSERT INTO client_payments 
+          (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Paid', 'credit')`,
+        [targetClientId, targetSiteId, bankAccountId, amount, date, title, method, ref]
+      )
+
+      // 5. Update total_received
+      if (targetSiteId) {
+        await conn.query(
+          'UPDATE sites SET total_received = total_received + ? WHERE id = ?',
+          [amount, targetSiteId]
+        )
+      }
+      if (targetClientId) {
+        await conn.query(
+          'UPDATE site_owners SET total_received = total_received + ? WHERE id = ?',
+          [amount, targetClientId]
+        )
+      }
+
+      await conn.commit()
+    } catch (err) {
+      await conn.rollback()
+      throw err
+    } finally {
+      conn.release()
+    }
 
     return this.findById(clientId)
   },

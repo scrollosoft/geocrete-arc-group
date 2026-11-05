@@ -84,6 +84,24 @@ export default function SiteDetailPage({
     }
   }, [site?._id, site?.id])
 
+  // Keep site expenses in sync when expenses prop updates from App
+  useEffect(() => {
+    if (expenses && expenses.length > 0) {
+      const siteId = site?._id || site?.id
+      const relevant = expenses.filter((e) => {
+        if (!e) return false
+        const eSiteId = e.site?._id || e.site?.id || (typeof e.site === 'object' ? null : e.site) || e.siteId
+        if (siteId && String(eSiteId) === String(siteId)) return true
+        const eSiteName = (e.site?.name || e.siteName || '').trim().toLowerCase()
+        const targetName = (site?.name || '').trim().toLowerCase()
+        return Boolean(eSiteName && targetName && eSiteName === targetName)
+      })
+      if (relevant.length > 0) {
+        setSiteExpensesData(relevant)
+      }
+    }
+  }, [expenses, site?._id, site?.id, site?.name])
+
   // Filter site-specific expenses (uses fresh siteExpensesData if loaded)
   const baseExpenses = siteExpensesData.length > 0 ? siteExpensesData : expenses
   const siteExpenses = baseExpenses.filter((e) => {
@@ -250,9 +268,19 @@ export default function SiteDetailPage({
 
   // Dynamic calculations based on actual site & expenses
   const projectBudget = Number(site.totalBudget !== undefined ? site.totalBudget : (site.projectValue || 0))
-  const totalSpent = site.totalSpent !== undefined && site.totalSpent !== null ? Number(site.totalSpent) : expenses.filter((e) => e.site?._id === site._id || e.site === site._id).reduce((s, e) => s + (e.amount || 0), 0)
+  const totalSpent = site.totalSpent !== undefined && site.totalSpent !== null ? Number(site.totalSpent) : siteExpenses.reduce((s, e) => s + (e.amount || 0), 0)
 
   const spentPercent = projectBudget > 0 ? Math.min(100, Math.round((totalSpent / projectBudget) * 100)) : 0
+
+  // Total amount paid for expenses / material purchases associated with the selected construction site
+  const totalSitePaid = siteExpenses.reduce((sum, e) => {
+    const rawPaid = e.paidAmount !== undefined && e.paidAmount !== null
+      ? Number(e.paidAmount)
+      : (e.status === 'Paid' ? Number(e.amount || 0) : 0)
+    return sum + (isNaN(rawPaid) ? 0 : rawPaid)
+  }, 0)
+
+  const paidPercent = totalSpent > 0 ? Math.min(100, Math.round((totalSitePaid / totalSpent) * 100)) : 0
 
   // Client Received & Balance Receivable calculations
   const clientReceived = Number(site.totalReceived || 0) // default ~1.35 Cr (73% collected)
@@ -413,7 +441,7 @@ export default function SiteDetailPage({
         </div>
       </div>
 
-      {/* 3. Top Summary Metric Cards (4 Cards in a Row) */}
+      {/* 3. Top Summary Metric Cards (5 Cards in a Row) */}
       <div className="site-detail-stat-grid">
         {/* Card 1: Project Budget */}
         <div className="site-detail-card">
@@ -429,14 +457,23 @@ export default function SiteDetailPage({
           <span className="site-card-desc">{spentPercent}% utilized</span>
         </div>
 
-        {/* Card 3: Client Received */}
+        {/* Card 3: Paid Amount */}
+        <div className="site-detail-card">
+          <span className="site-card-label">Paid Amount</span>
+          <div className="site-card-val">{formatIndianCurrency(totalSitePaid)}</div>
+          <span className="site-card-desc">
+            {totalSpent > 0 ? `${paidPercent}% of spent` : 'Total expenses paid'}
+          </span>
+        </div>
+
+        {/* Card 4: Client Received */}
         <div className="site-detail-card">
           <span className="site-card-label">Client Received</span>
           <div className="site-card-val">{formatIndianCurrency(clientReceived)}</div>
           <span className="site-card-desc">73% collected</span>
         </div>
 
-        {/* Card 4: Pending (Highlighted in Teal/Blue) */}
+        {/* Card 5: Pending (Highlighted in Teal/Blue) */}
         <div className="site-detail-card site-card-highlight">
           <span className="site-card-label">Pending</span>
           <div className="site-card-val site-card-val-cyan">{formatIndianCurrency(balanceReceivable)}</div>

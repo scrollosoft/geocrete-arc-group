@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import {
   CreditCard,
-  AlertTriangle,
   Plus,
   Search,
   ChevronDown,
@@ -74,13 +73,6 @@ export default function ExpensesPage({
     : 0
 
   const pendingEntriesCount = expenses.filter((e) => (e.pendingAmount || 0) > 0).length
-
-  // Over budget calculation
-  const overBudgetAmount = sites.reduce((sum, s) => {
-    const spent = s.totalSpent || 0
-    const budget = s.totalBudget || 0
-    return spent > budget ? sum + (spent - budget) : sum
-  }, 0)
 
   // Count distinct sites with expenses
   const distinctSitesCount = new Set(
@@ -206,8 +198,8 @@ export default function ExpensesPage({
         </button>
       </div>
 
-      {/* 2. Top Summary Metric Cards (4 in a row) */}
-      <div className="sites-stat-grid">
+      {/* 2. Top Summary Metric Cards */}
+      <div className="sites-stat-grid expenses-stat-grid">
         {/* Card 1: Total Expenses */}
         <div className="site-stat-card">
           <div className="stat-icon-wrap stat-icon-blue">
@@ -238,15 +230,6 @@ export default function ExpensesPage({
           <span className="stat-desc">{pendingEntriesCount || 0} pending entries</span>
         </div>
 
-        {/* Card 4: Over Budget */}
-        <div className="site-stat-card">
-          <div className="stat-icon-wrap stat-icon-rose">
-            <AlertTriangle size={18} />
-          </div>
-          <span className="stat-label">Over Budget</span>
-          <div className="stat-value">{formatIndianNumber(overBudgetAmount || 0)}</div>
-          <span className="stat-desc">1 category needs attention</span>
-        </div>
       </div>
 
       {/* 3. Search and Dropdown Filter Row */}

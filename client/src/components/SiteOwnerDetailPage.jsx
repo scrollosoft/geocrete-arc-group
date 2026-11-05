@@ -7,6 +7,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { siteOwnerService } from '../services/siteOwnerService.js'
+import { bankAccountService } from '../services/bankAccountService.js'
 
 export default function SiteOwnerDetailPage({
   clientId,
@@ -15,10 +16,12 @@ export default function SiteOwnerDetailPage({
   showNotification,
   onPaymentRecorded,
   onClientsChanged,
+  bankAccounts: propBankAccounts = [],
 }) {
   const [client, setClient] = useState(initialClient || null)
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [bankAccounts, setBankAccounts] = useState(propBankAccounts || [])
 
   // Record Payment Modal State
   const [payModal, setPayModal] = useState(false)
@@ -26,8 +29,28 @@ export default function SiteOwnerDetailPage({
   const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [payType, setPayType] = useState('Project milestone payment')
   const [payMethod, setPayMethod] = useState('Bank transfer')
+  const [payBankAccountId, setPayBankAccountId] = useState('')
   const [payRef, setPayRef] = useState('Reference verified')
+  const [payError, setPayError] = useState('')
   const [payLoading, setPayLoading] = useState(false)
+
+  const loadBankAccounts = useCallback(async () => {
+    try {
+      const data = await bankAccountService.getAll()
+      const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []
+      setBankAccounts(list)
+    } catch {
+      setBankAccounts([])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (propBankAccounts && propBankAccounts.length > 0) {
+      setBankAccounts(propBankAccounts)
+    } else {
+      loadBankAccounts()
+    }
+  }, [propBankAccounts, loadBankAccounts])
 
   const loadData = useCallback(async () => {
     const id = clientId || initialClient?.id || initialClient?._id
@@ -76,12 +99,18 @@ export default function SiteOwnerDetailPage({
 
   const handleRecordPayment = async (e) => {
     e.preventDefault()
+    setPayError('')
     const id = client?.id || client?._id || clientId
     const amt = parseFloat(payAmount)
     if (!amt || amt <= 0) {
-      alert('Please enter a valid payment amount.')
+      setPayError('Please enter a valid payment amount greater than zero.')
       return
     }
+    if (!payBankAccountId) {
+      setPayError('Please select a bank account.')
+      return
+    }
+
     setPayLoading(true)
     try {
       const res = await siteOwnerService.recordPayment(id, {
@@ -89,6 +118,7 @@ export default function SiteOwnerDetailPage({
         paymentDate: payDate,
         title: payType,
         paymentMethod: payMethod,
+        bankAccountId: payBankAccountId,
         reference: payRef,
         siteId: client?.siteId || null,
       })
@@ -96,6 +126,8 @@ export default function SiteOwnerDetailPage({
       if (res?.payments) setPayments(res.payments)
       setPayModal(false)
       setPayAmount('')
+      setPayBankAccountId('')
+      setPayError('')
       if (showNotification) {
         showNotification({
           type: 'success',
@@ -103,12 +135,15 @@ export default function SiteOwnerDetailPage({
         })
       }
       await loadData()
+      await loadBankAccounts()
       if (onPaymentRecorded) onPaymentRecorded()
       if (onClientsChanged) onClientsChanged()
     } catch (err) {
       console.error('Failed to record payment:', err)
+      const msg = err.response?.data?.error || err.message || 'Failed to record payment.'
+      setPayError(msg)
       if (showNotification) {
-        showNotification({ type: 'error', message: 'Failed to record payment.' })
+        showNotification({ type: 'error', message: msg })
       }
     } finally {
       setPayLoading(false)
@@ -184,7 +219,10 @@ export default function SiteOwnerDetailPage({
           className="sod-record-payment-btn"
           onClick={() => {
             setPayAmount('')
+            setPayBankAccountId('')
+            setPayError('')
             setPayDate(new Date().toISOString().slice(0, 10))
+            loadBankAccounts()
             setPayModal(true)
           }}
         >
@@ -331,7 +369,10 @@ export default function SiteOwnerDetailPage({
                   placeholder="e.g. 500000"
                   className="sites-search-input"
                   value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
+                  onChange={(e) => {
+                    setPayAmount(e.target.value)
+                    setPayError('')
+                  }}
                   style={{ width: '100%', height: '38px', paddingLeft: '12px' }}
                 />
               </div>
@@ -369,6 +410,30 @@ export default function SiteOwnerDetailPage({
                 </div>
               </div>
 
+              {/* Bank Account - placed below Payment Method */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                  Bank Account *
+                </label>
+                <select
+                  required
+                  className="sites-search-input"
+                  value={payBankAccountId}
+                  onChange={(e) => {
+                    setPayBankAccountId(e.target.value)
+                    setPayError('')
+                  }}
+                  style={{ width: '100%', height: '38px', paddingLeft: '8px' }}
+                >
+                  <option value="">Select Bank Account</option>
+                  {bankAccounts.map((b) => (
+                    <option key={b.id || b._id} value={b.id || b._id}>
+                      {b.bankName || b.bank_name} (₹{Number(b.balance || 0).toLocaleString('en-IN')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
                   Payment Description
@@ -399,6 +464,13 @@ export default function SiteOwnerDetailPage({
                   style={{ width: '100%', height: '38px', paddingLeft: '12px' }}
                 />
               </div>
+
+              {payError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '6px', color: '#B91C1C', fontSize: '12px' }}>
+                  <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                  <span>{payError}</span>
+                </div>
+              )}
 
               <div className="modal-actions" style={{ marginTop: '10px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button

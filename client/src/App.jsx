@@ -394,6 +394,7 @@ export default function App() {
             <MaterialsPage
               sites={sites}
               suppliers={suppliers}
+              bankAccounts={accounts}
               onOpenAddPurchase={() => setIsAddPurchaseOpen(true)}
               showNotification={setNotification}
               refreshTrigger={materialsRefreshTrigger}
@@ -403,6 +404,7 @@ export default function App() {
                 loadBankAccounts()
                 setSupplierRefreshTrigger((prev) => prev + 1)
               }}
+              onRefreshAccounts={loadBankAccounts}
             />
           ) : activeTab === 'suppliers' ? (
             <SuppliersPage
@@ -426,6 +428,7 @@ export default function App() {
           ) : activeTab === 'site-owners' ? (
             <SiteOwnersPage
               sites={sites}
+              bankAccounts={accounts}
               onOpenAddClient={() => setIsAddClientOpen(true)}
               showNotification={setNotification}
               refreshTrigger={clientRefreshTrigger}

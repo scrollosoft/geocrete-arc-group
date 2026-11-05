@@ -14,14 +14,42 @@ import {
   Package,
 } from 'lucide-react'
 import { materialService } from '../services/materialService.js'
+import { bankAccountService } from '../services/bankAccountService.js'
+
+
+const UNITS = [
+  'Bags',
+  'Tons',
+  'Units',
+  'Kg',
+  'Pieces',
+  'Cubic Feet',
+  'Cubic Meter',
+  'Meter',
+  'Liter',
+  'Days',
+  'Hours',
+  'Trips',
+  'Sq.Ft',
+  'Other',
+]
+
+const PAYMENT_METHODS = [
+  'Bank Transfer',
+  'UPI',
+  'Cheque',
+  'Cash',
+]
 
 export default function MaterialsPage({
   sites = [],
   suppliers = [],
+  bankAccounts = [],
   onOpenAddPurchase,
   showNotification,
   refreshTrigger = 0,
   onMaterialsChanged,
+  onRefreshAccounts,
 }) {
   const [materials, setMaterials] = useState([])
   const [summary, setSummary] = useState(null)
@@ -98,25 +126,89 @@ export default function MaterialsPage({
     return viewingMaterial
   }, [viewingMaterial, purchaseHistory])
 
+  const [localBankAccounts, setLocalBankAccounts] = useState(bankAccounts)
+  useEffect(() => {
+    if (bankAccounts && bankAccounts.length > 0) {
+      setLocalBankAccounts(bankAccounts)
+    } else {
+      bankAccountService.getAll().then((data) => {
+        if (Array.isArray(data)) setLocalBankAccounts(data)
+      }).catch(() => {})
+    }
+  }, [bankAccounts])
+
+  const effectiveBankAccounts = (bankAccounts && bankAccounts.length > 0) ? bankAccounts : localBankAccounts
+
   const [editingMaterial, setEditingMaterial] = useState(null)
   const [editFormData, setEditFormData] = useState({
-    materialName: '',
-    category: '',
+    id: '',
+    refNumber: '',
+    purchaseDate: '',
     site: '',
     supplier: '',
+    materialName: '',
     quantity: '',
     unit: 'Bags',
     unitPrice: '',
-    totalCost: '',
+    paymentMethod: 'Bank Transfer',
+    bankAccountId: '',
     paidAmount: '',
-    quantityUsed: '',
-    paymentStatus: 'Pending',
     notes: '',
   })
+  const [editErrors, setEditErrors] = useState({})
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState('')
   const [deletingMaterial, setDeletingMaterial] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // Derived: Total Amount = Quantity × Rate Per Unit
+  const editTotalAmount = (() => {
+    const q = Number(editFormData.quantity)
+    const r = Number(editFormData.unitPrice)
+    return q > 0 && r >= 0 ? Number((q * r).toFixed(2)) : 0
+  })()
+
+  // Derived: Payment Status calculated automatically from Total Amount and Paid Amount
+  const editPaymentStatus = (() => {
+    const paid = Number(editFormData.paidAmount) || 0
+    if (editTotalAmount > 0 && paid >= editTotalAmount) return 'Paid'
+    if (paid > 0) return 'Partial'
+    return 'Pending'
+  })()
+
+  // Dynamic list of material categories matching Add Purchase
+  const editMaterialOptions = useMemo(() => {
+    const set = new Set()
+    if (editFormData.materialName) {
+      set.add(editFormData.materialName)
+    }
+    if (editFormData.supplier) {
+      const selectedSupplier = suppliers.find(
+        (s) => String(s._id || s.id) === String(editFormData.supplier)
+      )
+      if (selectedSupplier?.categories) {
+        selectedSupplier.categories
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean)
+          .forEach((c) => set.add(c))
+      }
+    } else {
+      suppliers.forEach((s) => {
+        if (s.categories) {
+          s.categories.split(',').forEach((c) => {
+            const trimmed = c.trim()
+            if (trimmed) set.add(trimmed)
+          })
+        }
+      })
+    }
+    materials.forEach((m) => {
+      if (m.materialName) set.add(m.materialName)
+      if (m.category) set.add(m.category)
+    })
+    return Array.from(set).sort()
+  }, [editFormData.supplier, editFormData.materialName, suppliers, materials])
 
   // Fetch materials from API
   const fetchMaterials = useCallback(async () => {
@@ -168,160 +260,185 @@ export default function MaterialsPage({
     )
     const unitPrice = item.unitPrice !== undefined && item.unitPrice !== null
       ? item.unitPrice
-      : (qty > 0 ? Number((cost / qty).toFixed(2)) : '')
+      : (item.ratePerUnit !== undefined && item.ratePerUnit !== null
+        ? item.ratePerUnit
+        : (qty > 0 ? Number((cost / qty).toFixed(2)) : ''))
 
     // Resolve site & supplier IDs from object or name match
     const foundSite = sites.find((s) => s.name === (item.site?.name || item.siteName))
     const foundSupplier = suppliers.find((s) => s.name === (item.supplier?.name || item.supplierName))
-    const siteVal = item.site?._id || item.site?.id || item.siteId || foundSite?._id || foundSite?.id || ''
+    const siteVal = item.site?._id || item.site?.id || item.siteId || foundSite?._id || foundSite?.id || (sites[0]?._id || sites[0]?.id || '')
     const supplierVal = item.supplier?._id || item.supplier?.id || item.supplierId || foundSupplier?._id || foundSupplier?.id || ''
+
+    let pDate = ''
+    if (item.purchaseDate) {
+      if (typeof item.purchaseDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(item.purchaseDate)) {
+        pDate = item.purchaseDate.slice(0, 10)
+      } else {
+        const d = new Date(item.purchaseDate)
+        if (!isNaN(d.getTime())) pDate = d.toISOString().slice(0, 10)
+      }
+    }
+    if (!pDate) pDate = new Date().toISOString().slice(0, 10)
+
+    const bankAccVal = item.bankAccountId || item.bank_account_id || ''
 
     setEditingMaterial(item)
     setEditFormData({
-      materialName: item.materialName || item.category || '',
-      category: item.category || item.materialName || '',
+      id: item._id || item.id || '',
+      refNumber: item.refNumber || `MAT-${item.id || ''}`,
+      purchaseDate: pDate,
       site: siteVal,
       supplier: supplierVal,
+      materialName: item.materialName || item.category || '',
       quantity: item.quantity !== undefined ? item.quantity : '',
       unit: item.unit || 'Bags',
-      unitPrice: unitPrice,
-      totalCost: cost || '',
-      paidAmount: paid !== undefined ? paid : '',
-      quantityUsed: item.quantityUsed !== undefined ? item.quantityUsed : 0,
-      paymentStatus: item.paymentStatus || 'Pending',
-      notes: item.notes || '',
+      unitPrice: unitPrice !== undefined ? unitPrice : '',
+      paymentMethod: item.paymentMethod || 'Bank Transfer',
+      bankAccountId: bankAccVal,
+      paidAmount: paid !== undefined ? paid : 0,
+      notes: item.notes || item.remark || '',
     })
+    setEditErrors({})
     setEditError('')
+
+    // Fallback: If bankAccountId or refNumber is missing on grouped row, load details from purchase history
+    const cleanId = String(item._id || item.id || '').replace(/^grp-(exp-)?/, '')
+    if (cleanId && !isNaN(Number(cleanId))) {
+      materialService.getHistory(cleanId).then((res) => {
+        if (res?.history && res.history.length > 0) {
+          const first = res.history[0]
+          setEditFormData((prev) => ({
+            ...prev,
+            bankAccountId: prev.bankAccountId || first.bankAccountId || '',
+            refNumber: prev.refNumber && !prev.refNumber.startsWith('grp-') ? prev.refNumber : (first.refNumber || prev.refNumber),
+            purchaseDate: first.purchaseDate ? first.purchaseDate.slice(0, 10) : prev.purchaseDate,
+          }))
+        }
+      }).catch(() => {})
+    }
   }
 
   const handleEditChange = (e) => {
     const { name, value } = e.target
     setEditFormData((prev) => {
       const next = { ...prev, [name]: value }
-      if (name === 'quantity' || name === 'unitPrice') {
-        const q = Number(name === 'quantity' ? value : prev.quantity)
-        const p = Number(name === 'unitPrice' ? value : prev.unitPrice)
-        if (!isNaN(q) && !isNaN(p) && q > 0 && p > 0) {
-          next.totalCost = Number((q * p).toFixed(2))
-        }
-      } else if (name === 'totalCost') {
-        const q = Number(prev.quantity)
-        const c = Number(value)
-        if (!isNaN(q) && !isNaN(c) && q > 0 && c > 0) {
-          next.unitPrice = Number((c / q).toFixed(2))
+      if (name === 'supplier') {
+        const newSupplier = suppliers.find((s) => String(s._id || s.id) === String(value))
+        const cats = newSupplier?.categories
+          ? newSupplier.categories.split(',').map((c) => c.trim()).filter(Boolean)
+          : []
+        if (prev.materialName && cats.length > 0 && !cats.includes(prev.materialName)) {
+          next.materialName = ''
         }
       }
-
-      if (name === 'paidAmount' || name === 'totalCost') {
-        const c = Number(name === 'totalCost' ? value : next.totalCost || 0)
-        const p = Number(name === 'paidAmount' ? value : next.paidAmount || 0)
-        if (c > 0 && p >= c) {
-          next.paymentStatus = 'Paid'
-        } else if (p > 0) {
-          next.paymentStatus = 'Partial'
-        } else {
-          next.paymentStatus = 'Pending'
-        }
-      }
-
       return next
     })
+    if (editErrors[name]) {
+      setEditErrors((prev) => ({ ...prev, [name]: '' }))
+    }
     if (editError) setEditError('')
   }
 
   const handleEditSave = async (e) => {
     e.preventDefault()
-    if (!editFormData.materialName?.trim()) {
-      setEditError('Material name is required.')
-      return
+    setEditError('')
+
+    const newErrors = {}
+    if (!editFormData.purchaseDate) {
+      newErrors.purchaseDate = 'Purchase date is required.'
     }
-    if (editFormData.quantity === '' || Number(editFormData.quantity) < 0) {
-      setEditError('Valid quantity is required.')
+    if (!editFormData.site) {
+      newErrors.site = 'Construction site is required.'
+    }
+    if (!editFormData.materialName?.trim()) {
+      newErrors.materialName = 'Material name is required.'
+    }
+    const qty = Number(editFormData.quantity)
+    if (editFormData.quantity === '' || isNaN(qty) || qty <= 0) {
+      newErrors.quantity = 'Please enter a valid quantity greater than 0.'
+    }
+    const rate = Number(editFormData.unitPrice)
+    if (editFormData.unitPrice === '' || isNaN(rate) || rate < 0) {
+      newErrors.unitPrice = 'Please enter a valid rate per unit.'
+    }
+
+    const computedTotal = Number((qty * rate).toFixed(2))
+    const paid = editFormData.paidAmount !== '' && editFormData.paidAmount !== undefined
+      ? Number(editFormData.paidAmount)
+      : 0
+
+    if (isNaN(paid) || paid < 0) {
+      newErrors.paidAmount = 'Paid amount cannot be negative.'
+    } else if (paid > computedTotal) {
+      newErrors.paidAmount = 'Paid amount cannot exceed total amount.'
+    } else if (paid > 0 && !editFormData.bankAccountId) {
+      newErrors.bankAccountId = 'Please select a bank account.'
+    } else if (paid > 0 && editFormData.bankAccountId) {
+      const selectedBank = effectiveBankAccounts.find(
+        (b) => String(b._id || b.id) === String(editFormData.bankAccountId)
+      )
+      if (selectedBank) {
+        const oldPaid = Number(editingMaterial.paidAmount || 0)
+        const oldBankId = editingMaterial.bankAccountId || ''
+        const isSameBank = String(oldBankId) === String(editFormData.bankAccountId)
+        const netDeduction = isSameBank ? (paid - oldPaid) : paid
+        const currentBal = Number(selectedBank.balance || 0)
+        if (netDeduction > 0 && currentBal < netDeduction) {
+          newErrors.bankAccountId = `Insufficient bank balance. Available balance: ₹${currentBal.toLocaleString('en-IN')}.`
+        }
+      }
+    }
+
+    setEditErrors(newErrors)
+    if (Object.keys(newErrors).length > 0) {
+      const firstMsg = Object.values(newErrors)[0]
+      setEditError(firstMsg)
       return
     }
 
     setEditLoading(true)
-    setEditError('')
     try {
       const matId = editingMaterial._id || editingMaterial.id
-      const qty = Number(editFormData.quantity) || 0
-      const unitPrice = Number(editFormData.unitPrice) || 0
-      const totalCost = Number(editFormData.totalCost) || (qty * unitPrice)
-      const paidAmount = Number(editFormData.paidAmount) || 0
-      const quantityUsed = Number(editFormData.quantityUsed) || 0
-      const remainingStock = Math.max(0, qty - quantityUsed)
-      const outstandingAmount = Math.max(0, totalCost - paidAmount)
-
-      const matchedSite = sites.find((s) => String(s._id || s.id) === String(editFormData.site))
-      const matchedSupplier = suppliers.find((s) => String(s._id || s.id) === String(editFormData.supplier))
-
-      const updatedRecord = {
-        ...editingMaterial,
+      const payload = {
+        purchaseDate: editFormData.purchaseDate,
+        siteId: editFormData.site,
+        supplierId: editFormData.supplier || null,
         materialName: editFormData.materialName.trim(),
         category: editFormData.materialName.trim(),
-        site: matchedSite
-          ? { _id: String(matchedSite._id || matchedSite.id), id: String(matchedSite._id || matchedSite.id), name: matchedSite.name, location: matchedSite.location || '' }
-          : editingMaterial.site,
-        supplier: matchedSupplier
-          ? { _id: String(matchedSupplier._id || matchedSupplier.id), id: String(matchedSupplier._id || matchedSupplier.id), name: matchedSupplier.name }
-          : (editFormData.supplier === '' ? null : editingMaterial.supplier),
         quantity: qty,
-        unit: editFormData.unit || 'Units',
-        unitPrice,
-        totalCost,
-        paidAmount,
-        outstandingAmount,
-        quantityUsed,
-        remainingStock,
-        paymentStatus: editFormData.paymentStatus,
+        unit: editFormData.unit || 'Bags',
+        ratePerUnit: rate,
+        unitPrice: rate,
+        totalAmount: computedTotal,
+        totalCost: computedTotal,
+        paidAmount: paid,
+        bankAccountId: paid > 0 ? editFormData.bankAccountId : null,
+        paymentMethod: editFormData.paymentMethod,
+        paymentStatus: editPaymentStatus,
         notes: editFormData.notes || '',
+        remark: editFormData.notes || '',
       }
 
-      // Update state immediately so UI updates without lag
-      setMaterials((prev) =>
-        prev.map((m) => ((m._id || m.id) === matId ? { ...m, ...updatedRecord } : m))
-      )
-
-      // Sync with backend if persistent DB record
-      if (matId && !String(matId).startsWith('m')) {
-        const payload = {
-          materialName: editFormData.materialName.trim(),
-          category: editFormData.materialName.trim(),
-          site: editFormData.site || undefined,
-          siteId: editFormData.site || undefined,
-          supplier: editFormData.supplier || null,
-          supplierId: editFormData.supplier || null,
-          quantity: qty,
-          unit: editFormData.unit || 'Units',
-          unitPrice,
-          totalCost,
-          paidAmount,
-          quantityUsed,
-          paymentStatus: editFormData.paymentStatus,
-          notes: editFormData.notes || '',
-        }
-        try {
-          await materialService.update(matId, payload)
-          await fetchMaterials()
-          if (onMaterialsChanged) onMaterialsChanged()
-        } catch (apiErr) {
-          console.warn('Backend update failed:', apiErr)
-        }
-      }
+      await materialService.update(matId, payload)
+      await fetchMaterials()
+      if (onMaterialsChanged) onMaterialsChanged()
+      if (onRefreshAccounts) onRefreshAccounts()
 
       if (showNotification) {
         showNotification({
           type: 'success',
-          message: `Material "${editFormData.materialName}" updated successfully!`,
+          message: `Material purchase "${editFormData.refNumber || editFormData.materialName}" updated successfully!`,
         })
       }
       setEditingMaterial(null)
     } catch (err) {
-      setEditError(err.message || 'Failed to update material')
+      const msg = err.message || 'Failed to update material'
+      setEditError(msg)
       if (showNotification) {
         showNotification({
           type: 'error',
-          message: err.message || 'Failed to update material',
+          message: msg,
         })
       }
     } finally {
@@ -1015,10 +1132,15 @@ export default function MaterialsPage({
         </div>
       )}
 
-      {/* â”€â”€ EDIT / UPDATE MATERIAL MODAL â”€â”€ */}
+      {/* ── EDIT / UPDATE MATERIAL MODAL ── */}
       {editingMaterial && (
         <div className="modal-overlay" onClick={() => setEditingMaterial(null)}>
-          <div className="modal-container" style={{ maxWidth: '620px' }} onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-container"
+            style={{ width: '820px', maxWidth: '95vw' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
             <div className="modal-header">
               <div className="modal-title-row">
                 <div className="modal-icon-badge" style={{ backgroundColor: '#ECFDF5', color: '#059669' }}>
@@ -1039,211 +1161,252 @@ export default function MaterialsPage({
             </div>
 
             {editError && (
-              <div style={{ margin: '16px 24px 0 24px', padding: '10px 14px', borderRadius: '6px', background: '#FEE2E2', color: '#B91C1C', fontSize: '13px' }}>
+              <div className="form-alert form-alert-error" style={{ margin: '16px 24px 0 24px' }}>
                 {editError}
               </div>
             )}
 
             <form onSubmit={handleEditSave} className="modal-form">
               <div className="modal-body">
-              <div className="modal-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                {/* Material Name */}
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label className="form-label">Material Name *</label>
-                  <input
-                    type="text"
-                    name="materialName"
-                    className="form-input"
-                    value={editFormData.materialName}
-                    onChange={handleEditChange}
-                    required
-                  />
-                </div>
+                <div className="modal-form-grid">
+                  {/* 1. Purchase / Material ID (read-only) */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Purchase / Material ID</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ backgroundColor: '#F8FAFC', fontWeight: 600, color: '#334155' }}
+                      value={editFormData.refNumber || editFormData.id}
+                      readOnly
+                      tabIndex={-1}
+                    />
+                  </div>
 
-                {/* Construction Site */}
-                <div className="form-group">
-                  <label className="form-label">Construction Site</label>
-                  <select
-                    name="site"
-                    className="form-select"
-                    value={editFormData.site}
-                    onChange={handleEditChange}
-                  >
-                    <option value="">-- Select Site --</option>
-                    {sites.map((s) => (
-                      <option key={s._id || s.id} value={s._id || s.id}>
-                        {s.name} ({s.location || 'Site'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  {/* 2. Purchase Date * */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Purchase Date *</label>
+                    <input
+                      type="date"
+                      name="purchaseDate"
+                      className={`form-input ${editErrors.purchaseDate ? 'input-error' : ''}`}
+                      value={editFormData.purchaseDate}
+                      onChange={handleEditChange}
+                      required
+                    />
+                    {editErrors.purchaseDate && <span className="field-error-msg">{editErrors.purchaseDate}</span>}
+                  </div>
 
-                {/* Supplier */}
-                <div className="form-group">
-                  <label className="form-label">Supplier</label>
-                  <select
-                    name="supplier"
-                    className="form-select"
-                    value={editFormData.supplier}
-                    onChange={handleEditChange}
-                  >
-                    <option value="">-- Direct / None --</option>
-                    {suppliers.map((sup) => (
-                      <option key={sup._id || sup.id} value={sup._id || sup.id}>
-                        {sup.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  {/* 3. Construction Site * */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Construction Site *</label>
+                    <select
+                      name="site"
+                      className={`form-select ${editErrors.site ? 'input-error' : ''}`}
+                      value={editFormData.site}
+                      onChange={handleEditChange}
+                      required
+                    >
+                      <option value="">Select a Site</option>
+                      {sites.map((s) => (
+                        <option key={s._id || s.id} value={s._id || s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                    {editErrors.site && <span className="field-error-msg">{editErrors.site}</span>}
+                  </div>
 
-                {/* Category */}
-                <div className="form-group">
-                  <label className="form-label">Category</label>
-                  <input
-                    type="text"
-                    name="category"
-                    className="form-input"
-                    placeholder="e.g. Raw Material, Cement, Steel"
-                    value={editFormData.category}
-                    onChange={handleEditChange}
-                  />
-                </div>
+                  {/* 4. Supplier */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Supplier</label>
+                    <select
+                      name="supplier"
+                      className="form-select"
+                      value={editFormData.supplier}
+                      onChange={handleEditChange}
+                    >
+                      <option value="">Select a Supplier (Optional)</option>
+                      {suppliers.map((sup) => (
+                        <option key={sup._id || sup.id} value={sup._id || sup.id}>
+                          {sup.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Unit */}
-                <div className="form-group">
-                  <label className="form-label">Unit</label>
-                  <select
-                    name="unit"
-                    className="form-select"
-                    value={editFormData.unit}
-                    onChange={handleEditChange}
-                  >
-                    {!['Bags', 'bags', 'Kg', 'Ton', 'T', 'tonnes', 'Pieces', 'pcs', 'Cubic Feet', 'Cubic Meter', 'Meter', 'Liter', 'Units', 'Sq.Ft', 'Trips', 'Other'].includes(editFormData.unit) && editFormData.unit && (
-                      <option value={editFormData.unit}>{editFormData.unit}</option>
-                    )}
-                    {['Bags', 'bags', 'Kg', 'Ton', 'T', 'tonnes', 'Pieces', 'pcs', 'Cubic Feet', 'Cubic Meter', 'Meter', 'Liter', 'Units', 'Sq.Ft', 'Trips', 'Other'].map((u) => (
-                      <option key={u} value={u}>{u}</option>
-                    ))}
-                  </select>
-                </div>
+                  {/* 5. Material * */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Material *</label>
+                    <select
+                      name="materialName"
+                      className={`form-select ${editErrors.materialName ? 'input-error' : ''}`}
+                      value={editFormData.materialName}
+                      onChange={handleEditChange}
+                      required
+                    >
+                      <option value="">-- Select material --</option>
+                      {editMaterialOptions.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                    {editErrors.materialName && <span className="field-error-msg">{editErrors.materialName}</span>}
+                  </div>
 
-                {/* Quantity */}
-                <div className="form-group">
-                  <label className="form-label">Purchased Quantity *</label>
-                  <input
-                    type="number"
-                    name="quantity"
-                    className="form-input"
-                    min="0"
-                    step="any"
-                    value={editFormData.quantity}
-                    onChange={handleEditChange}
-                    required
-                  />
-                </div>
+                  {/* 6. Quantity * */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Quantity *</label>
+                    <input
+                      type="number"
+                      name="quantity"
+                      className={`form-input ${editErrors.quantity ? 'input-error' : ''}`}
+                      placeholder="0"
+                      min="0.01"
+                      step="any"
+                      value={editFormData.quantity}
+                      onChange={handleEditChange}
+                      required
+                    />
+                    {editErrors.quantity && <span className="field-error-msg">{editErrors.quantity}</span>}
+                  </div>
 
-                {/* Quantity Used */}
-                <div className="form-group">
-                  <label className="form-label">Used Quantity</label>
-                  <input
-                    type="number"
-                    name="quantityUsed"
-                    className="form-input"
-                    min="0"
-                    step="any"
-                    value={editFormData.quantityUsed}
-                    onChange={handleEditChange}
-                  />
-                </div>
+                  {/* 7. Unit */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Unit</label>
+                    <select
+                      name="unit"
+                      className="form-select"
+                      value={editFormData.unit}
+                      onChange={handleEditChange}
+                    >
+                      {UNITS.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Unit Price */}
-                <div className="form-group">
-                  <label className="form-label">Unit Price (₹)</label>
-                  <input
-                    type="number"
-                    name="unitPrice"
-                    className="form-input"
-                    min="0"
-                    step="any"
-                    value={editFormData.unitPrice}
-                    onChange={handleEditChange}
-                  />
-                </div>
+                  {/* 8. Rate Per Unit (₹) * */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Rate Per Unit (₹) *</label>
+                    <div className="input-with-prefix">
+                      <span className="input-prefix">₹</span>
+                      <input
+                        type="number"
+                        name="unitPrice"
+                        className={`form-input with-prefix ${editErrors.unitPrice ? 'input-error' : ''}`}
+                        placeholder="0"
+                        min="0"
+                        step="any"
+                        value={editFormData.unitPrice}
+                        onChange={handleEditChange}
+                        required
+                      />
+                    </div>
+                    {editErrors.unitPrice && <span className="field-error-msg">{editErrors.unitPrice}</span>}
+                  </div>
 
-                {/* Total Cost */}
-                <div className="form-group">
-                  <label className="form-label">Total Cost (₹)</label>
-                  <input
-                    type="number"
-                    name="totalCost"
-                    className="form-input"
-                    min="0"
-                    step="any"
-                    value={editFormData.totalCost}
-                    onChange={handleEditChange}
-                  />
-                </div>
+                  {/* 9. Payment Method */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Payment Method</label>
+                    <select
+                      name="paymentMethod"
+                      className="form-select"
+                      value={editFormData.paymentMethod}
+                      onChange={handleEditChange}
+                    >
+                      {PAYMENT_METHODS.map((pm) => (
+                        <option key={pm} value={pm}>
+                          {pm}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Paid Amount */}
-                <div className="form-group">
-                  <label className="form-label">Paid Amount (₹)</label>
-                  <input
-                    type="number"
-                    name="paidAmount"
-                    className="form-input"
-                    min="0"
-                    step="any"
-                    value={editFormData.paidAmount}
-                    onChange={handleEditChange}
-                  />
-                </div>
+                  {/* 10. Bank Account */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Bank Account</label>
+                    <select
+                      name="bankAccountId"
+                      className={`form-select ${editErrors.bankAccountId ? 'input-error' : ''}`}
+                      value={editFormData.bankAccountId}
+                      onChange={handleEditChange}
+                    >
+                      <option value="">Select Bank Account</option>
+                      {effectiveBankAccounts.map((b) => (
+                        <option key={b._id || b.id} value={b._id || b.id}>
+                          {b.bankName} (₹{Number(b.balance || 0).toLocaleString('en-IN')})
+                        </option>
+                      ))}
+                    </select>
+                    {editErrors.bankAccountId && <span className="field-error-msg">{editErrors.bankAccountId}</span>}
+                  </div>
 
-                {/* Payment Status */}
-                <div className="form-group">
-                  <label className="form-label">Payment Status</label>
-                  <select
-                    name="paymentStatus"
-                    className="form-select"
-                    value={editFormData.paymentStatus}
-                    onChange={handleEditChange}
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="Partial">Partial</option>
-                    <option value="Paid">Paid</option>
-                  </select>
-                </div>
+                  {/* 11. Total Amount (₹) - Read-only calculated */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Total Amount (₹)</label>
+                    <div className="input-with-prefix">
+                      <span className="input-prefix">₹</span>
+                      <input
+                        type="text"
+                        className="form-input with-prefix"
+                        style={{ backgroundColor: '#F8FAFC', fontWeight: 600, color: '#334155' }}
+                        value={editTotalAmount > 0 ? editTotalAmount.toLocaleString('en-IN') : '0'}
+                        readOnly
+                        tabIndex={-1}
+                        aria-label="Total Amount calculated automatically"
+                      />
+                    </div>
+                  </div>
 
-                {/* Notes */}
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label className="form-label">Notes / Remarks</label>
-                  <input
-                    type="text"
-                    name="notes"
-                    className="form-input"
-                    placeholder="Invoice number or notes"
-                    value={editFormData.notes}
-                    onChange={handleEditChange}
-                  />
-                </div>
-              </div>
+                  {/* 12. Paid Amount (₹) */}
+                  <div className="form-group">
+                    <label className="form-label labour-form-label">Paid Amount (₹)</label>
+                    <div className="input-with-prefix">
+                      <span className="input-prefix">₹</span>
+                      <input
+                        type="number"
+                        name="paidAmount"
+                        className={`form-input with-prefix ${editErrors.paidAmount ? 'input-error' : ''}`}
+                        placeholder="0"
+                        min="0"
+                        max={editTotalAmount > 0 ? editTotalAmount : undefined}
+                        step="any"
+                        value={editFormData.paidAmount}
+                        onChange={handleEditChange}
+                      />
+                    </div>
+                    {editErrors.paidAmount && <span className="field-error-msg">{editErrors.paidAmount}</span>}
+                  </div>
 
+                  {/* 13. Remark */}
+                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label className="form-label labour-form-label">Remark</label>
+                    <input
+                      type="text"
+                      name="notes"
+                      className="form-input"
+                      placeholder="Add invoice number or a note"
+                      value={editFormData.notes}
+                      onChange={handleEditChange}
+                    />
+                  </div>
+                </div>
               </div>{/* end modal-body */}
 
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="btn btn-secondary-action"
                   onClick={() => setEditingMaterial(null)}
                   disabled={editLoading}
-                  style={{ padding: '8px 18px', borderRadius: '6px', fontSize: '13.5px', fontWeight: 600 }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="btn btn-primary"
+                  className="btn btn-primary-action"
                   disabled={editLoading}
-                  style={{ padding: '8px 22px', borderRadius: '6px', fontSize: '13.5px', fontWeight: 600, backgroundColor: '#0293DE', color: '#FFF' }}
                 >
                   {editLoading ? 'Saving...' : 'Save Changes'}
                 </button>

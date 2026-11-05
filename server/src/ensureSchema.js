@@ -99,9 +99,22 @@ export async function ensureSchema() {
     console.log('Added client_payments.bank_account_id column')
   }
 
+  // Ensure type column on client_payments table ('credit' or 'debit')
+  if (!(await columnExists(pool, 'client_payments', 'type'))) {
+    await pool.query(`ALTER TABLE client_payments ADD COLUMN type VARCHAR(20) NOT NULL DEFAULT 'credit' AFTER status`)
+    console.log('Added client_payments.type column')
+  }
+
   // Ensure client_payments.client_id can be NULL if site has no owner
   try {
     await pool.query(`ALTER TABLE client_payments MODIFY COLUMN client_id INT UNSIGNED NULL DEFAULT NULL`)
+  } catch (err) {
+    // ignore
+  }
+
+  // Ensure worker_payments.site_id can be NULL if worker has no assigned site
+  try {
+    await pool.query(`ALTER TABLE worker_payments MODIFY COLUMN site_id INT UNSIGNED NULL DEFAULT NULL`)
   } catch (err) {
     // ignore
   }
@@ -110,6 +123,27 @@ export async function ensureSchema() {
   if (!(await columnExists(pool, 'expenses', 'bank_account_id'))) {
     await pool.query(`ALTER TABLE expenses ADD COLUMN bank_account_id INT UNSIGNED NULL DEFAULT NULL AFTER supplier_id`)
     console.log('Added expenses.bank_account_id column')
+  }
+
+  // Ensure material_id column on expenses table
+  if (!(await columnExists(pool, 'expenses', 'material_id'))) {
+    await pool.query('ALTER TABLE expenses ADD COLUMN material_id INT UNSIGNED NULL DEFAULT NULL AFTER id, ADD INDEX idx_material_id (material_id)')
+    console.log('Added expenses.material_id column')
+  }
+
+  // Link historical material expenses to materials
+  try {
+    await pool.query(`
+      UPDATE expenses e
+      JOIN materials m ON LOWER(TRIM(e.category)) = LOWER(TRIM(m.category))
+                      AND e.site_id = m.site_id
+                      AND (e.supplier_id = m.supplier_id OR (e.supplier_id IS NULL AND m.supplier_id IS NULL))
+                      AND e.applied_to_material = 1
+      SET e.material_id = m.id
+      WHERE e.material_id IS NULL
+    `)
+  } catch (err) {
+    console.warn('Material link check skipped:', err.message)
   }
 
   // Ensure bank_account_id column on materials table

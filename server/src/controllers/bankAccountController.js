@@ -170,7 +170,8 @@ export const getBankTransactions = async (req, res, next) => {
     const [clientPayments] = await pool.query(`
       SELECT 
         cp.id,
-        'credit' AS txn_type,
+        COALESCE(cp.type, 'credit') AS txn_type,
+        cp.type,
         cp.amount,
         CAST(cp.created_at AS CHAR) AS created_at_str,
         CAST(cp.payment_date AS CHAR) AS payment_date_str,
@@ -192,7 +193,7 @@ export const getBankTransactions = async (req, res, next) => {
         so.phone AS client_phone
       FROM client_payments cp
       INNER JOIN bank_accounts ba ON ba.id = cp.bank_account_id AND ba.is_active = 1
-      INNER JOIN sites s ON s.id = cp.site_id
+      LEFT JOIN sites s ON s.id = cp.site_id
       LEFT JOIN site_owners so ON so.id = cp.client_id
       WHERE cp.amount > 0
     `)
@@ -294,22 +295,32 @@ export const getBankTransactions = async (req, res, next) => {
     // 4. Map client payments into standardized transaction objects
     const creditTxns = clientPayments.map((cp) => {
       const isAdvance = cp.title && (cp.title.toLowerCase().includes('initial') || cp.title.toLowerCase().includes('advance'))
-      const title = isAdvance ? 'Site Advance Received' : 'Client Payment Received'
+      const isRefund = cp.title && (cp.title.toLowerCase().includes('refund') || cp.title.toLowerCase().includes('credit'))
+      const isDebit = cp.txn_type === 'debit' || cp.type === 'debit'
+
+      let title = isAdvance ? 'Site Advance Received' : (cp.title || 'Client Payment Received')
+      let category = isRefund ? 'Credit / Refund' : (isAdvance ? 'Site Advance' : (isDebit ? 'Debit / Expense' : 'Credit / Incoming'))
+      if (isRefund) {
+        title = cp.title || 'Material Purchase Refund'
+      } else if (isDebit) {
+        title = cp.title || 'Site Owner Payment'
+      }
+
       const bankName = cp.bank_name || (cp.bank_account_id ? bankMap.get(String(cp.bank_account_id))?.bank_name : null) || 'Bank Account'
       const siteText = cp.site_name || 'Construction Site'
-      const subtitle = `${siteText} · ${bankName}`
+      const subtitle = isRefund ? `${siteText} · Refund to ${bankName}` : `${siteText} · ${bankName}`
       const numAmount = Number(cp.amount || 0)
       const parsedTime = formatActualDateTime(cp.created_at_str, cp.payment_date_str)
 
       return {
         id: `cp-${cp.id}`,
         rawId: cp.id,
-        type: 'credit',
+        type: isDebit ? 'debit' : 'credit',
         title,
-        category: isAdvance ? 'Site Advance' : 'Client Payment',
+        category,
         subtitle,
         amount: numAmount,
-        formattedAmount: `+₹${numAmount.toLocaleString('en-IN')}`,
+        formattedAmount: isDebit ? `−₹${numAmount.toLocaleString('en-IN')}` : `+₹${numAmount.toLocaleString('en-IN')}`,
         rawTimestamp: parsedTime.rawTimestamp,
         date: parsedTime.date,
         dateTime: parsedTime.dateTime,
@@ -320,8 +331,8 @@ export const getBankTransactions = async (req, res, next) => {
         siteId: cp.site_id || null,
         siteName: cp.site_name || '',
         siteLocation: cp.site_location || '',
-        partyName: cp.client_name || 'Client',
-        partyType: 'Client',
+        partyName: isRefund ? 'Material Purchase Refund' : (cp.client_name || 'Site Owner'),
+        partyType: isRefund ? 'Supplier' : (isDebit ? 'Site Owner' : 'Client'),
         paymentMethod: cp.payment_method || 'Bank Transfer',
         referenceId: cp.reference || `TXN-CP-${String(cp.id).padStart(4, '0')}`,
         remark: cp.reference || cp.title || '',

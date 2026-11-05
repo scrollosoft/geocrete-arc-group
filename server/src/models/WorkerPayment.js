@@ -58,7 +58,9 @@ export const WorkerPayment = {
         throw new Error(`Worker with ID ${workerId} not found.`)
       }
 
-      const finalSiteId = siteId || worker.site_id
+      const finalSiteId = (siteId && !isNaN(Number(siteId)) && Number(siteId) > 0)
+        ? Number(siteId)
+        : (worker.site_id ? Number(worker.site_id) : null)
       const formattedDate = paymentDate ? new Date(paymentDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
       const referenceId = `TXN-WRK-${Date.now().toString().slice(-6)}`
 

@@ -188,6 +188,9 @@ export const Material = {
           paidAmount: 0,
           quantityUsed: 0,
           purchaseDate: m.purchaseDate,
+          bankAccountId: m.bankAccountId || null,
+          paymentMethod: m.paymentMethod || 'Bank Transfer',
+          notes: m.notes || '',
         })
       }
       const g = groups.get(key)
@@ -222,6 +225,9 @@ export const Material = {
           paidAmount: 0,
           quantityUsed: 0,
           purchaseDate: fmtDateOnly(e.date),
+          bankAccountId: e.bank_account_id ? String(e.bank_account_id) : null,
+          paymentMethod: e.payment_method || 'Bank Transfer',
+          notes: e.remark || '',
         })
       }
       const g = groups.get(key)
@@ -249,6 +255,9 @@ export const Material = {
 
       return {
         ...g,
+        bankAccountId: g.bankAccountId || null,
+        paymentMethod: g.paymentMethod || 'Bank Transfer',
+        notes: g.notes || '',
         quantity,
         unitPrice,
         ratePerUnit: unitPrice,

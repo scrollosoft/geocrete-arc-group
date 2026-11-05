@@ -1484,6 +1484,10 @@
   gap: 16px;
 }
 
+.sites-stat-grid.expenses-stat-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .site-stat-card {
   background-color: #FFFFFF;
   border: 1px solid #E5EAF1;
@@ -2165,10 +2169,10 @@
   background-color: #0369A1;
 }
 
-/* 4 Stat Cards in a row */
+/* 5 Stat Cards in a row */
 .site-detail-stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
 }
 

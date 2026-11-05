@@ -15,6 +15,7 @@ import SiteOwnerDetailPage from './SiteOwnerDetailPage.jsx'
 
 export default function SiteOwnersPage({
   sites = [],
+  bankAccounts = [],
   onOpenAddClient,
   showNotification,
   refreshTrigger = 0,
@@ -174,6 +175,7 @@ export default function SiteOwnersPage({
       <SiteOwnerDetailPage
         clientId={viewingClient._id || viewingClient.id}
         client={viewingClient}
+        bankAccounts={bankAccounts}
         onBack={() => {
           setViewingClient(null)
           fetchSiteOwners()

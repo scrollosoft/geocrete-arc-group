@@ -69,6 +69,9 @@ export const recordSiteOwnerPayment = async (req, res, next) => {
     const payments = await SiteOwner.getPayments(req.params.id)
     res.json({ client, payments })
   } catch (error) {
+    if (error.message) {
+      return res.status(400).json({ error: error.message })
+    }
     next(error)
   }
 }
