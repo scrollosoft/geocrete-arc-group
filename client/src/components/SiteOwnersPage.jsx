@@ -18,6 +18,8 @@ export default function SiteOwnersPage({
   onOpenAddClient,
   showNotification,
   refreshTrigger = 0,
+  onPaymentRecorded,
+  onClientsChanged,
 }) {
   const [clients, setClients] = useState([])
   const [summary, setSummary] = useState(null)
@@ -126,6 +128,7 @@ export default function SiteOwnersPage({
         showNotification({ type: 'success', message: `Client "${name}" deleted successfully.` })
       }
       fetchSiteOwners()
+      if (onClientsChanged) onClientsChanged()
     } catch (err) {
       console.error('Delete failed:', err)
       if (showNotification) {
@@ -176,6 +179,8 @@ export default function SiteOwnersPage({
           fetchSiteOwners()
         }}
         showNotification={showNotification}
+        onPaymentRecorded={onPaymentRecorded}
+        onClientsChanged={onClientsChanged}
       />
     )
   }
@@ -257,10 +262,10 @@ export default function SiteOwnersPage({
           </span>
         </div>
 
-        {/* Card 4: Balance Receivable */}
+        {/* Card 4: Pending */}
         <div className="site-stat-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <span className="stat-label">Balance Receivable</span>
+            <span className="stat-label">Pending</span>
             <div className="stat-icon-wrap stat-icon-rose">
               <AlertTriangle size={18} />
             </div>

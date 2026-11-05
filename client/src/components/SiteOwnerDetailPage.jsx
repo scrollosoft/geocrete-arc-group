@@ -13,6 +13,8 @@ export default function SiteOwnerDetailPage({
   client: initialClient,
   onBack,
   showNotification,
+  onPaymentRecorded,
+  onClientsChanged,
 }) {
   const [client, setClient] = useState(initialClient || null)
   const [payments, setPayments] = useState([])
@@ -42,26 +44,16 @@ export default function SiteOwnerDetailPage({
       if (Array.isArray(fetchedPayments) && fetchedPayments.length > 0) {
         setPayments(fetchedPayments)
       } else {
-        // Fallback default timeline matching real amounts for this client
         const c = fetchedClient || initialClient
         const adv = Number(c?.advanceAmount || 0)
-        const tot = Number(c?.totalReceived || 0)
-        const msTotal = Math.max(0, tot - adv)
         const defaultList = []
-        if (msTotal > 0) {
-          defaultList.push(
-            { id: 'p1', paymentDate: '24 May 2025', title: 'Project milestone payment', paymentMethod: 'Bank transfer', reference: 'Reference verified', amount: 234000, status: 'Paid' },
-            { id: 'p2', paymentDate: '18 Apr 2025', title: 'Project milestone payment', paymentMethod: 'Bank transfer', reference: 'Reference verified', amount: 1500000, status: 'Paid' },
-            { id: 'p3', paymentDate: '06 Mar 2025', title: 'Project milestone payment', paymentMethod: 'Bank transfer', reference: 'Reference verified', amount: 2000000, status: 'Paid' }
-          )
-        }
         if (adv > 0) {
           defaultList.push({
             id: 'p-adv',
-            paymentDate: '12 Jan 2025',
+            paymentDate: c?.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB') : '-',
             title: 'Project advance received',
             paymentMethod: 'Bank transfer',
-            reference: 'Reference verified',
+            reference: 'Initial advance',
             amount: adv,
             status: 'Paid',
           })
@@ -111,6 +103,8 @@ export default function SiteOwnerDetailPage({
         })
       }
       await loadData()
+      if (onPaymentRecorded) onPaymentRecorded()
+      if (onClientsChanged) onClientsChanged()
     } catch (err) {
       console.error('Failed to record payment:', err)
       if (showNotification) {
@@ -181,7 +175,7 @@ export default function SiteOwnerDetailPage({
         <div className="sod-header-left">
           <h1 className="sod-title">{c.name || 'Site Owner'}</h1>
           <div className="sod-subtitle">
-            Client · {c.siteName || 'Aarav Heights'}
+            Client · {c.siteName || '-'}
           </div>
         </div>
 
@@ -210,7 +204,7 @@ export default function SiteOwnerDetailPage({
             </div>
           </div>
           <div className="sod-stat-val">{formatCompact(projectVal)}</div>
-          <div className="sod-stat-sub">{c.siteName || 'Aarav Heights'}</div>
+          <div className="sod-stat-sub">{c.siteName || '-'}</div>
         </div>
 
         {/* Card 2: Advance Received */}
@@ -237,10 +231,10 @@ export default function SiteOwnerDetailPage({
           <div className="sod-stat-sub">{collectedPct}% collected</div>
         </div>
 
-        {/* Card 4: Balance Receivable */}
+        {/* Card 4: Pending */}
         <div className="sod-stat-card">
           <div className="sod-stat-top">
-            <span className="sod-stat-label">Balance Receivable</span>
+            <span className="sod-stat-label">Pending</span>
             <div className="sod-stat-icon-wrap sod-icon-red">
               <AlertTriangle size={16} />
             </div>

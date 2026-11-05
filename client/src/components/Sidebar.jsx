@@ -8,7 +8,6 @@ import {
   Truck,
   UserCheck,
   Wallet,
-  BarChart3,
   Settings,
 } from 'lucide-react'
 
@@ -21,8 +20,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
     { id: 'materials', label: 'Materials', icon: Package },
     { id: 'suppliers', label: 'Suppliers', icon: Truck },
     { id: 'site-owners', label: 'Site Owners', icon: UserCheck },
-    { id: 'payments', label: 'Payments', icon: Wallet, badge: 5 },
-    { id: 'reports', label: 'Reports', icon: BarChart3 },
+    { id: 'payments', label: 'Payments', icon: Wallet },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
 

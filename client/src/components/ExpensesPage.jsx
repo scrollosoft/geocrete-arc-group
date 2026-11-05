@@ -7,14 +7,24 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
+import { expenseService } from '../services/expenseService.js'
+import AddExpenseModal from './AddExpenseModal.jsx'
 
 export default function ExpensesPage({
   expenses = [],
   sites = [],
+  suppliers = [],
+  bankAccounts = [],
   onOpenAddExpense,
+  onExpenseChanged,
+  showNotification,
   loading = false,
 }) {
+  const [editingExpense, setEditingExpense] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All Status')
   const [siteFilter, setSiteFilter] = useState('All Sites')
@@ -61,7 +71,7 @@ export default function ExpensesPage({
   })
   const thisMonthAmount = currentMonthExpenses.length > 0
     ? currentMonthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
-    : totalExpenseAmount // fallback if dates are mocked in past/future
+    : 0
 
   const pendingEntriesCount = expenses.filter((e) => (e.pendingAmount || 0) > 0).length
 
@@ -75,7 +85,7 @@ export default function ExpensesPage({
   // Count distinct sites with expenses
   const distinctSitesCount = new Set(
     expenses.map((e) => (e.site?._id || e.site || '').toString()).filter(Boolean)
-  ).size || sites.length || 12
+  ).size || sites.length || 0
 
   // Filter expenses list
   const filteredExpenses = expenses.filter((item) => {
@@ -145,6 +155,33 @@ export default function ExpensesPage({
     return items
   }
 
+  const handleDeleteExpense = async (item) => {
+    const itemName = item.category || 'this expense'
+    if (!window.confirm(`Are you sure you want to delete ${itemName}? This cannot be undone.`)) {
+      return
+    }
+    const id = item._id || item.id
+    setDeletingId(id)
+    try {
+      await expenseService.delete(id)
+      if (showNotification) {
+        showNotification({ type: 'success', message: `Expense "${itemName}" deleted successfully!` })
+      }
+      if (onExpenseChanged) {
+        onExpenseChanged()
+      }
+    } catch (err) {
+      console.error('Failed to delete expense:', err)
+      if (showNotification) {
+        showNotification({ type: 'error', message: err.message || 'Failed to delete expense' })
+      } else {
+        alert('Delete failed: ' + (err.message || 'Unknown error'))
+      }
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   return (
     <div className="expenses-page">
       {/* 1. Breadcrumb & Page Header */}
@@ -177,7 +214,7 @@ export default function ExpensesPage({
             <CreditCard size={18} />
           </div>
           <span className="stat-label">Total Expenses</span>
-          <div className="stat-value">{formatIndianNumber(totalExpenseAmount || 42700000)}</div>
+          <div className="stat-value">{formatIndianNumber(totalExpenseAmount || 0)}</div>
           <span className="stat-desc">Across {distinctSitesCount} sites</span>
         </div>
 
@@ -187,7 +224,7 @@ export default function ExpensesPage({
             <CreditCard size={18} />
           </div>
           <span className="stat-label">This Month</span>
-          <div className="stat-value">{formatIndianNumber(thisMonthAmount || 2840000)}</div>
+          <div className="stat-value">{formatIndianNumber(thisMonthAmount || 0)}</div>
           <span className="stat-desc">12% lower than last month</span>
         </div>
 
@@ -197,8 +234,8 @@ export default function ExpensesPage({
             <CreditCard size={18} />
           </div>
           <span className="stat-label">Pending Payments</span>
-          <div className="stat-value">{formatIndianNumber(totalPendingAmount || 1280000)}</div>
-          <span className="stat-desc">{pendingEntriesCount || 18} outstanding entries</span>
+          <div className="stat-value">{formatIndianNumber(totalPendingAmount || 0)}</div>
+          <span className="stat-desc">{pendingEntriesCount || 0} pending entries</span>
         </div>
 
         {/* Card 4: Over Budget */}
@@ -207,7 +244,7 @@ export default function ExpensesPage({
             <AlertTriangle size={18} />
           </div>
           <span className="stat-label">Over Budget</span>
-          <div className="stat-value">{formatIndianNumber(overBudgetAmount || 180000)}</div>
+          <div className="stat-value">{formatIndianNumber(overBudgetAmount || 0)}</div>
           <span className="stat-desc">1 category needs attention</span>
         </div>
       </div>
@@ -296,13 +333,14 @@ export default function ExpensesPage({
                 <th className="th-amount">AMOUNT</th>
                 <th className="th-paid">PAID</th>
                 <th className="th-pending">PENDING</th>
+                <th className="th-actions" style={{ textAlign: 'center', width: '90px' }}>ACTION</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 [1, 2, 3, 4].map((i) => (
                   <tr key={i} className="skeleton-row">
-                    <td colSpan={6}>
+                    <td colSpan={7}>
                       <div className="skeleton-line" style={{ height: '24px', margin: '4px 0' }} />
                     </td>
                   </tr>
@@ -311,16 +349,37 @@ export default function ExpensesPage({
                 currentRecords.map((item) => (
                   <tr key={item._id} className="expense-row">
                     <td className="td-date">{formatDate(item.date)}</td>
-                    <td className="td-site">{item.site?.name || 'Aarav Heights'}</td>
+                    <td className="td-site">{item.site?.name || item.site || '-'}</td>
                     <td className="td-category">{item.category || 'Material'}</td>
                     <td className="td-amount">{formatCurrency(item.amount)}</td>
                     <td className="td-paid">{formatCurrency(item.paidAmount)}</td>
                     <td className="td-pending">{formatCurrency(item.pendingAmount)}</td>
+                    <td className="td-actions" style={{ textAlign: 'center' }}>
+                      <div className="site-actions-group" style={{ display: 'inline-flex', gap: '6px', justifyContent: 'center' }}>
+                        <button
+                          type="button"
+                          className="site-action-btn site-action-btn-edit"
+                          title="Edit Expense"
+                          onClick={() => setEditingExpense(item)}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="site-action-btn site-action-btn-delete"
+                          title="Delete Expense"
+                          disabled={deletingId === (item._id || item.id)}
+                          onClick={() => handleDeleteExpense(item)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="td-empty">
+                  <td colSpan={7} className="td-empty">
                     No expense records match the selected filters.
                   </td>
                 </tr>
@@ -387,6 +446,23 @@ export default function ExpensesPage({
           </div>
         </div>
       </div>
+
+      {/* Edit Expense Modal */}
+      {editingExpense && (
+        <AddExpenseModal
+          isOpen={Boolean(editingExpense)}
+          expenseToEdit={editingExpense}
+          onClose={() => setEditingExpense(null)}
+          sites={sites}
+          suppliers={suppliers}
+          bankAccounts={bankAccounts}
+          onExpenseUpdated={() => {
+            setEditingExpense(null)
+            if (onExpenseChanged) onExpenseChanged()
+          }}
+          showNotification={showNotification}
+        />
+      )}
     </div>
   )
 }

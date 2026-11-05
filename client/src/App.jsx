@@ -23,6 +23,7 @@ import AddExpenseModal from './components/AddExpenseModal.jsx'
 import SettingsPage from './components/SettingsPage.jsx'
 import SupplierDetailPage from './components/SupplierDetailPage.jsx'
 import PaymentsPage from './components/PaymentsPage.jsx'
+import SiteDetailPage from './components/SiteDetailPage.jsx'
 
 import { bankAccountService } from './services/bankAccountService.js'
 import { siteService } from './services/siteService.js'
@@ -67,17 +68,6 @@ export default function App() {
   const [selectedSiteFilter, setSelectedSiteFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('')
 
-  const handleTabChange = useCallback((newTab) => {
-    setActiveTab(newTab)
-    try {
-      const newPath = newTab === 'dashboard' ? '/' : `/${newTab}`
-      if (window.location.pathname !== newPath) {
-        window.history.pushState({ tab: newTab }, '', newPath)
-      }
-    } catch {
-      // ignore
-    }
-  }, [])
 
   useEffect(() => {
     const handlePopState = () => {
@@ -111,13 +101,9 @@ export default function App() {
   const [clientRefreshTrigger, setClientRefreshTrigger] = useState(0)
   const [notification, setNotification] = useState(null)
   const [selectedSupplierId, setSelectedSupplierId] = useState(null)
+  const [selectedSiteForDetail, setSelectedSiteForDetail] = useState(null)
   const [settingsKey, setSettingsKey] = useState(0)
   const [ownerProfile, setOwnerProfile] = useState(null)
-
-  const handleNavigateOwnerProfile = () => {
-    handleTabChange('settings')
-    setSettingsKey((k) => k + 1)
-  }
 
   // 1. Fetch Bank Accounts
   const loadBankAccounts = useCallback(async () => {
@@ -160,7 +146,17 @@ export default function App() {
     }
   }, [])
 
-  // 4. Fetch Expenses
+  // 4. Fetch Suppliers
+  const loadSuppliers = useCallback(async () => {
+    try {
+      const data = await supplierService.getAll()
+      setSuppliers(data || [])
+    } catch (err) {
+      console.error('Failed to load suppliers:', err)
+    }
+  }, [])
+
+  // 5. Fetch Expenses
   const loadExpenses = useCallback(async () => {
     try {
       const params = {}
@@ -259,6 +255,51 @@ export default function App() {
     }
   }, [selectedSiteFilter, dateFilter, searchQuery])
 
+  const handleTabChange = useCallback((newTab) => {
+    if (newTab === 'sites') {
+      setSelectedSiteForDetail(null)
+      loadSites()
+    } else if (newTab === 'labour') {
+      loadLabour()
+    } else if (newTab === 'expenses') {
+      loadExpenses()
+    } else if (newTab === 'payments') {
+      loadBankAccounts()
+    } else if (newTab === 'materials') {
+      setMaterialsRefreshTrigger((prev) => prev + 1)
+    } else if (newTab === 'suppliers') {
+      loadSuppliers()
+      setSupplierRefreshTrigger((prev) => prev + 1)
+    } else if (newTab === 'site-owners') {
+      setClientRefreshTrigger((prev) => prev + 1)
+    } else if (newTab === 'dashboard') {
+      loadSites()
+      loadBankAccounts()
+      loadExpenses()
+    }
+    setActiveTab(newTab)
+    try {
+      const newPath = newTab === 'dashboard' ? '/' : `/${newTab}`
+      if (window.location.pathname !== newPath) {
+        window.history.pushState({ tab: newTab }, '', newPath)
+      }
+    } catch {
+      // ignore
+    }
+  }, [loadSites, loadLabour, loadExpenses, loadBankAccounts, loadSuppliers])
+
+  const handleViewSite = useCallback((site) => {
+    const siteId = site?._id || site?.id
+    const fullSite = sites.find((s) => String(s._id || s.id) === String(siteId)) || site
+    setSelectedSiteForDetail(fullSite)
+    handleTabChange('site-detail')
+  }, [sites, handleTabChange])
+
+  const handleNavigateOwnerProfile = () => {
+    handleTabChange('settings')
+    setSettingsKey((k) => k + 1)
+  }
+
   // Callbacks for mutations
   const handleExpenseCreated = () => {
     loadExpenses()
@@ -267,6 +308,18 @@ export default function App() {
     setSupplierRefreshTrigger((prev) => prev + 1)
     setMaterialsRefreshTrigger((prev) => prev + 1)
   }
+
+  // Refresh financial & project data after any payment or major mutation
+  const handlePaymentCompleted = useCallback(() => {
+    loadBankAccounts()
+    loadSites()
+    loadExpenses()
+    loadLabour()
+    loadSuppliers()
+    setMaterialsRefreshTrigger((prev) => prev + 1)
+    setSupplierRefreshTrigger((prev) => prev + 1)
+    setClientRefreshTrigger((prev) => prev + 1)
+  }, [loadBankAccounts, loadSites, loadExpenses, loadLabour, loadSuppliers])
 
   const handleScrollToAddExpense = () => {
     setIsAddExpenseOpen(true)
@@ -291,7 +344,20 @@ export default function App() {
 
         {/* Dashboard, Sites or Expenses Page Body */}
         <main className="content-body">
-          {activeTab === 'sites' ? (
+          {activeTab === 'site-detail' && selectedSiteForDetail ? (
+            <SiteDetailPage
+              site={sites.find((s) => String(s._id || s.id) === String(selectedSiteForDetail._id || selectedSiteForDetail.id)) || selectedSiteForDetail}
+              expenses={expenses}
+              onBack={() => {
+                setSelectedSiteForDetail(null)
+                handleTabChange('sites')
+              }}
+              onOpenAddExpense={handleScrollToAddExpense}
+              onOpenAddWorker={() => setIsAddWorkerOpen(true)}
+              onSiteChanged={loadSites}
+              onRefreshAccounts={loadBankAccounts}
+            />
+          ) : activeTab === 'sites' || activeTab === 'site-detail' ? (
             <SitesPage
               sites={sites}
               expenses={expenses}
@@ -299,22 +365,30 @@ export default function App() {
               onOpenAddExpense={handleScrollToAddExpense}
               loading={loadingSites}
               onSitesChanged={loadSites}
+              onRefreshAccounts={loadBankAccounts}
               showNotification={setNotification}
             />
           ) : activeTab === 'expenses' ? (
             <ExpensesPage
               expenses={expenses}
               sites={sites}
+              suppliers={suppliers}
+              bankAccounts={accounts}
               onOpenAddExpense={handleScrollToAddExpense}
               loading={loadingExpenses}
+              onExpenseChanged={handlePaymentCompleted}
+              showNotification={setNotification}
             />
           ) : activeTab === 'labour' ? (
             <LabourPage
               workers={workers}
               summary={labourSummary}
               sites={sites}
+              bankAccounts={accounts}
               onOpenAddWorker={() => setIsAddWorkerOpen(true)}
               loading={loadingLabour}
+              onLabourChanged={loadLabour}
+              onRefreshAccounts={loadBankAccounts}
             />
           ) : activeTab === 'materials' ? (
             <MaterialsPage
@@ -323,6 +397,12 @@ export default function App() {
               onOpenAddPurchase={() => setIsAddPurchaseOpen(true)}
               showNotification={setNotification}
               refreshTrigger={materialsRefreshTrigger}
+              onMaterialsChanged={() => {
+                loadSites()
+                loadExpenses()
+                loadBankAccounts()
+                setSupplierRefreshTrigger((prev) => prev + 1)
+              }}
             />
           ) : activeTab === 'suppliers' ? (
             <SuppliersPage
@@ -334,12 +414,14 @@ export default function App() {
               }}
               showNotification={setNotification}
               refreshTrigger={supplierRefreshTrigger}
+              onSuppliersChanged={loadSuppliers}
             />
           ) : activeTab === 'supplier-detail' && selectedSupplierId ? (
             <SupplierDetailPage
               supplierId={selectedSupplierId}
               onBack={() => handleTabChange('suppliers')}
               showNotification={setNotification}
+              onPaymentRecorded={handlePaymentCompleted}
             />
           ) : activeTab === 'site-owners' ? (
             <SiteOwnersPage
@@ -347,6 +429,11 @@ export default function App() {
               onOpenAddClient={() => setIsAddClientOpen(true)}
               showNotification={setNotification}
               refreshTrigger={clientRefreshTrigger}
+              onPaymentRecorded={handlePaymentCompleted}
+              onClientsChanged={() => {
+                loadSites()
+                setClientRefreshTrigger((prev) => prev + 1)
+              }}
             />
           ) : activeTab === 'payments' ? (
             <PaymentsPage
@@ -364,7 +451,7 @@ export default function App() {
           ) : (
             <>
               {/* Welcome Section */}
-              <WelcomeSection />
+              <WelcomeSection ownerProfile={ownerProfile} />
 
               {/* Bank Accounts Section (4 cards in a row) */}
               <BankAccounts
@@ -397,6 +484,7 @@ export default function App() {
                 sites={siteOverview.length > 0 ? siteOverview : sites}
                 loading={loadingSites}
                 onNavigateSites={() => handleTabChange('sites')}
+                onViewSite={handleViewSite}
               />
             </>
           )}
@@ -427,8 +515,10 @@ export default function App() {
         isOpen={isAddWorkerOpen}
         onClose={() => setIsAddWorkerOpen(false)}
         sites={sites}
+        bankAccounts={accounts}
         onWorkerCreated={() => {
           loadLabour()
+          loadBankAccounts()
         }}
         showNotification={setNotification}
       />
@@ -455,10 +545,8 @@ export default function App() {
         isOpen={isAddSupplierOpen}
         onClose={() => setIsAddSupplierOpen(false)}
         onSupplierCreated={(newSup) => {
+          loadSuppliers()
           setSupplierRefreshTrigger((prev) => prev + 1)
-          if (newSup) {
-            setSuppliers((prev) => [...prev, newSup])
-          }
         }}
         showNotification={setNotification}
       />

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   CreditCard,
   AlertTriangle,
@@ -15,93 +15,15 @@ import {
 } from 'lucide-react'
 import { materialService } from '../services/materialService.js'
 
-// Fallback sample data matching reference screenshot exactly
-const sampleMaterials = [
-  {
-    _id: 'm1',
-    id: 'm1',
-    materialName: 'TMT Steel Fe500',
-    quantity: 12.5,
-    unit: 'T',
-    site: { name: 'Aarav Heights' },
-    supplier: { name: 'Bharat Steel Traders' },
-    totalCost: 480000,
-    paidAmount: 480000,
-    outstandingAmount: 0,
-    quantityUsed: 8.2,
-    remainingStock: 4.3,
-    paymentStatus: 'Paid',
-  },
-  {
-    _id: 'm2',
-    id: 'm2',
-    materialName: 'Portland Cement',
-    quantity: 600,
-    unit: 'bags',
-    site: { name: 'Aarav Heights' },
-    supplier: { name: 'Shree Cement Co.' },
-    totalCost: 480000,
-    paidAmount: 0,
-    outstandingAmount: 480000,
-    quantityUsed: 480,
-    remainingStock: 120,
-    paymentStatus: 'Pending',
-  },
-  {
-    _id: 'm3',
-    id: 'm3',
-    materialName: 'Red Clay Bricks',
-    quantity: 24000,
-    unit: 'pcs',
-    site: { name: 'Orchid Business Park' },
-    supplier: { name: 'Mahalaxmi Bricks' },
-    totalCost: 480000,
-    paidAmount: 0,
-    outstandingAmount: 480000,
-    quantityUsed: 10000,
-    remainingStock: 14000,
-    paymentStatus: 'Partial',
-  },
-  {
-    _id: 'm4',
-    id: 'm4',
-    materialName: 'River Sand',
-    quantity: 42,
-    unit: 'tonnes',
-    site: { name: 'Greenfield Villa' },
-    supplier: { name: 'Sai Aggregates' },
-    totalCost: 480000,
-    paidAmount: 0,
-    outstandingAmount: 480000,
-    quantityUsed: 24,
-    remainingStock: 18,
-    paymentStatus: 'Pending',
-  },
-  {
-    _id: 'm5',
-    id: 'm5',
-    materialName: 'Crushed Aggregate 20mm',
-    quantity: 35,
-    unit: 'tonnes',
-    site: { name: 'Aarav Heights' },
-    supplier: { name: 'Bharat Steel Traders' },
-    totalCost: 480000,
-    paidAmount: 480000,
-    outstandingAmount: 0,
-    quantityUsed: 32,
-    remainingStock: 3,
-    paymentStatus: 'Paid',
-  },
-]
-
 export default function MaterialsPage({
   sites = [],
   suppliers = [],
   onOpenAddPurchase,
   showNotification,
   refreshTrigger = 0,
+  onMaterialsChanged,
 }) {
-  const [materials, setMaterials] = useState(sampleMaterials)
+  const [materials, setMaterials] = useState([])
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -381,6 +303,7 @@ export default function MaterialsPage({
         try {
           await materialService.update(matId, payload)
           await fetchMaterials()
+          if (onMaterialsChanged) onMaterialsChanged()
         } catch (apiErr) {
           console.warn('Backend update failed:', apiErr)
         }
@@ -421,6 +344,7 @@ export default function MaterialsPage({
         try {
           await materialService.delete(matId)
           await fetchMaterials()
+          if (onMaterialsChanged) onMaterialsChanged()
         } catch (apiErr) {
           console.warn('Backend delete failed:', apiErr)
         }
@@ -447,7 +371,7 @@ export default function MaterialsPage({
 
   const displayList = materials
 
-  // Filter client-side if sample data is active
+  // Filter client-side
   const filteredMaterials = displayList.filter((item) => {
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -534,9 +458,9 @@ export default function MaterialsPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.totalCost, '₹1.68 Cr')}
+            {formatCostValue(summary?.totalCost, '₹0')}
           </div>
-          <span className="stat-desc">39.3% of investment</span>
+          <span className="stat-desc">Lifetime materials</span>
         </div>
 
         {/* Card 2: Purchased This Month */}
@@ -548,10 +472,10 @@ export default function MaterialsPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.monthCost, '₹18.6 L')}
+            {formatCostValue(summary?.monthCost, '₹0')}
           </div>
           <span className="stat-desc">
-            {summary?.monthCount ? `${summary.monthCount} purchase records` : '42 purchase records'}
+            {summary?.monthCount ? `${summary.monthCount} purchase records` : '0 purchase records'}
           </span>
         </div>
 
@@ -564,10 +488,10 @@ export default function MaterialsPage({
             </div>
           </div>
           <div className="stat-value">
-            {formatCostValue(summary?.pendingAmount, '₹8.4 L')}
+            {formatCostValue(summary?.pendingAmount, '₹0')}
           </div>
           <span className="stat-desc">
-            {summary?.pendingSuppliersCount ? `Across ${summary.pendingSuppliersCount} suppliers` : 'Across 7 suppliers'}
+            {summary?.pendingSuppliersCount ? `Across ${summary.pendingSuppliersCount} suppliers` : 'Across 0 suppliers'}
           </span>
         </div>
 
@@ -580,7 +504,7 @@ export default function MaterialsPage({
             </div>
           </div>
           <div className="stat-value">
-            {summary?.lowStockCount !== undefined ? summary.lowStockCount : '6'}
+            {summary?.lowStockCount !== undefined ? summary.lowStockCount : 0}
           </div>
           <span className="stat-desc">Reorder recommended</span>
         </div>
@@ -675,7 +599,7 @@ export default function MaterialsPage({
                 <th style={{ padding: '16px 20px', width: '14%' }}>SUPPLIER</th>
                 <th style={{ padding: '16px 20px', width: '12%' }}>PURCHASE COST</th>
                 <th style={{ padding: '16px 20px', width: '11%' }}>PAID AMOUNT</th>
-                <th style={{ padding: '16px 20px', width: '11%' }}>OUTSTANDING</th>
+                <th style={{ padding: '16px 20px', width: '11%' }}>PENDING</th>
                 <th style={{ padding: '16px 20px', width: '10%', textAlign: 'center' }}>ACTIONS</th>
               </tr>
             </thead>
@@ -944,7 +868,7 @@ export default function MaterialsPage({
                   </span>
                 </div>
                 <div className="site-view-item">
-                  <span className="site-view-label">Outstanding Amount</span>
+                  <span className="site-view-label">Pending Amount</span>
                   <span className="site-view-val" style={{ color: (activeView.outstandingAmount || 0) > 0 ? '#EF4444' : '#70829F' }}>
                     ₹{Number(activeView.outstandingAmount !== undefined ? activeView.outstandingAmount : Math.max(0, (activeView.totalCost || 0) - (activeView.paidAmount || 0))).toLocaleString('en-IN')}
                   </span>
@@ -1003,7 +927,7 @@ export default function MaterialsPage({
                           <th style={{ padding: '10px 12px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>RATE / UNIT</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>TOTAL AMOUNT</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>PAID AMOUNT</th>
-                          <th style={{ padding: '10px 12px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>OUTSTANDING</th>
+                          <th style={{ padding: '10px 12px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>PENDING</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>STATUS</th>
                         </tr>
                       </thead>

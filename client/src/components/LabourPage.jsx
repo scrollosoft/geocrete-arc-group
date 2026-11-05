@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   CreditCard,
   AlertTriangle,
@@ -17,6 +17,11 @@ import {
   MoreHorizontal,
 } from 'lucide-react'
 import { labourService } from '../services/labourService.js'
+import { attendanceService } from '../services/attendanceService.js'
+import { workerPaymentService } from '../services/workerPaymentService.js'
+import { bankAccountService } from '../services/bankAccountService.js'
+import MarkAttendanceModal from './MarkAttendanceModal.jsx'
+import RecordWorkerPaymentModal from './RecordWorkerPaymentModal.jsx'
 
 export default function LabourPage({
   workers = [],
@@ -24,8 +29,10 @@ export default function LabourPage({
   sites = [],
   onOpenAddWorker,
   loading = false,
+  onLabourChanged,
+  onRefreshAccounts,
 }) {
-  const [activeTab, setActiveTab] = useState('Materials')
+  const [activeTab, setActiveTab] = useState('Attendance')
   const [search, setSearch] = useState('')
   const [siteFilter, setSiteFilter] = useState('All Sites')
   const [pageSize, setPageSize] = useState(10)
@@ -36,7 +43,7 @@ export default function LabourPage({
 
   // View worker detail page
   const [viewWorker, setViewWorker] = useState(null)
-  const [detailTab, setDetailTab] = useState('Materials')
+  const [detailTab, setDetailTab] = useState('Attendance')
 
   // Edit modal
   const [editWorker, setEditWorker] = useState(null)
@@ -47,90 +54,84 @@ export default function LabourPage({
   // Delete loading id
   const [deletingId, setDeletingId] = useState(null)
 
+  // Bank accounts for Edit Worker additional advance
+  const [bankAccounts, setBankAccounts] = useState([])
+  const [loadingBanks, setLoadingBanks] = useState(false)
+
+  useEffect(() => {
+    setLoadingBanks(true)
+    bankAccountService.getAll()
+      .then((res) => {
+        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+        setBankAccounts(list)
+      })
+      .catch(() => setBankAccounts([]))
+      .finally(() => setLoadingBanks(false))
+  }, [])
+
+  // Attendance & Payment Modals
+  const [showMarkAttendance, setShowMarkAttendance] = useState(false)
+  const [showRecordPayment, setShowRecordPayment] = useState(false)
+
+  // Real attendance history for worker detail view
+  const [workerAttendanceHistory, setWorkerAttendanceHistory] = useState([])
+  const [loadingAttendance, setLoadingAttendance] = useState(false)
+
+  // Real payment history for worker detail view
+  const [workerPaymentHistory, setWorkerPaymentHistory] = useState([])
+  const [loadingPayments, setLoadingPayments] = useState(false)
+
+  // Load real data when viewing a worker's detail
+  useEffect(() => {
+    if (!viewWorker) return
+    const id = viewWorker._id || viewWorker.id
+    if (!id) return
+
+    // Load attendance history
+    setLoadingAttendance(true)
+    attendanceService.getWorkerHistory(id)
+      .then((res) => {
+        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+        setWorkerAttendanceHistory(list)
+      })
+      .catch(() => setWorkerAttendanceHistory([]))
+      .finally(() => setLoadingAttendance(false))
+
+    // Load payment history
+    setLoadingPayments(true)
+    workerPaymentService.getByWorker(id)
+      .then((res) => {
+        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+        setWorkerPaymentHistory(list)
+      })
+      .catch(() => setWorkerPaymentHistory([]))
+      .finally(() => setLoadingPayments(false))
+  }, [viewWorker])
+
   const formatExactCurrency = (amount) => {
     if (amount === undefined || amount === null || isNaN(amount)) return '₹0.00'
     return `₹${Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
-  // Fallback sample workers matching reference screenshot if DB has none
-  const sampleWorkers = [
-    {
-      _id: 'w1',
-      name: 'Ramesh Kumar',
-      phone: '+91234567892',
-      trade: 'Mason',
-      siteName: 'Aarav Heights',
-      dailyRate: 1000,
-      wagesEarned: 19950,
-      totalPaid: 15000,
-      outstanding: 4950,
-    },
-    {
-      _id: 'w2',
-      name: 'Suresh Yadav',
-      phone: '+91234567892',
-      trade: 'Carpenter',
-      siteName: 'Greenfield Villa',
-      dailyRate: 1100,
-      wagesEarned: 13325,
-      totalPaid: 10000,
-      outstanding: 3325,
-    },
-    {
-      _id: 'w3',
-      name: 'Ramesh Kumar',
-      phone: '+91234567892',
-      trade: 'Electrician',
-      siteName: 'Orchid Business Park',
-      dailyRate: 650,
-      wagesEarned: 23100,
-      totalPaid: 22000,
-      outstanding: 1100,
-    },
-    {
-      _id: 'w4',
-      name: 'Ramesh Kumar',
-      phone: '+91234567892',
-      trade: 'Helper',
-      siteName: 'Aarav Heights',
-      dailyRate: 950,
-      wagesEarned: 20000,
-      totalPaid: 12000,
-      outstanding: 8000,
-    },
-    {
-      _id: 'w5',
-      name: 'Mahesh Patil',
-      phone: '+91234567892',
-      trade: 'Plumber',
-      siteName: 'Greenfield Villa',
-      dailyRate: 1200,
-      wagesEarned: 18000,
-      totalPaid: 10000,
-      outstanding: 8000,
-    },
-  ]
-
   // Use localWorkers after an edit/delete, otherwise use prop workers
   const baseWorkers = localWorkers !== null ? localWorkers : workers
 
-  const displayWorkers = baseWorkers.length > 0
-    ? baseWorkers.map((w) => ({
-        _id: w._id,
-        name: w.name,
-        phone: w.phone || '+91234567892',
-        trade: w.trade || 'Mason',
-        siteName: w.site?.name || w.siteName || 'N/A',
-        dailyRate: w.dailyRate || 1000,
-        wagesEarned: w.wagesEarned || 0,
-        totalPaid: w.totalPaid || 0,
-        outstanding: Math.max(0, (w.wagesEarned || 0) - (w.totalPaid || 0)),
-        paymentType: w.paymentType || 'Daily',
-        status: w.status || 'Active',
-        address: w.address || '',
-        remarks: w.remarks || '',
-      }))
-    : sampleWorkers
+  const displayWorkers = (baseWorkers || []).map((w) => ({
+    _id: w._id,
+    name: w.name,
+    phone: w.phone || '',
+    trade: w.trade || '',
+    siteName: w.site?.name || w.siteName || '',
+    dailyRate: Number(w.dailyRate || 0),
+    wagesEarned: Number(w.wagesEarned || 0),
+    totalPaid: Number(w.totalPaid || 0),
+    outstanding: Math.max(0, (Number(w.wagesEarned) || 0) - (Number(w.totalPaid) || 0)),
+    paymentType: w.paymentType || 'Daily',
+    status: w.status || 'Active',
+    address: w.address || '',
+    remarks: w.remarks || '',
+    joiningDate: w.joiningDate,
+  }))
 
   // Dynamic summary values from props or calculated from dataset
   const totalWorkersCount = summary?.totalWorkers !== undefined
@@ -153,79 +154,30 @@ export default function LabourPage({
   const filteredWorkers = displayWorkers.filter((worker) => {
     const matchesSearch =
       !search ||
-      worker.name.toLowerCase().includes(search.toLowerCase()) ||
-      worker.trade.toLowerCase().includes(search.toLowerCase()) ||
-      worker.phone.toLowerCase().includes(search.toLowerCase())
+      (worker.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (worker.trade || '').toLowerCase().includes(search.toLowerCase()) ||
+      (worker.phone || '').toLowerCase().includes(search.toLowerCase())
 
     const matchesSite =
       siteFilter === 'All Sites' ||
-      worker.siteName.toLowerCase() === siteFilter.toLowerCase()
+      (worker.siteName || '').toLowerCase() === siteFilter.toLowerCase()
 
     return matchesSearch && matchesSite
   })
 
-  // Sample Payments matching reference screenshot
-  const samplePayments = [
-    {
-      id: 'p1',
-      date: '11/08/2026',
-      workerName: 'Ramesh Kumar',
-      siteName: 'Aarav Heights',
-      type: 'Paid',
-      method: 'UPI',
-      amount: 15000,
-      remark: 'Weekly settlement',
-    },
-    {
-      id: 'p2',
-      date: '11/08/2026',
-      workerName: 'Suresh Yadav',
-      siteName: 'Greenfield Villa',
-      type: 'Paid',
-      method: 'Cash',
-      amount: 10000,
-      remark: 'Weekly settlement',
-    },
-    {
-      id: 'p3',
-      date: '11/08/2026',
-      workerName: 'Ramesh Kumar',
-      siteName: 'Orchid Business Park',
-      type: 'Advance',
-      method: 'UPI',
-      amount: 22000,
-      remark: 'Adjusted against earned wages',
-    },
-    {
-      id: 'p4',
-      date: '11/08/2026',
-      workerName: 'Ramesh Kumar',
-      siteName: 'Aarav Heights',
-      type: 'Paid',
-      method: 'Bank Transfer',
-      amount: 12000,
-      remark: 'Wages cleared',
-    },
-  ]
-
-  // Add real DB worker payments if any
-  const dbPayments = displayWorkers
+  // Real DB worker payments
+  const allPayments = displayWorkers
     .filter((w) => Number(w.totalPaid) > 0)
     .map((w, idx) => ({
       id: `dbp-${w._id || idx}`,
-      date: w.joiningDate ? new Date(w.joiningDate).toLocaleDateString('en-GB') : '11/08/2026',
+      date: w.joiningDate ? new Date(w.joiningDate).toLocaleDateString('en-GB') : '-',
       workerName: w.name,
-      siteName: w.siteName || w.site?.name || 'Aarav Heights',
+      siteName: w.siteName || w.site?.name || '-',
       type: 'Paid',
       method: w.paymentType === 'Daily' ? 'Cash' : 'Bank Transfer',
       amount: Number(w.totalPaid),
-      remark: w.remarks || 'Weekly settlement',
+      remark: w.remarks || 'Wage / Advance payment',
     }))
-
-  const allPayments = [
-    ...samplePayments,
-    ...dbPayments.filter((dbp) => !samplePayments.some((sp) => sp.workerName === dbp.workerName)),
-  ]
 
   const filteredPayments = allPayments.filter((p) => {
     const matchesSearch =
@@ -278,25 +230,68 @@ export default function LabourPage({
   // ── EDIT ──────────────────────────────────────────────────────────────────
   const handleEdit = (item) => {
     setEditWorker(item)
+    const prevAdv = Number(item.advancePaid !== undefined ? item.advancePaid : (item.advanceAmount || 0))
     setEditForm({
-      name: item.name,
-      phone: item.phone,
-      trade: item.trade,
-      dailyRate: item.dailyRate,
-      wagesEarned: item.wagesEarned,
-      totalPaid: item.totalPaid,
-      paymentType: item.paymentType || 'Daily',
-      status: item.status || 'Active',
+      name: item.name || '',
+      phone: item.phone || '',
+      trade: item.trade || '',
+      dailyRate: item.dailyRate || '',
+      wagesEarned: item.wagesEarned || 0,
+      totalPaid: item.totalPaid || 0,
+      previousAdvanceAmount: prevAdv,
+      additionalAdvance: '',
+      bankAccountId: '',
       address: item.address || '',
       remarks: item.remarks || '',
     })
     setEditError('')
+
+    // Fetch advance payment records for this worker to ensure exact previous advance
+    const workerId = item._id || item.id
+    if (workerId) {
+      workerPaymentService.getByWorker(workerId)
+        .then((res) => {
+          const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+          const initAdv = Number(item.advanceAmount || 0)
+          const extraAdv = list
+            .filter((p) => p.paymentType === 'Advance Payment')
+            .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+          const calculatedAdv = initAdv + extraAdv
+          setEditForm((prev) => ({
+            ...prev,
+            previousAdvanceAmount: Math.max(prevAdv, calculatedAdv),
+          }))
+        })
+        .catch(() => {})
+    }
   }
 
   const handleEditSave = async () => {
+    if (editSaving) return
     if (!editForm.name?.trim()) { setEditError('Name is required.'); return }
     if (!editForm.trade?.trim()) { setEditError('Trade is required.'); return }
     if (!editForm.dailyRate || Number(editForm.dailyRate) <= 0) { setEditError('Daily rate must be > 0.'); return }
+
+    const numAdditionalAdv = Number(editForm.additionalAdvance || 0)
+    if (numAdditionalAdv < 0) {
+      setEditError('Additional advance amount cannot be negative.')
+      return
+    }
+
+    if (numAdditionalAdv > 0) {
+      if (!editForm.bankAccountId) {
+        setEditError('Please select a Bank Name for the additional advance.')
+        return
+      }
+      const selBank = bankAccounts.find((b) => String(b.id || b._id) === String(editForm.bankAccountId))
+      if (selBank && Number(selBank.balance || 0) < numAdditionalAdv) {
+        setEditError(
+          `Insufficient bank balance in ${selBank.bankName || selBank.bank_name}. Available: ₹${Number(selBank.balance || 0).toLocaleString('en-IN')}, Requested: ₹${numAdditionalAdv.toLocaleString('en-IN')}. Please select another account or reduce the advance amount.`
+        )
+        return
+      }
+    }
+
     setEditSaving(true)
     setEditError('')
     try {
@@ -307,8 +302,8 @@ export default function LabourPage({
         dailyRate: Number(editForm.dailyRate),
         wagesEarned: Number(editForm.wagesEarned) || 0,
         totalPaid: Number(editForm.totalPaid) || 0,
-        paymentType: editForm.paymentType,
-        status: editForm.status,
+        additionalAdvance: numAdditionalAdv > 0 ? numAdditionalAdv : undefined,
+        bankAccountId: numAdditionalAdv > 0 ? editForm.bankAccountId : undefined,
         address: editForm.address,
         remarks: editForm.remarks,
       })
@@ -324,17 +319,25 @@ export default function LabourPage({
           phone: editForm.phone.trim(),
           trade: editForm.trade.trim(),
           dailyRate: Number(editForm.dailyRate),
-          wagesEarned: Number(editForm.wagesEarned) || 0,
-          totalPaid: Number(editForm.totalPaid) || 0,
-          outstanding: Math.max(0, (Number(editForm.wagesEarned) || 0) - (Number(editForm.totalPaid) || 0)),
-          paymentType: editForm.paymentType,
-          status: editForm.status,
+          wagesEarned: Number(updated?.wagesEarned !== undefined ? updated.wagesEarned : editForm.wagesEarned),
+          totalPaid: Number(updated?.totalPaid !== undefined ? updated.totalPaid : editForm.totalPaid),
+          outstanding: Math.max(0, (Number(updated?.wagesEarned !== undefined ? updated.wagesEarned : editForm.wagesEarned) || 0) - (Number(updated?.totalPaid !== undefined ? updated.totalPaid : editForm.totalPaid) || 0)),
           address: editForm.address,
           remarks: editForm.remarks,
           siteName: updated?.site?.name || prev?.siteName || 'N/A',
         }))
+        // Refresh payment history if currently viewing this worker
+        const wId = viewWorker._id || viewWorker.id
+        workerPaymentService.getByWorker(wId)
+          .then((res) => {
+            const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+            setWorkerPaymentHistory(list)
+          })
+          .catch(() => {})
       }
       setEditWorker(null)
+      if (onLabourChanged) onLabourChanged()
+      if (numAdditionalAdv > 0 && onRefreshAccounts) onRefreshAccounts()
     } catch (err) {
       setEditError(err.message || 'Update failed.')
     } finally {
@@ -352,6 +355,7 @@ export default function LabourPage({
         const base = prev !== null ? prev : workers
         return base.filter((w) => w._id !== item._id)
       })
+      if (onLabourChanged) onLabourChanged()
     } catch (err) {
       window.alert('Delete failed: ' + (err.message || 'Unknown error'))
     } finally {
@@ -392,7 +396,7 @@ export default function LabourPage({
                 {viewWorker.name}
               </h1>
               <p className="sites-subtitle" style={{ fontSize: '13px', color: '#70829F', marginTop: '4px' }}>
-                {viewWorker.trade} · {viewWorker.siteName || viewWorker.site?.name || 'Aarav Heights'} · {viewWorker.phone}
+                {[viewWorker.trade, viewWorker.siteName || viewWorker.site?.name, viewWorker.phone].filter(Boolean).join(' · ')}
               </p>
             </div>
 
@@ -460,7 +464,7 @@ export default function LabourPage({
             {/* Card 4: Outstanding */}
             <div className="site-stat-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <span className="stat-label">Outstanding</span>
+                <span className="stat-label">Pending</span>
                 <div className="stat-icon-wrap stat-icon-rose">
                   <AlertTriangle size={18} />
                 </div>
@@ -474,7 +478,7 @@ export default function LabourPage({
           <div className="labour-table-card" style={{ padding: '18px 24px 24px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E5EAF1', paddingBottom: '0', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
-                {['Materials', 'Attendance', 'Payments'].map((tab) => (
+                {['Attendance', 'Payments'].map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -491,7 +495,7 @@ export default function LabourPage({
                 <button
                   type="button"
                   className="btn-mark-attendance"
-                  onClick={() => alert(`Attendance marked for ${viewWorker.name}`)}
+                  onClick={() => setShowMarkAttendance(true)}
                 >
                   <UserCheck size={16} />
                   <span>Mark Attendance</span>
@@ -499,7 +503,7 @@ export default function LabourPage({
                 <button
                   type="button"
                   className="btn-record-payments"
-                  onClick={() => alert(`Record payment for ${viewWorker.name}`)}
+                  onClick={() => setShowRecordPayment(true)}
                 >
                   <Receipt size={16} />
                   <span>Record Payment's</span>
@@ -507,164 +511,108 @@ export default function LabourPage({
               </div>
             </div>
 
-            {/* Tab 1: Materials (Summary row matching reference screenshot) */}
-            {detailTab === 'Materials' && (
-              <div className="sites-table-scroll">
-                <table className="labour-table">
-                  <thead>
-                    <tr>
-                      <th className="th-labour-worker">WORKER</th>
-                      <th className="th-labour-trade">TRADE OR SITE</th>
-                      <th className="th-labour-rate">DAILY RATE</th>
-                      <th className="th-labour-earned">EARNED</th>
-                      <th className="th-labour-paid">PAID</th>
-                      <th className="th-labour-out">OUTSTANDING</th>
-                      <th className="th-labour-actions">ACTIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="labour-data-row">
-                      <td className="td-labour-worker">
-                        <div className="worker-cell">
-                          <span className="worker-name">{viewWorker.name}</span>
-                          <span className="worker-phone">{viewWorker.phone}</span>
-                        </div>
-                      </td>
-                      <td className="td-labour-trade">
-                        <div className="trade-cell">
-                          <span className="trade-title">{viewWorker.trade}</span>
-                          <span className="trade-site">{viewWorker.siteName || viewWorker.site?.name || 'Aarav Heights'}</span>
-                        </div>
-                      </td>
-                      <td className="td-labour-rate">{formatExactCurrency(viewWorker.dailyRate)}</td>
-                      <td className="td-labour-earned">{formatExactCurrency(viewWorker.wagesEarned)}</td>
-                      <td className="td-labour-paid">{formatExactCurrency(viewWorker.totalPaid)}</td>
-                      <td className="td-labour-out">
-                        <span className="labour-outstanding-badge">
-                          {formatExactCurrency(viewWorker.outstanding)}
-                        </span>
-                      </td>
-                      <td className="td-labour-actions">
-                        <button
-                          type="button"
-                          className="labour-action-btn"
-                          title="Edit Worker"
-                          onClick={() => handleEdit(viewWorker)}
-                        >
-                          <MoreHorizontal size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Tab 2: Attendance */}
+            {/* Tab: Attendance */}
             {detailTab === 'Attendance' && (
               <div className="sites-table-scroll">
-                <table className="labour-table">
-                  <thead>
-                    <tr>
-                      <th style={{ padding: '12px 14px' }}>DATE</th>
-                      <th style={{ padding: '12px 14px' }}>SITE</th>
-                      <th style={{ padding: '12px 14px' }}>SHIFT / HOURS</th>
-                      <th style={{ padding: '12px 14px' }}>STATUS</th>
-                      <th style={{ padding: '12px 14px' }}>DAILY WAGE</th>
-                      <th style={{ padding: '12px 14px' }}>REMARKS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="labour-data-row">
-                      <td style={{ padding: '14px', fontWeight: 600, color: '#172033' }}>
-                        {new Date().toISOString().slice(0, 10)}
-                      </td>
-                      <td style={{ padding: '14px', color: '#70829F' }}>
-                        {viewWorker.siteName || viewWorker.site?.name || 'Aarav Heights'}
-                      </td>
-                      <td style={{ padding: '14px', color: '#172033' }}>Full Day (8 hrs)</td>
-                      <td style={{ padding: '14px' }}>
-                        <span className="site-status-pill status-completed">Present</span>
-                      </td>
-                      <td style={{ padding: '14px', fontWeight: 600, color: '#172033' }}>
-                        {formatExactCurrency(viewWorker.dailyRate)}
-                      </td>
-                      <td style={{ padding: '14px', color: '#70829F' }}>
-                        {viewWorker.remarks || 'Standard shift recorded'}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                {loadingAttendance && (
+                  <div style={{ textAlign: 'center', padding: '32px', color: '#70829F' }}>Loading attendance...</div>
+                )}
+                {!loadingAttendance && workerAttendanceHistory.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '32px', color: '#70829F', fontSize: '14px' }}>
+                    No attendance records found for {viewWorker.name}.
+                  </div>
+                )}
+                {!loadingAttendance && workerAttendanceHistory.length > 0 && (
+                  <table className="labour-table">
+                    <thead>
+                      <tr>
+                        <th style={{ padding: '12px 14px' }}>DATE</th>
+                        <th style={{ padding: '12px 14px' }}>SITE</th>
+                        <th style={{ padding: '12px 14px' }}>UNITS</th>
+                        <th style={{ padding: '12px 14px' }}>STATUS</th>
+                        <th style={{ padding: '12px 14px' }}>DAILY WAGE</th>
+                        <th style={{ padding: '12px 14px' }}>EARNED</th>
+                        <th style={{ padding: '12px 14px' }}>REMARKS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {workerAttendanceHistory.map((a) => {
+                        const statusColors = {
+                          Present: { bg: '#DCFCE7', color: '#15803D' },
+                          'Half Day': { bg: '#FEF9C3', color: '#A16207' },
+                          Absent: { bg: '#FEE2E2', color: '#B91C1C' },
+                          Leave: { bg: '#E0E7FF', color: '#4338CA' },
+                        }
+                        const sc = statusColors[a.status] || { bg: '#F1F5F9', color: '#64748B' }
+                        return (
+                          <tr key={a.id} className="labour-data-row">
+                            <td style={{ padding: '14px', fontWeight: 600, color: '#172033' }}>{a.attendanceDate}</td>
+                            <td style={{ padding: '14px', color: '#70829F' }}>{a.siteName}</td>
+                            <td style={{ padding: '14px', color: '#172033' }}>{a.units}</td>
+                            <td style={{ padding: '14px' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, background: sc.bg, color: sc.color }}>
+                                {a.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '14px', fontWeight: 600, color: '#172033' }}>{formatExactCurrency(a.dailyWage)}</td>
+                            <td style={{ padding: '14px', fontWeight: 600, color: '#15803D' }}>{formatExactCurrency(a.earnedWage)}</td>
+                            <td style={{ padding: '14px', color: '#70829F' }}>{a.remarks || '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
 
             {/* Tab 3: Payments */}
             {detailTab === 'Payments' && (
               <div className="sites-table-scroll">
-                <table className="labour-table">
-                  <thead>
-                    <tr>
-                      <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>DATE</th>
-                      <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>WORKER</th>
-                      <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>TYPE</th>
-                      <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>METHOD</th>
-                      <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>AMMOUNT</th>
-                      <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>REMARK</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allPayments
-                      .filter((p) => p.workerName.toLowerCase() === viewWorker.name.toLowerCase())
-                      .map((p) => (
-                        <tr key={p.id} className="labour-data-row">
-                          <td style={{ padding: '18px 16px', color: '#70829F', fontSize: '13.5px' }}>{p.date}</td>
-                          <td style={{ padding: '18px 16px', fontWeight: 700, color: '#172033', fontSize: '13.5px' }}>{p.workerName}</td>
-                          <td style={{ padding: '18px 16px' }}>
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: '4px 14px',
-                              borderRadius: '999px',
-                              fontSize: '11.5px',
-                              fontWeight: 600,
-                              backgroundColor: p.type === 'Advance' ? '#FFEDD5' : '#DCFCE7',
-                              color: p.type === 'Advance' ? '#C2410C' : '#15803D',
-                            }}>
-                              {p.type}
-                            </span>
-                          </td>
-                          <td style={{ padding: '18px 16px', color: '#475569', fontSize: '13.5px' }}>{p.method}</td>
-                          <td style={{ padding: '18px 16px', fontWeight: 500, color: '#172033', fontSize: '13.5px' }}>{formatExactCurrency(p.amount)}</td>
-                          <td style={{ padding: '18px 16px', color: '#64748B', fontSize: '13.5px' }}>{p.remark}</td>
-                        </tr>
-                      ))}
-                    {allPayments.filter((p) => p.workerName.toLowerCase() === viewWorker.name.toLowerCase()).length === 0 && (
-                      <tr className="labour-data-row">
-                        <td style={{ padding: '18px 16px', color: '#70829F', fontSize: '13.5px' }}>11/08/2026</td>
-                        <td style={{ padding: '18px 16px', fontWeight: 700, color: '#172033', fontSize: '13.5px' }}>{viewWorker.name}</td>
-                        <td style={{ padding: '18px 16px' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '4px 14px',
-                            borderRadius: '999px',
-                            fontSize: '11.5px',
-                            fontWeight: 600,
-                            backgroundColor: '#DCFCE7',
-                            color: '#15803D',
-                          }}>
-                            Paid
-                          </span>
-                        </td>
-                        <td style={{ padding: '18px 16px', color: '#475569', fontSize: '13.5px' }}>Bank Transfer</td>
-                        <td style={{ padding: '18px 16px', fontWeight: 500, color: '#172033', fontSize: '13.5px' }}>{formatExactCurrency(viewWorker.totalPaid || 15000)}</td>
-                        <td style={{ padding: '18px 16px', color: '#64748B', fontSize: '13.5px' }}>Weekly settlement</td>
+                {loadingPayments && (
+                  <div style={{ textAlign: 'center', padding: '32px', color: '#70829F' }}>Loading payments...</div>
+                )}
+                {!loadingPayments && workerPaymentHistory.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '32px', color: '#70829F', fontSize: '14px' }}>
+                    No payment records found for {viewWorker.name}.
+                  </div>
+                )}
+                {!loadingPayments && workerPaymentHistory.length > 0 && (
+                  <table className="labour-table">
+                    <thead>
+                      <tr>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>DATE</th>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>TYPE</th>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>BANK</th>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>AMOUNT</th>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>REMARK</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {workerPaymentHistory.map((p) => {
+                        const typeColors = {
+                          'Advance Payment': { bg: '#FFEDD5', color: '#C2410C' },
+                          'Wage Payment': { bg: '#DCFCE7', color: '#15803D' },
+                          'Final Settlement': { bg: '#E0E7FF', color: '#4338CA' },
+                        }
+                        const tc = typeColors[p.paymentType] || { bg: '#F1F5F9', color: '#64748B' }
+                        return (
+                          <tr key={p.id} className="labour-data-row">
+                            <td style={{ padding: '18px 16px', color: '#70829F', fontSize: '13.5px' }}>{p.paymentDate}</td>
+                            <td style={{ padding: '18px 16px' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 14px', borderRadius: '999px', fontSize: '11.5px', fontWeight: 600, background: tc.bg, color: tc.color }}>
+                                {p.paymentType}
+                              </span>
+                            </td>
+                            <td style={{ padding: '18px 16px', color: '#475569', fontSize: '13.5px' }}>{p.bankName || '—'}</td>
+                            <td style={{ padding: '18px 16px', fontWeight: 600, color: '#172033', fontSize: '13.5px' }}>{formatExactCurrency(p.amount)}</td>
+                            <td style={{ padding: '18px 16px', color: '#64748B', fontSize: '13.5px' }}>{p.remarks || p.referenceId || '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
           </div>
@@ -730,7 +678,7 @@ export default function LabourPage({
               <div className="stat-icon-wrap stat-icon-rose">
                 <AlertTriangle size={18} />
               </div>
-              <span className="stat-label">Outstanding</span>
+              <span className="stat-label">Pending</span>
               <div className="stat-value">{formatExactCurrency(totalOutstanding)}</div>
               <span className="stat-desc">Payable to your workforce</span>
             </div>
@@ -740,7 +688,7 @@ export default function LabourPage({
           <div className="labour-table-card">
         {/* Navigation Tabs Header */}
         <div className="labour-tabs-bar">
-          {['Materials', 'Attendance', 'Payments'].map((tab) => (
+          {['Attendance', 'Payments'].map((tab) => (
             <button
               key={tab}
               type="button"
@@ -798,7 +746,7 @@ export default function LabourPage({
             <button
               type="button"
               className="btn-mark-attendance"
-              onClick={() => alert('Attendance marked')}
+              onClick={() => setShowMarkAttendance(true)}
             >
               <UserCheck size={16} />
               <span>Mark Attendance</span>
@@ -806,7 +754,7 @@ export default function LabourPage({
             <button
               type="button"
               className="btn-record-payments"
-              onClick={() => alert('Record payments')}
+              onClick={() => setShowRecordPayment(true)}
             >
               <Receipt size={16} />
               <span>Record Payment's</span>
@@ -884,7 +832,7 @@ export default function LabourPage({
                   <th className="th-labour-rate">DAILY RATE</th>
                   <th className="th-labour-earned">EARNED</th>
                   <th className="th-labour-paid">PAID</th>
-                  <th className="th-labour-out">OUTSTANDING</th>
+                  <th className="th-labour-out">PENDING</th>
                   <th className="th-labour-actions">ACTIONS</th>
                 </tr>
               </thead>
@@ -1040,6 +988,50 @@ export default function LabourPage({
     </div>
   )}
 
+      {/* ── MARK ATTENDANCE MODAL ─────────────────────────────────────────── */}
+      {showMarkAttendance && (
+        <MarkAttendanceModal
+          sites={sites}
+          selectedSite={viewWorker ? sites.find((s) => s.name === (viewWorker.siteName || '')) : null}
+          onClose={() => setShowMarkAttendance(false)}
+          onSuccess={() => {
+            // Refresh attendance history if a worker is currently viewed
+            if (viewWorker) {
+              const id = viewWorker._id || viewWorker.id
+              attendanceService.getWorkerHistory(id)
+                .then((res) => {
+                  const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+                  setWorkerAttendanceHistory(list)
+                })
+                .catch(() => {})
+            }
+          }}
+        />
+      )}
+
+      {/* ── RECORD PAYMENT MODAL ──────────────────────────────────────────── */}
+      {showRecordPayment && (
+        <RecordWorkerPaymentModal
+          worker={viewWorker || null}
+          sites={sites}
+          onClose={() => setShowRecordPayment(false)}
+          onSuccess={() => {
+            // Refresh payment history if a worker is currently viewed
+            if (viewWorker) {
+              const id = viewWorker._id || viewWorker.id
+              workerPaymentService.getByWorker(id)
+                .then((res) => {
+                  const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+                  setWorkerPaymentHistory(list)
+                })
+                .catch(() => {})
+            }
+            if (onLabourChanged) onLabourChanged()
+            if (onRefreshAccounts) onRefreshAccounts()
+          }}
+        />
+      )}
+
       {/* ── EDIT MODAL ────────────────────────────────────────────────────── */}
       {editWorker && (
         <div className="lmodal-overlay" onClick={() => setEditWorker(null)}>
@@ -1057,8 +1049,52 @@ export default function LabourPage({
                 <div className="ledit-field"><label className="ledit-label">Daily Rate (₹) *</label><input className="ledit-input" type="number" min="0" value={editForm.dailyRate || ''} onChange={(e) => setEditForm(f => ({ ...f, dailyRate: e.target.value }))} /></div>
                 <div className="ledit-field"><label className="ledit-label">Wages Earned (₹)</label><input className="ledit-input" type="number" min="0" value={editForm.wagesEarned || ''} onChange={(e) => setEditForm(f => ({ ...f, wagesEarned: e.target.value }))} /></div>
                 <div className="ledit-field"><label className="ledit-label">Total Paid (₹)</label><input className="ledit-input" type="number" min="0" value={editForm.totalPaid || ''} onChange={(e) => setEditForm(f => ({ ...f, totalPaid: e.target.value }))} /></div>
-                <div className="ledit-field"><label className="ledit-label">Payment Type</label><select className="ledit-input" value={editForm.paymentType || 'Daily'} onChange={(e) => setEditForm(f => ({ ...f, paymentType: e.target.value }))}><option>Daily</option><option>Weekly</option><option>Monthly</option></select></div>
-                <div className="ledit-field"><label className="ledit-label">Status</label><select className="ledit-input" value={editForm.status || 'Active'} onChange={(e) => setEditForm(f => ({ ...f, status: e.target.value }))}><option>Active</option><option>Inactive</option><option>On Leave</option></select></div>
+                {/* Previous Advance Amount (Read-only) */}
+                <div className="ledit-field">
+                  <label className="ledit-label">Previous Advance Amount</label>
+                  <input
+                    className="ledit-input"
+                    type="text"
+                    readOnly
+                    value={`₹${Number(editForm.previousAdvanceAmount || 0).toLocaleString('en-IN')}`}
+                    style={{ background: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' }}
+                  />
+                </div>
+
+                {/* Additional Advance Amount (Optional) */}
+                <div className="ledit-field">
+                  <label className="ledit-label">Additional Advance Amount</label>
+                  <input
+                    className="ledit-input"
+                    type="number"
+                    min="0"
+                    placeholder="Enter advance amount..."
+                    value={editForm.additionalAdvance || ''}
+                    onChange={(e) => setEditForm(f => ({ ...f, additionalAdvance: e.target.value }))}
+                  />
+                </div>
+
+                {/* Bank Name (Dropdown populated with actual bank names) */}
+                <div className="ledit-field ledit-full">
+                  <label className="ledit-label">
+                    Bank Name {Number(editForm.additionalAdvance) > 0 && <span style={{ color: '#EF4444' }}>*</span>}
+                  </label>
+                  <select
+                    className="ledit-input"
+                    value={editForm.bankAccountId || ''}
+                    onChange={(e) => setEditForm(f => ({ ...f, bankAccountId: e.target.value }))}
+                    disabled={loadingBanks}
+                  >
+                    <option value="">
+                      {loadingBanks ? 'Loading banks...' : 'Select Bank Name...'}
+                    </option>
+                    {bankAccounts.map((b) => (
+                      <option key={b._id || b.id} value={b._id || b.id}>
+                        {b.bankName || b.bank_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div className="ledit-field ledit-full"><label className="ledit-label">Address</label><input className="ledit-input" value={editForm.address || ''} onChange={(e) => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
                 <div className="ledit-field ledit-full"><label className="ledit-label">Remarks</label><input className="ledit-input" value={editForm.remarks || ''} onChange={(e) => setEditForm(f => ({ ...f, remarks: e.target.value }))} /></div>
               </div>

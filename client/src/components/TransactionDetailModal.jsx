@@ -137,7 +137,11 @@ export default function TransactionDetailModal({ isOpen, onClose, transaction })
             <div className="gpay-receipt-row">
               <span className="gpay-receipt-label">
                 <User size={14} className="gpay-row-icon" />
-                {transaction.partyType === 'Client' ? 'Client' : 'Supplier / Vendor'}
+                {transaction.partyType === 'Client'
+                  ? 'Client'
+                  : transaction.partyType === 'Worker'
+                  ? 'Worker'
+                  : 'Supplier / Vendor'}
               </span>
               <span className="gpay-receipt-val">{transaction.partyName}</span>
             </div>
@@ -182,7 +186,7 @@ export default function TransactionDetailModal({ isOpen, onClose, transaction })
             <div className="gpay-receipt-row">
               <span className="gpay-receipt-label">
                 <FileText size={14} className="gpay-row-icon" />
-                Remark / Notes
+                {transaction.partyType === 'Worker' ? 'Payment Description' : 'Remark / Notes'}
               </span>
               <span className="gpay-receipt-val">{transaction.remark}</span>
             </div>

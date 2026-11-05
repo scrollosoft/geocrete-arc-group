@@ -371,12 +371,41 @@ export const updateSite = async (req, res, next) => {
     if (addlReceived > 0 && validBankId) {
       const paymentDate = new Date().toISOString().slice(0, 10)
 
-      // Find the linked site_owner for this site
+      // Find or create the linked site_owner for this site
+      let ownerId = null
       const [ownerRows] = await connection.query(
         'SELECT id FROM site_owners WHERE site_id = ? LIMIT 1',
         [siteId]
       )
-      const ownerId = ownerRows.length > 0 ? ownerRows[0].id : null
+      if (ownerRows.length > 0) {
+        ownerId = ownerRows[0].id
+      } else {
+        const [nameOwnerRows] = await connection.query(
+          'SELECT id FROM site_owners WHERE name = ? LIMIT 1',
+          [(siteOwner || '').trim()]
+        )
+        if (nameOwnerRows.length > 0) {
+          ownerId = nameOwnerRows[0].id
+          await connection.query('UPDATE site_owners SET site_id = ? WHERE id = ?', [siteId, ownerId])
+        } else {
+          const [newOwnerResult] = await connection.query(
+            `INSERT INTO site_owners
+              (name, phone, email, address, site_id, project_value, advance_amount, total_received, status, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'On schedule', ?)`,
+            [
+              (siteOwner || '').trim() || 'Site Client',
+              finalContact || '',
+              trimmedEmail || '',
+              (address || '').trim(),
+              siteId,
+              projectVal,
+              adv,
+              description || '',
+            ]
+          )
+          ownerId = newOwnerResult.insertId
+        }
+      }
 
       // Insert payment record
       await connection.query(

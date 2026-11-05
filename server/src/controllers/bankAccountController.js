@@ -230,6 +230,67 @@ export const getBankTransactions = async (req, res, next) => {
       WHERE e.paid_amount > 0
     `)
 
+    // 3b. Fetch worker initial advance payments paid from bank accounts on joining
+    const [workerInitialAdvances] = await pool.query(`
+      SELECT 
+        l.id,
+        'debit' AS txn_type,
+        l.advance_amount AS amount,
+        CAST(l.created_at AS CHAR) AS created_at_str,
+        CAST(l.joining_date AS CHAR) AS payment_date_str,
+        l.joining_date AS payment_date,
+        l.created_at,
+        l.name AS worker_name,
+        l.phone AS worker_phone,
+        l.trade,
+        l.remarks,
+        l.status,
+        l.advance_amount,
+        l.bank_account_id,
+        ba.bank_name,
+        ba.account_number,
+        ba.balance AS bank_current_balance,
+        l.site_id,
+        s.name AS site_name,
+        s.location AS site_location
+      FROM labours l
+      INNER JOIN bank_accounts ba ON ba.id = l.bank_account_id AND ba.is_active = 1
+      LEFT JOIN sites s ON s.id = l.site_id
+      WHERE l.advance_amount > 0
+    `)
+
+    // 3c. Fetch recorded worker payments (wage payments, additional advances, settlements)
+    const [workerRecordedPayments] = await pool.query(`
+      SELECT 
+        wp.id,
+        wp.worker_id,
+        wp.site_id,
+        wp.bank_account_id,
+        wp.payment_date,
+        wp.amount,
+        wp.payment_type,
+        wp.payment_method,
+        wp.reference_id,
+        wp.remarks,
+        wp.created_by,
+        wp.created_at,
+        CAST(wp.created_at AS CHAR) AS created_at_str,
+        CAST(wp.payment_date AS CHAR) AS payment_date_str,
+        l.name AS worker_name,
+        l.phone AS worker_phone,
+        l.trade,
+        s.name AS site_name,
+        s.location AS site_location,
+        ba.bank_name,
+        ba.account_number,
+        ba.balance AS bank_current_balance
+      FROM worker_payments wp
+      INNER JOIN labours l ON l.id = wp.worker_id
+      INNER JOIN bank_accounts ba ON ba.id = wp.bank_account_id AND ba.is_active = 1
+      LEFT JOIN sites s ON s.id = wp.site_id
+      WHERE wp.amount > 0
+    `)
+
     // 4. Map client payments into standardized transaction objects
     const creditTxns = clientPayments.map((cp) => {
       const isAdvance = cp.title && (cp.title.toLowerCase().includes('initial') || cp.title.toLowerCase().includes('advance'))
@@ -338,8 +399,98 @@ export const getBankTransactions = async (req, res, next) => {
       }
     })
 
+    // 5b. Map worker initial advance payments into standardized transaction objects
+    const workerAdvanceTxns = workerInitialAdvances.map((wp) => {
+      const numAmount = Number(wp.amount || 0)
+      const pDate = (wp.payment_date_str || '').slice(0, 10)
+      const cTime = (wp.created_at_str || '').slice(11, 19) || '12:00:00'
+      const parsedTime = formatActualDateTime(`${pDate} ${cTime}`, wp.payment_date_str)
+      const title = 'Worker Advance Payment'
+      const bankName = wp.bank_name || (wp.bank_account_id ? bankMap.get(String(wp.bank_account_id))?.bank_name : null) || 'Bank Account'
+      const tradeText = wp.trade ? ` (${wp.trade})` : ''
+      const subtitle = `${wp.worker_name}${tradeText} · ${bankName}`
+      const defaultDesc = `Worker Advance Payment - ${wp.worker_name}`
+      const description = wp.remarks && wp.remarks.trim() ? `${defaultDesc} (${wp.remarks.trim()})` : defaultDesc
+
+      return {
+        id: `labour-init-${wp.id}`,
+        rawId: wp.id,
+        type: 'debit',
+        title,
+        category: 'Worker Advance',
+        subtitle,
+        amount: numAmount,
+        formattedAmount: `−₹${numAmount.toLocaleString('en-IN')}`,
+        rawTimestamp: parsedTime.rawTimestamp,
+        date: parsedTime.date,
+        dateTime: parsedTime.dateTime,
+        status: 'Completed',
+        bankAccountId: wp.bank_account_id || null,
+        bankName,
+        accountNumber: wp.account_number || '',
+        siteId: wp.site_id || null,
+        siteName: wp.site_name || '',
+        siteLocation: wp.site_location || '',
+        workerId: wp.id,
+        partyName: wp.worker_name || 'Worker',
+        partyType: 'Worker',
+        paymentMethod: 'Bank Transfer',
+        referenceId: `TXN-WRK-INIT-${String(wp.id).padStart(4, '0')}`,
+        remark: description,
+        balanceAfter: null,
+      }
+    })
+
+    // 5c. Map recorded worker payments into standardized transaction objects
+    const workerWageTxns = workerRecordedPayments.map((wp) => {
+      const numAmount = Number(wp.amount || 0)
+      const pDate = (wp.payment_date_str || '').slice(0, 10)
+      const cTime = (wp.created_at_str || '').slice(11, 19) || '12:00:00'
+      const parsedTime = formatActualDateTime(`${pDate} ${cTime}`, wp.payment_date_str)
+      const pType = wp.payment_type || 'Wage Payment'
+      const title = pType === 'Advance Payment'
+        ? 'Worker Advance Payment'
+        : pType === 'Final Settlement'
+        ? 'Worker Final Settlement'
+        : 'Worker Wage Payment'
+      const bankName = wp.bank_name || (wp.bank_account_id ? bankMap.get(String(wp.bank_account_id))?.bank_name : null) || 'Bank Account'
+      const tradeText = wp.trade ? ` (${wp.trade})` : ''
+      const subtitle = `${wp.worker_name}${tradeText} · ${bankName}`
+      const defaultDesc = `${title} - ${wp.worker_name}`
+      const description = wp.remarks && wp.remarks.trim() ? `${defaultDesc} (${wp.remarks.trim()})` : defaultDesc
+
+      return {
+        id: `wp-${wp.id}`,
+        rawId: wp.id,
+        type: 'debit',
+        title,
+        category: title,
+        subtitle,
+        amount: numAmount,
+        formattedAmount: `−₹${numAmount.toLocaleString('en-IN')}`,
+        rawTimestamp: parsedTime.rawTimestamp,
+        date: parsedTime.date,
+        dateTime: parsedTime.dateTime,
+        status: 'Completed',
+        bankAccountId: wp.bank_account_id || null,
+        bankName,
+        accountNumber: wp.account_number || '',
+        siteId: wp.site_id || null,
+        siteName: wp.site_name || '',
+        siteLocation: wp.site_location || '',
+        workerId: wp.worker_id,
+        paymentRecordId: wp.id,
+        partyName: wp.worker_name || 'Worker',
+        partyType: 'Worker',
+        paymentMethod: wp.payment_method || 'Bank Transfer',
+        referenceId: wp.reference_id || `TXN-WRK-${String(wp.id).padStart(4, '0')}`,
+        remark: description,
+        balanceAfter: null,
+      }
+    })
+
     // 6. Combine all transactions and calculate accurate running balance per bank account
-    const allCombined = [...creditTxns, ...debitTxns]
+    const allCombined = [...creditTxns, ...debitTxns, ...workerAdvanceTxns, ...workerWageTxns]
 
     // Calculate running balance separately for each bank account
     for (const b of bankRows) {

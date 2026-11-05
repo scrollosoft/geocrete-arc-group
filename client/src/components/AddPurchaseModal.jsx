@@ -4,19 +4,6 @@ import { materialService } from '../services/materialService.js'
 
 const getTodayString = () => new Date().toISOString().split('T')[0]
 
-const MATERIALS = [
-  'Cement',
-  'Structural steel',
-  'Bricks & Blocks',
-  'River Sand',
-  'Aggregates',
-  'Ready-Mix Concrete',
-  'Masonry labour',
-  'Excavator rental',
-  'Plumbing Supplies',
-  'Electrical Cables',
-]
-
 const UNITS = [
   'Bags',
   'Tons',
@@ -55,7 +42,7 @@ export default function AddPurchaseModal({
     purchaseDate: getTodayString(),
     siteId: '',
     supplierId: '',
-    material: 'Cement',
+    material: '',
     quantity: '',
     unit: 'Bags',
     ratePerUnit: '',
@@ -103,20 +90,30 @@ export default function AddPurchaseModal({
     }
   }, [isOpen, sites])
 
-  // Derive the list of materials to show based on selected supplier's categories
+  // Derive the list of materials dynamically based on selected supplier's categories or all suppliers
   const materialOptions = useMemo(() => {
-    if (!formData.supplierId) return MATERIALS
-    const selectedSupplier = suppliers.find(
-      (s) => String(s._id || s.id) === String(formData.supplierId)
-    )
-    if (!selectedSupplier?.categories) return MATERIALS
-    const supplierCats = selectedSupplier.categories
-      .split(',')
-      .map((c) => c.trim())
-      .filter(Boolean)
-    if (supplierCats.length === 0) return MATERIALS
-    const filtered = MATERIALS.filter((m) => supplierCats.includes(m))
-    return filtered.length > 0 ? filtered : supplierCats
+    if (formData.supplierId) {
+      const selectedSupplier = suppliers.find(
+        (s) => String(s._id || s.id) === String(formData.supplierId)
+      )
+      if (selectedSupplier?.categories) {
+        return selectedSupplier.categories
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean)
+      }
+      return []
+    }
+    const set = new Set()
+    suppliers.forEach((s) => {
+      if (s.categories) {
+        s.categories.split(',').forEach((c) => {
+          const trimmed = c.trim()
+          if (trimmed) set.add(trimmed)
+        })
+      }
+    })
+    return Array.from(set).sort()
   }, [formData.supplierId, suppliers])
 
   if (!isOpen) return null
@@ -133,9 +130,7 @@ export default function AddPurchaseModal({
         const cats = newSupplier?.categories
           ? newSupplier.categories.split(',').map((c) => c.trim()).filter(Boolean)
           : []
-        const allFiltered = MATERIALS.filter((m) => cats.includes(m))
-        const available = allFiltered.length > 0 ? allFiltered : (cats.length > 0 ? cats : MATERIALS)
-        if (prev.material && !available.includes(prev.material)) {
+        if (prev.material && cats.length > 0 && !cats.includes(prev.material)) {
           updated.material = ''
         }
       }
@@ -264,7 +259,7 @@ export default function AddPurchaseModal({
         purchaseDate: getTodayString(),
         siteId: sites.length > 0 ? (sites[0]._id || sites[0].id) : '',
         supplierId: '',
-        material: 'Cement',
+        material: '',
         quantity: '',
         unit: 'Bags',
         ratePerUnit: '',

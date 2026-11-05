@@ -33,6 +33,8 @@ export default function AddExpenseModal({
   suppliers = [],
   bankAccounts = [],
   onExpenseCreated,
+  onExpenseUpdated,
+  expenseToEdit = null,
   showNotification,
 }) {
   const [formData, setFormData] = useState({
@@ -72,12 +74,44 @@ export default function AddExpenseModal({
     }
   }, [isOpen])
 
-  // Pre-select first site if none selected
+  // Initialize or pre-select fields on open/edit
   useEffect(() => {
-    if (isOpen && sites.length > 0 && !formData.site) {
-      setFormData((prev) => ({ ...prev, site: sites[0]._id || sites[0].id }))
+    if (!isOpen) return
+    if (expenseToEdit) {
+      const siteId = expenseToEdit.site?._id || expenseToEdit.site?.id || expenseToEdit.site || ''
+      const supplierId = expenseToEdit.supplier?._id || expenseToEdit.supplier?.id || expenseToEdit.supplier || ''
+      const rawDate = expenseToEdit.date ? String(expenseToEdit.date).split('T')[0] : getTodayString()
+      setFormData({
+        date: rawDate,
+        site: siteId,
+        supplier: supplierId,
+        category: expenseToEdit.category || '',
+        quantity: expenseToEdit.quantity !== undefined && expenseToEdit.quantity !== null ? String(expenseToEdit.quantity) : '',
+        unit: expenseToEdit.unit || 'Bags',
+        ratePerUnit: expenseToEdit.ratePerUnit !== undefined && expenseToEdit.ratePerUnit !== null ? String(expenseToEdit.ratePerUnit) : '',
+        paidAmount: expenseToEdit.paidAmount !== undefined && expenseToEdit.paidAmount !== null ? String(expenseToEdit.paidAmount) : '',
+        paymentMethod: expenseToEdit.paymentMethod || 'Bank Transfer',
+        bankAccountId: expenseToEdit.bankAccountId || '',
+        remark: expenseToEdit.remark || '',
+      })
+      setError('')
+    } else {
+      setFormData({
+        date: getTodayString(),
+        site: sites.length > 0 ? (sites[0]._id || sites[0].id) : '',
+        supplier: '',
+        category: '',
+        quantity: '',
+        unit: 'Bags',
+        ratePerUnit: '',
+        paidAmount: '',
+        paymentMethod: 'Bank Transfer',
+        bankAccountId: '',
+        remark: '',
+      })
+      setError('')
     }
-  }, [isOpen, sites, formData.site])
+  }, [isOpen, expenseToEdit, sites])
 
   // Material options for the dropdown:
   // - If a supplier is selected → show ALL of that supplier's saved categories directly
@@ -117,8 +151,11 @@ export default function AddExpenseModal({
         unique.push({ ...m, displayName: name })
       }
     }
+    if (formData.category && !unique.some((u) => u.displayName.toLowerCase() === formData.category.toLowerCase())) {
+      unique.unshift({ displayName: formData.category })
+    }
     return unique.sort((a, b) => a.displayName.localeCompare(b.displayName))
-  }, [materialsList, formData.supplier, suppliers])
+  }, [materialsList, formData.supplier, suppliers, formData.category])
 
   if (!isOpen) return null
 
@@ -254,32 +291,43 @@ export default function AddExpenseModal({
         remark: formData.remark.trim(),
       }
 
-      const created = await expenseService.create(payload)
-
-      if (showNotification) {
-        showNotification({
-          type: 'success',
-          message: 'Expense recorded successfully!',
+      if (expenseToEdit) {
+        const editId = expenseToEdit._id || expenseToEdit.id
+        const updated = await expenseService.update(editId, payload)
+        if (showNotification) {
+          showNotification({
+            type: 'success',
+            message: 'Expense updated successfully!',
+          })
+        }
+        if (onExpenseUpdated) {
+          onExpenseUpdated(updated)
+        }
+      } else {
+        const created = await expenseService.create(payload)
+        if (showNotification) {
+          showNotification({
+            type: 'success',
+            message: 'Expense recorded successfully!',
+          })
+        }
+        // Reset form
+        setFormData({
+          date: getTodayString(),
+          site: sites.length > 0 ? (sites[0]._id || sites[0].id) : '',
+          supplier: '',
+          category: '',
+          quantity: '',
+          unit: 'Bags',
+          ratePerUnit: '',
+          paidAmount: '',
+          paymentMethod: 'Bank Transfer',
+          bankAccountId: '',
+          remark: '',
         })
-      }
-
-      // Reset form
-      setFormData({
-        date: getTodayString(),
-        site: sites.length > 0 ? (sites[0]._id || sites[0].id) : '',
-        supplier: '',
-        category: '',
-        quantity: '',
-        unit: 'Bags',
-        ratePerUnit: '',
-        paidAmount: '',
-        paymentMethod: 'Bank Transfer',
-        bankAccountId: '',
-        remark: '',
-      })
-
-      if (onExpenseCreated) {
-        onExpenseCreated(created)
+        if (onExpenseCreated) {
+          onExpenseCreated(created)
+        }
       }
       onClose()
     } catch (err) {
@@ -321,10 +369,10 @@ export default function AddExpenseModal({
             </div>
             <div>
               <h3 className="modal-title" style={{ fontSize: '18px', fontWeight: 700, color: '#172033', margin: 0 }}>
-                Add Expense
+                {expenseToEdit ? 'Edit Expense' : 'Add Expense'}
               </h3>
               <p className="modal-subtitle" style={{ fontSize: '13px', color: '#70829F', margin: '4px 0 0 0' }}>
-                Record daily site expenses, materials or supplier payments
+                {expenseToEdit ? 'Update site expense, material or supplier payment details' : 'Record daily site expenses, materials or supplier payments'}
               </p>
             </div>
           </div>
@@ -647,7 +695,7 @@ export default function AddExpenseModal({
                 opacity: submitting ? 0.7 : 1,
               }}
             >
-              {submitting ? 'Saving...' : 'Save Expense'}
+              {submitting ? 'Saving...' : expenseToEdit ? 'Save Changes' : 'Save Expense'}
             </button>
           </div>
         </form>

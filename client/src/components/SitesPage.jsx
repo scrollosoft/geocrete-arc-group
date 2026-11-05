@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react'
+import React, { useState } from 'react'
 import {
   Building2,
   TrendingUp,
@@ -24,6 +24,7 @@ export default function SitesPage({
   onOpenAddExpense,
   loading = false,
   onSitesChanged,
+  onRefreshAccounts,
   showNotification,
 }) {
   const [selectedSiteForDetail, setSelectedSiteForDetail] = useState(null)
@@ -36,48 +37,7 @@ export default function SitesPage({
   const [pageSize, setPageSize] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
 
-  const sampleSites = [
-    {
-      _id: 's1',
-      date: '11/08/2026',
-      name: 'Greenfield Villa',
-      particulars: 'Shreedhar patil',
-      budget: '₹42.0 L',
-      totalSpent: '00',
-      remaining: '00',
-      status: 'In Progress',
-    },
-    {
-      _id: 's2',
-      date: '11/08/2026',
-      name: "Aarav Height's",
-      particulars: 'Shreedhar patil',
-      budget: '₹42.0 L',
-      totalSpent: '00',
-      remaining: '00',
-      status: 'In Progress',
-    },
-    {
-      _id: 's3',
-      date: '11/08/2026',
-      name: "Aarav Height's",
-      particulars: 'Shreedhar patil',
-      budget: '₹42.0 L',
-      totalSpent: '00',
-      remaining: '00',
-      status: 'In Progress',
-    },
-    {
-      _id: 's4',
-      date: '11/08/2026',
-      name: "Aarav Height's",
-      particulars: 'Shreedhar patil',
-      budget: '₹42.0 L',
-      totalSpent: '00',
-      remaining: '00',
-      status: 'Completed',
-    },
-  ]
+  // Dynamic sites only
 
   const formatIndianBudget = (amount) => {
     if (amount === undefined || amount === null || isNaN(amount)) return '₹0'
@@ -89,38 +49,31 @@ export default function SitesPage({
   }
 
   // Combine MongoDB sites with reference structure
-  const displayRows = sites.length > 0
-    ? sites.map((s, idx) => {
-        const budget = Number(s.totalBudget !== undefined ? s.totalBudget : (s.projectValue || 0))
-        const received = Number(s.totalReceived || 0)
-        const spent = Number(s.totalSpent || 0)
-        const balanceReceivable = Math.max(0, budget - received)
-        const remainingBudget = Math.max(0, budget - spent)
+  const displayRows = (sites || []).map((s, idx) => {
+    const budget = Number(s.totalBudget !== undefined ? s.totalBudget : (s.projectValue || 0))
+    const received = Number(s.totalReceived || 0)
+    const spent = Number(s.totalSpent || 0)
+    const balanceReceivable = Math.max(0, budget - received)
+    const remainingBudget = Math.max(0, budget - spent)
 
-        return {
-          _id: s._id || `site-${idx}`,
-          raw: s,
-          date: s.startDate
-            ? new Date(s.startDate).toLocaleDateString('en-GB')
-            : s.createdAt
-            ? new Date(s.createdAt).toLocaleDateString('en-GB')
-            : '11/08/2026',
-          name: s.name || "Aarav Height's",
-          particulars: s.siteOwner || 'Shreedhar patil',
-          budget: formatIndianBudget(budget),
-          totalReceived: formatIndianBudget(received),
-          totalSpent: formatIndianBudget(spent),
-          balanceReceivable: formatIndianBudget(balanceReceivable),
-          remaining: formatIndianBudget(remainingBudget),
-          status: s.status === 'Completed' ? 'Completed' : (s.status === 'On Hold' || s.status === 'On hold') ? 'On hold' : 'In Progress',
-        }
-      })
-    : sampleSites.map((s) => ({
-        ...s,
-        raw: s,
-        totalReceived: '₹0',
-        balanceReceivable: s.budget || '₹0',
-      }))
+    return {
+      _id: s._id || s.id || `site-${idx}`,
+      raw: s,
+      date: s.startDate
+        ? new Date(s.startDate).toLocaleDateString('en-GB')
+        : s.createdAt
+        ? new Date(s.createdAt).toLocaleDateString('en-GB')
+        : '-',
+      name: s.name || 'Unnamed Site',
+      particulars: s.siteOwner || s.particulars || s.clientName || '-',
+      budget: formatIndianBudget(budget),
+      totalReceived: formatIndianBudget(received),
+      totalSpent: formatIndianBudget(spent),
+      balanceReceivable: formatIndianBudget(balanceReceivable),
+      remaining: formatIndianBudget(remainingBudget),
+      status: s.status === 'Completed' ? 'Completed' : (s.status === 'On Hold' || s.status === 'On hold') ? 'On hold' : 'In Progress',
+    }
+  })
 
   // Filter rows
   const filteredRows = displayRows.filter((row) => {
@@ -322,11 +275,7 @@ export default function SitesPage({
 
     try {
       setUpdating(true)
-      const isSample =
-        !editingSite._id ||
-        String(editingSite._id).startsWith('site-') ||
-        String(editingSite._id).startsWith('s')
-      if (!isSample) {
+      if (editingSite && editingSite._id) {
         await siteService.update(editingSite._id, {
           name: editFormData.name,
           location: editFormData.location,
@@ -348,6 +297,7 @@ export default function SitesPage({
         showNotification({ type: 'success', message: `Site "${editFormData.name}" updated successfully!` })
       }
       if (onSitesChanged) onSitesChanged()
+      if (onRefreshAccounts) onRefreshAccounts()
       setEditingSite(null)
     } catch (err) {
       if (showNotification) {
@@ -377,6 +327,7 @@ export default function SitesPage({
         })
       }
       if (onSitesChanged) onSitesChanged()
+      if (onRefreshAccounts) onRefreshAccounts()
     } catch (err) {
       if (showNotification) {
         showNotification({
@@ -545,7 +496,7 @@ export default function SitesPage({
                 <th className="th-site-budget">PROJECT BUDGET</th>
                 <th className="th-site-received">TOTAL RECEIVED</th>
                 <th className="th-site-spent">TOTAL SPENT</th>
-                <th className="th-site-rem">BALANCE RECEIVABLE</th>
+                <th className="th-site-rem">PENDING</th>
                 <th className="th-site-status">STATUS</th>
                 <th className="th-site-actions">ACTION</th>
               </tr>
@@ -761,7 +712,7 @@ export default function SitesPage({
                   </span>
                 </div>
                 <div className="site-view-item">
-                  <span className="site-view-label">Balance Receivable</span>
+                  <span className="site-view-label">Pending</span>
                   <span className="site-view-val">
                     {formatIndianBudget(
                       Math.max(
@@ -975,7 +926,7 @@ export default function SitesPage({
                     </option>
                     {editBankAccounts.map((bank) => (
                       <option key={bank._id || bank.id} value={bank._id || bank.id}>
-                        {bank.bankName} â€¢â€¢â€¢â€¢ {String(bank.accountNumber || '').slice(-4)}
+                        {bank.bankName} •••• {String(bank.accountNumber || '').slice(-4)}
                       </option>
                     ))}
                   </select>
@@ -994,7 +945,7 @@ export default function SitesPage({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Balance Receivable (₹)</label>
+                  <label className="form-label">Pending (₹)</label>
                   <input
                     type="number"
                     className="form-input"

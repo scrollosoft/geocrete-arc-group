@@ -99,6 +99,13 @@ export async function ensureSchema() {
     console.log('Added client_payments.bank_account_id column')
   }
 
+  // Ensure client_payments.client_id can be NULL if site has no owner
+  try {
+    await pool.query(`ALTER TABLE client_payments MODIFY COLUMN client_id INT UNSIGNED NULL DEFAULT NULL`)
+  } catch (err) {
+    // ignore
+  }
+
   // Ensure bank_account_id column on expenses table
   if (!(await columnExists(pool, 'expenses', 'bank_account_id'))) {
     await pool.query(`ALTER TABLE expenses ADD COLUMN bank_account_id INT UNSIGNED NULL DEFAULT NULL AFTER supplier_id`)

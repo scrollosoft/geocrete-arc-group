@@ -1,7 +1,7 @@
 import React from 'react'
 import { Building2, MapPin, AlertTriangle, ArrowRight } from 'lucide-react'
 
-export default function SiteCard({ site }) {
+export default function SiteCard({ site, onViewSite }) {
   const formatIndianCurrency = (amount) => {
     if (!amount && amount !== 0) return '₹0'
     const num = Number(amount)
@@ -14,8 +14,8 @@ export default function SiteCard({ site }) {
     return `₹${num.toLocaleString('en-IN')}`
   }
 
-  const totalBudget = site.totalBudget || 18500000
-  const totalSpent = site.totalSpent || 12400000
+  const totalBudget = Number(site.totalBudget !== undefined ? site.totalBudget : (site.projectValue || 0))
+  const totalSpent = Number(site.totalSpent || 0)
   const remaining = Math.max(0, totalBudget - totalSpent)
 
   // Percentages
@@ -30,10 +30,10 @@ export default function SiteCard({ site }) {
           <Building2 size={18} className="site-icon" />
         </div>
         <div className="site-title-info">
-          <h3 className="site-name">{site.name || 'Aarav Heights'}</h3>
+          <h3 className="site-name">{site.name || 'Unnamed Site'}</h3>
           <div className="site-location">
             <MapPin size={12} className="pin-icon" />
-            <span>{site.location || 'Baner, Pune'}</span>
+            <span>{site.location || '-'}</span>
           </div>
         </div>
       </div>
@@ -41,7 +41,7 @@ export default function SiteCard({ site }) {
       {/* Site Owner */}
       <div className="site-owner-row">
         <span className="owner-label">Site owner</span>
-        <span className="owner-name">{site.siteOwner || 'Rajesh Mehta'}</span>
+        <span className="owner-name">{site.siteOwner || site.clientName || '-'}</span>
       </div>
 
       {/* Metrics Row: Total Budget | Total Spent | Remaining */}
@@ -80,12 +80,12 @@ export default function SiteCard({ site }) {
         <div className="progress-group">
           <div className="progress-label-row">
             <span className="progress-name">Total Spent</span>
-            <span className="progress-percent">{spentPercent || 80}%</span>
+            <span className="progress-percent">{spentPercent}%</span>
           </div>
           <div className="progress-track">
             <div
               className="progress-fill fill-spent"
-              style={{ width: `${spentPercent || 80}%` }}
+              style={{ width: `${spentPercent}%` }}
             />
           </div>
         </div>
@@ -94,12 +94,12 @@ export default function SiteCard({ site }) {
         <div className="progress-group">
           <div className="progress-label-row">
             <span className="progress-name">Remaining</span>
-            <span className="progress-percent">{remainingPercent || 40}%</span>
+            <span className="progress-percent">{remainingPercent}%</span>
           </div>
           <div className="progress-track">
             <div
               className="progress-fill fill-remaining"
-              style={{ width: `${remainingPercent || 40}%` }}
+              style={{ width: `${remainingPercent}%` }}
             />
           </div>
         </div>
@@ -107,11 +107,17 @@ export default function SiteCard({ site }) {
 
       {/* Footer */}
       <div className="site-card-footer">
-        <div className="site-alert-notice">
-          <AlertTriangle size={13} className="alert-icon" />
-          <span>{site.budgetAlertCount || 1} budget alert</span>
-        </div>
-        <button type="button" className="site-view-link">
+        {spentPercent > 90 || Number(site.budgetAlertCount) > 0 ? (
+          <div className="site-alert-notice">
+            <AlertTriangle size={13} className="alert-icon" />
+            <span>Budget alert</span>
+          </div>
+        ) : <div />}
+        <button
+          type="button"
+          className="site-view-link"
+          onClick={() => onViewSite && onViewSite(site)}
+        >
           <span>View Site</span>
           <ArrowRight size={13} />
         </button>

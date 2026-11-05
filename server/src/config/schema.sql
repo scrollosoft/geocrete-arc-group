@@ -166,3 +166,53 @@ CREATE TABLE IF NOT EXISTS materials (
   INDEX idx_payment_status (payment_status),
   INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ----------------------------------------------------------------
+-- worker_attendances
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS worker_attendances (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  worker_id     INT UNSIGNED  NOT NULL,
+  site_id       INT UNSIGNED  NOT NULL,
+  attendance_date DATE        NOT NULL,
+  status        ENUM('Present', 'Half Day', 'Absent', 'Leave') NOT NULL DEFAULT 'Present',
+  units         DECIMAL(3,1)  NOT NULL DEFAULT 1.0,
+  daily_wage    DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  earned_wage   DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  remarks       TEXT          NULL,
+  marked_by     VARCHAR(100)  NOT NULL DEFAULT 'Admin',
+  created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_worker_site_date (worker_id, site_id, attendance_date),
+  CONSTRAINT fk_att_worker FOREIGN KEY (worker_id) REFERENCES labours(id) ON DELETE CASCADE,
+  CONSTRAINT fk_att_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+  INDEX idx_att_date (attendance_date),
+  INDEX idx_att_worker (worker_id),
+  INDEX idx_att_site (site_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
+-- worker_payments
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS worker_payments (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  worker_id     INT UNSIGNED  NOT NULL,
+  site_id       INT UNSIGNED  NOT NULL,
+  bank_account_id INT UNSIGNED NOT NULL,
+  payment_date  DATE          NOT NULL,
+  amount        DECIMAL(15,2) NOT NULL,
+  payment_type  ENUM('Advance Payment', 'Wage Payment', 'Final Settlement') NOT NULL DEFAULT 'Wage Payment',
+  payment_method VARCHAR(50)  NOT NULL DEFAULT 'Bank Transfer',
+  reference_id  VARCHAR(100)  NULL,
+  remarks       TEXT          NULL,
+  created_by    VARCHAR(100)  NOT NULL DEFAULT 'Admin',
+  created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_wpay_worker FOREIGN KEY (worker_id) REFERENCES labours(id) ON DELETE CASCADE,
+  CONSTRAINT fk_wpay_site FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+  CONSTRAINT fk_wpay_bank FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id) ON DELETE RESTRICT,
+  INDEX idx_wpay_worker (worker_id),
+  INDEX idx_wpay_site (site_id),
+  INDEX idx_wpay_date (payment_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

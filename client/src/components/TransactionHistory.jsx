@@ -252,7 +252,7 @@ export default function TransactionHistory({
             <input
               type="text"
               className="gpay-search-input"
-              placeholder="Search by description, site, supplier, or ref..."
+              placeholder="Search by description, worker, site, supplier, or ref..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />

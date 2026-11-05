@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Calendar, ChevronDown } from 'lucide-react'
+import React, { useState, useEffect, useMemo } from 'react'
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 
 export default function RecentExpenses({
   expenses = [],
@@ -11,6 +11,40 @@ export default function RecentExpenses({
   loading = false,
 }) {
   const [showDatePicker, setShowDatePicker] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 10
+
+  // Reset to page 1 when site or date filter changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedSiteFilter, dateFilter])
+
+  const totalRecords = expenses.length
+  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize))
+  const activePage = Math.min(Math.max(1, currentPage), totalPages)
+  const startIndex = (activePage - 1) * pageSize
+  const endIndex = Math.min(startIndex + pageSize, totalRecords)
+
+  const currentExpenses = useMemo(() => {
+    return expenses.slice(startIndex, endIndex)
+  }, [expenses, startIndex, endIndex])
+
+  const getPaginationItems = () => {
+    if (totalRecords === 0) return []
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1)
+    }
+    const items = [1]
+    if (activePage > 3) items.push('...')
+    const start = Math.max(2, activePage - 1)
+    const end = Math.min(totalPages - 1, activePage + 1)
+    for (let p = start; p <= end; p++) {
+      items.push(p)
+    }
+    if (activePage < totalPages - 2) items.push('...')
+    items.push(totalPages)
+    return items
+  }
 
   const formatCurrency = (val) => {
     if (val === undefined || val === null || val === '') return '-'
@@ -117,11 +151,11 @@ export default function RecentExpenses({
                   </td>
                 </tr>
               ))
-            ) : expenses.length > 0 ? (
-              expenses.map((item) => (
+            ) : currentExpenses.length > 0 ? (
+              currentExpenses.map((item) => (
                 <tr key={item._id} className="expense-row">
                   <td className="td-date">{formatDate(item.date)}</td>
-                  <td className="td-site">{item.site?.name || 'Aarav Heights'}</td>
+                  <td className="td-site">{item.site?.name || item.site || '-'}</td>
                   <td className="td-category">{item.category || 'Material'}</td>
                   <td className="td-amount">{formatCurrency(item.amount)}</td>
                   <td className="td-paid">{formatCurrency(item.paidAmount)}</td>
@@ -138,6 +172,60 @@ export default function RecentExpenses({
           </tbody>
         </table>
       </div>
+
+      {/* Dynamic Pagination Footer */}
+      {!loading && totalRecords > 0 && (
+        <div className="sites-pagination-row" style={{ marginTop: '16px' }}>
+          <div className="pagination-left">
+            <span className="pagination-range-text">
+              Showing {startIndex + 1}–{endIndex} of {totalRecords} records
+            </span>
+          </div>
+
+          <div className="pagination-right">
+            <button
+              type="button"
+              className="pagination-nav-btn"
+              disabled={activePage <= 1}
+              onClick={() => setCurrentPage(activePage - 1)}
+            >
+              <ChevronLeft size={14} strokeWidth={1.75} />
+              <span>Back</span>
+            </button>
+
+            {getPaginationItems().map((item, index) => {
+              if (item === '...') {
+                return (
+                  <span key={`dots-${index}`} className="pagination-dots">
+                    ...
+                  </span>
+                )
+              }
+              const isSelected = item === activePage
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  className={`pagination-num-btn ${isSelected ? 'pagination-num-active' : ''}`}
+                  onClick={() => setCurrentPage(item)}
+                >
+                  {item}
+                </button>
+              )
+            })}
+
+            <button
+              type="button"
+              className="pagination-nav-btn"
+              disabled={activePage >= totalPages}
+              onClick={() => setCurrentPage(activePage + 1)}
+            >
+              <span>Next</span>
+              <ChevronRight size={14} strokeWidth={1.75} />
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

@@ -20,6 +20,7 @@ export default function SupplierDetailPage({
   siteId,
   onBack,
   showNotification,
+  onPaymentRecorded,
 }) {
   const [data, setData]           = useState(null)
   const [loading, setLoading]     = useState(true)
@@ -58,6 +59,7 @@ export default function SupplierDetailPage({
       setPayAmount('')
       setPayNote('')
       await load()
+      if (onPaymentRecorded) onPaymentRecorded()
       if (showNotification) showNotification({ type: 'success', message: 'Payment recorded successfully.' })
     } catch {
       if (showNotification) showNotification({ type: 'error', message: 'Failed to record payment.' })
@@ -183,7 +185,7 @@ export default function SupplierDetailPage({
 
         <div className="sd-stat-card">
           <div className="sd-stat-top">
-            <span className="sd-stat-label">Outstanding</span>
+            <span className="sd-stat-label">Pending</span>
             <div className="sd-stat-icon-wrap sd-icon-orange"><AlertTriangle size={16} /></div>
           </div>
           <div className="sd-stat-value">{fmt(summary.outstanding)}</div>
@@ -213,7 +215,7 @@ export default function SupplierDetailPage({
                 <th style={{ padding: '14px 20px', width: '12%' }}>REF NO.</th>
                 <th style={{ padding: '14px 20px', width: '12%', textAlign: 'right' }}>AMOUNT</th>
                 <th style={{ padding: '14px 20px', width: '12%', textAlign: 'right' }}>TOTAL PAID</th>
-                <th style={{ padding: '14px 20px', width: '12%', textAlign: 'right' }}>OUTSTANDING</th>
+                <th style={{ padding: '14px 20px', width: '12%', textAlign: 'right' }}>PENDING</th>
                 <th style={{ padding: '14px 20px', width: '10%', textAlign: 'center' }}>STATUS</th>
                 <th style={{ padding: '14px 20px', width: '11%', textAlign: 'center' }}>ACTION</th>
               </tr>
@@ -378,7 +380,7 @@ export default function SupplierDetailPage({
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ fontSize: '11.5px', fontWeight: 600, color: '#70829F', display: 'block', marginBottom: '6px' }}>Purchase</label>
                 <div style={{ fontSize: '13.5px', color: '#172033', fontWeight: 500 }}>
-                  {payTarget ? payTarget.materialName : `All outstanding for ${supplier.name}`}
+                  {payTarget ? payTarget.materialName : `All pending for ${supplier.name}`}
                 </div>
               </div>
               <div style={{ marginBottom: '16px' }}>

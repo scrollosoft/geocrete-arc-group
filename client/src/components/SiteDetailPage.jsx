@@ -11,20 +11,27 @@ import { materialService } from '../services/materialService.js'
 import { supplierService } from '../services/supplierService.js'
 import { expenseService } from '../services/expenseService.js'
 import { siteService } from '../services/siteService.js'
+import { labourService } from '../services/labourService.js'
 
 export default function SiteDetailPage({
   site,
   expenses = [],
   onBack,
   onOpenAddExpense,
+  onOpenAddWorker,
+  onSiteChanged,
+  onRefreshAccounts,
 }) {
   const [activeSubTab, setActiveSubTab] = useState('Overview')
+  const [activeLabourTab, setActiveLabourTab] = useState('Worker List')
   const [siteMaterials, setSiteMaterials] = useState([])
   const [allSuppliers, setAllSuppliers] = useState([])
   const [siteExpensesData, setSiteExpensesData] = useState([])
   const [clientPayments, setClientPayments] = useState([])
+  const [siteWorkers, setSiteWorkers] = useState([])
   const [loadingSuppliers, setLoadingSuppliers] = useState(false)
   const [loadingPayments, setLoadingPayments] = useState(false)
+  const [loadingLabour, setLoadingLabour] = useState(false)
 
   // Load site-specific materials, suppliers, expenses, and client payments
   useEffect(() => {
@@ -34,13 +41,15 @@ export default function SiteDetailPage({
 
     setLoadingSuppliers(true)
     setLoadingPayments(true)
+    setLoadingLabour(true)
     Promise.all([
       materialService.getAll({ siteId }).catch(() => ({ materials: [] })),
       supplierService.getAll().catch(() => []),
       expenseService.getAll({ siteId }).catch(() => ({ expenses: [] })),
       siteService.getPayments(siteId).catch(() => []),
+      labourService.getAll({ siteId }).catch(() => ({ workers: [] })),
     ])
-      .then(([matRes, supRes, expRes, payRes]) => {
+      .then(([matRes, supRes, expRes, payRes, labRes]) => {
         if (!active) return
         setSiteMaterials(matRes?.materials || (Array.isArray(matRes) ? matRes : []))
         setAllSuppliers(Array.isArray(supRes) ? supRes : (supRes?.suppliers || []))
@@ -49,11 +58,24 @@ export default function SiteDetailPage({
           setSiteExpensesData(loadedExpenses)
         }
         setClientPayments(Array.isArray(payRes) ? payRes : [])
+
+        // Site-specific labour workers
+        const rawWorkers = labRes?.workers || (Array.isArray(labRes) ? labRes : [])
+        const filteredWorkers = rawWorkers.filter((w) => {
+          if (!w) return false
+          const wSiteId = w.site?._id || w.site?.id || (typeof w.site === 'object' ? null : w.site) || w.siteId
+          if (wSiteId && String(wSiteId) === String(siteId)) return true
+          const wSiteName = (w.site?.name || w.siteName || '').trim().toLowerCase()
+          const targetName = (site.name || '').trim().toLowerCase()
+          return Boolean(wSiteName && targetName && wSiteName === targetName)
+        })
+        setSiteWorkers(filteredWorkers)
       })
       .finally(() => {
         if (active) {
           setLoadingSuppliers(false)
           setLoadingPayments(false)
+          setLoadingLabour(false)
         }
       })
 
@@ -222,60 +244,23 @@ export default function SiteDetailPage({
   }
 
   // Site core metrics
-  const siteName = site.name || 'Greenfield Villa'
-  const location = site.location || 'Bengaluru'
-  const clientName = site.siteOwner || site.particulars || 'Client Name'
+  const siteName = site.name || 'Site'
+  const location = site.location || '-'
+  const clientName = site.siteOwner || site.particulars || site.clientName || '-'
 
   // Dynamic calculations based on actual site & expenses
-  const projectBudget = site.totalBudget || 18500000 // default 1.85 Cr
-  const totalSpent = site.totalSpent !== undefined && site.totalSpent > 0
-    ? site.totalSpent
-    : expenses.filter((e) => e.site?._id === site._id || e.site === site._id).reduce((s, e) => s + (e.amount || 0), 0) || 12400000 // default 1.24 Cr
+  const projectBudget = Number(site.totalBudget !== undefined ? site.totalBudget : (site.projectValue || 0))
+  const totalSpent = site.totalSpent !== undefined && site.totalSpent !== null ? Number(site.totalSpent) : expenses.filter((e) => e.site?._id === site._id || e.site === site._id).reduce((s, e) => s + (e.amount || 0), 0)
 
-  const spentPercent = projectBudget > 0 ? Math.min(100, Math.round((totalSpent / projectBudget) * 100)) : 67
+  const spentPercent = projectBudget > 0 ? Math.min(100, Math.round((totalSpent / projectBudget) * 100)) : 0
 
   // Client Received & Balance Receivable calculations
-  const clientReceived = site.totalReceived !== undefined ? Number(site.totalReceived) : Math.round(projectBudget * 0.73) // default ~1.35 Cr (73% collected)
+  const clientReceived = Number(site.totalReceived || 0) // default ~1.35 Cr (73% collected)
   const balanceReceivable = Math.max(0, projectBudget - clientReceived)
 
-  // Default sample transactions matching screenshot if site has few expenses
-  const sampleTransactions = [
-    {
-      _id: 'tx1',
-      description: 'Structural steel – Fe500',
-      date: '2025-05-24',
-      category: 'Material',
-      amount: 480000,
-      iconType: 'material',
-    },
-    {
-      _id: 'tx2',
-      description: 'Excavator rental',
-      date: '2025-05-22',
-      category: 'Equipment',
-      amount: 145000,
-      iconType: 'equipment',
-    },
-    {
-      _id: 'tx3',
-      description: 'Masonry labour – Week 20',
-      date: '2025-05-21',
-      category: 'Labour',
-      amount: 86500,
-      iconType: 'labour',
-    },
-    {
-      _id: 'tx4',
-      description: 'Cement – 600 bags',
-      date: '2025-05-18',
-      category: 'Material',
-      amount: 234000,
-      iconType: 'material',
-    },
-  ]
+  // Real site transactions only
 
-  const displayTransactions = siteExpenses.length > 0
-    ? siteExpenses.slice(0, 5).map((e) => ({
+  const displayTransactions = (siteExpenses || []).slice(0, 5).map((e) => ({
         _id: e._id,
         description: e.category || e.remark || 'Expense Item',
         date: e.date,
@@ -283,22 +268,84 @@ export default function SiteDetailPage({
         amount: e.amount || 0,
         iconType: e.category?.toLowerCase() === 'labour' ? 'labour' : 'material',
       }))
-    : sampleTransactions
+
+  // Site-specific labour expenses from expenses dataset
+  const directLabourExpenses = siteExpenses.filter(
+    (e) => (e.category || '').toLowerCase() === 'labour'
+  )
+
+  // Calculate each worker's metrics cleanly
+  // Formula: Outstanding = Total Wages Earned - Total Paid
+  const workersWithMetrics = useMemo(() => {
+    return siteWorkers.map((w) => {
+      const dailyRate = Number(w.dailyRate || 0)
+      const attendanceDays = Array.isArray(w.attendance)
+        ? w.attendance.filter((a) => a && (a.status === 'Present' || a.status === 'Active' || !a.status)).length
+        : Number(w.attendanceDays || w.daysWorked || 0)
+      const wagesFromAttendance = attendanceDays > 0 ? attendanceDays * dailyRate : 0
+      const recordWagesEarned = Number(w.wagesEarned || 0)
+      const totalWagesEarned = wagesFromAttendance > 0 ? wagesFromAttendance : recordWagesEarned
+      const totalPaid = Number(w.totalPaid !== undefined ? w.totalPaid : (w.advanceAmount || 0))
+      const outstanding = Math.max(0, totalWagesEarned - totalPaid)
+
+      return {
+        ...w,
+        dailyRate,
+        wagesEarned: totalWagesEarned,
+        totalPaid,
+        outstanding,
+      }
+    })
+  }, [siteWorkers])
+
+  // Worker advance payments / wages paid for this site
+  const workerAdvanceExpenses = workersWithMetrics
+    .filter((w) => Number(w.advanceAmount) > 0 || Number(w.totalPaid) > 0)
+    .map((w) => ({
+      _id: `worker-adv-${w._id || w.id}`,
+      date: w.joiningDate || w.createdAt,
+      category: 'Labour',
+      remark: w.remarks || `Advance payment to ${w.name} (${w.trade || 'Worker'})`,
+      amount: Number(w.totalPaid || w.advanceAmount || 0),
+      paidAmount: Number(w.totalPaid || w.advanceAmount || 0),
+      pendingAmount: w.outstanding,
+      paymentMethod: w.bankName || 'Bank Transfer',
+      isWorkerPayment: true,
+      workerName: w.name,
+      trade: w.trade,
+    }))
+
+  // Combined site labour expenses
+  const allLabourExpenses = [...directLabourExpenses, ...workerAdvanceExpenses]
+
+  // Labour workforce metrics
+  const totalLabourWorkers = siteWorkers.length
+  const totalWagesEarned = workersWithMetrics.reduce((acc, w) => acc + w.wagesEarned, 0)
+  const totalWorkersPaid = workersWithMetrics.reduce((acc, w) => acc + w.totalPaid, 0)
+  const totalWorkersOutstanding = workersWithMetrics.reduce((acc, w) => acc + w.outstanding, 0)
+
+  // Direct labour expenses (if any exist in expenses table)
+  const totalExpensePaid = directLabourExpenses.reduce((acc, e) => acc + Number(e.paidAmount || 0), 0)
+  const totalExpensePending = directLabourExpenses.reduce((acc, e) => acc + Number(e.pendingAmount || 0), 0)
+
+  // Total Paid and Total Pending amounts for the Labour summary
+  const totalLabourPaid = totalWorkersPaid + totalExpensePaid
+  const totalLabourPending = totalWorkersOutstanding + totalExpensePending
 
   // Category breakdown calculation
   const materialSpent = siteExpenses
     .filter((e) => (e.category || '').toLowerCase() === 'material')
     .reduce((s, e) => s + (e.amount || 0), 0)
-  const labourSpent = siteExpenses
-    .filter((e) => (e.category || '').toLowerCase() === 'labour')
-    .reduce((s, e) => s + (e.amount || 0), 0)
+  const labourSpent = totalLabourPaid > 0
+    ? totalLabourPaid
+    : directLabourExpenses.reduce((s, e) => s + (e.amount || 0), 0)
 
   const materialsPercent = totalSpent > 0 && materialSpent > 0
     ? Math.min(100, Math.round((materialSpent / totalSpent) * 100))
-    : 80
+    : 0
   const labourPercent = totalSpent > 0 && labourSpent > 0
     ? Math.min(100, Math.round((labourSpent / totalSpent) * 100))
-    : 92
+    : 0
 
   const subTabs = ['Overview', 'Expenses', 'Materials', 'Labour', 'Client Payments', 'Suppliers']
 
@@ -342,7 +389,7 @@ export default function SiteDetailPage({
           <button
             type="button"
             className="site-detail-action-btn site-btn-outline"
-            onClick={onOpenAddExpense}
+            onClick={onOpenAddWorker || onOpenAddExpense}
           >
             <Plus size={15} />
             <span>Add Labour</span>
@@ -389,9 +436,9 @@ export default function SiteDetailPage({
           <span className="site-card-desc">73% collected</span>
         </div>
 
-        {/* Card 4: Balance Receivable (Highlighted in Teal/Blue) */}
+        {/* Card 4: Pending (Highlighted in Teal/Blue) */}
         <div className="site-detail-card site-card-highlight">
-          <span className="site-card-label">Balance Receivable</span>
+          <span className="site-card-label">Pending</span>
           <div className="site-card-val site-card-val-cyan">{formatIndianCurrency(balanceReceivable)}</div>
           <span className="site-card-desc">Next due 06 Jun</span>
         </div>
@@ -436,7 +483,9 @@ export default function SiteDetailPage({
 
               {/* Labour Bar */}
               <div className="breakdown-item">
-                <span className="breakdown-name">Labour</span>
+                <span className="breakdown-name">
+                  Labour{totalLabourWorkers > 0 ? ` (${totalLabourWorkers} ${totalLabourWorkers === 1 ? 'Worker' : 'Workers'})` : ''}
+                </span>
                 <div className="breakdown-bar-track">
                   <div
                     className="breakdown-bar-fill breakdown-fill-orange"
@@ -591,27 +640,227 @@ export default function SiteDetailPage({
       {/* Labour Tab */}
       {activeSubTab === 'Labour' && (
         <div className="site-detail-box" style={{ padding: '0', overflow: 'hidden' }}>
-          <div className="sites-table-scroll">
-            <table className="expenses-table">
-              <thead>
-                <tr>
-                  <th className="th-date">DATE</th>
-                  <th className="th-desc">LABOUR DESCRIPTION</th>
-                  <th className="th-amount">AMOUNT</th>
-                  <th className="th-paid">PAID</th>
-                  <th className="th-pending">PENDING</th>
-                </tr>
-              </thead>
-              <tbody>
-                {siteExpenses.filter((e) => (e.category || '').toLowerCase() === 'labour').length > 0 ? (
-                  siteExpenses
-                    .filter((e) => (e.category || '').toLowerCase() === 'labour')
-                    .map((item) => (
+          {/* Sub-navigation bar inside Labour section */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 24px 0 24px',
+              borderBottom: '1px solid #E5EAF1',
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', gap: '28px' }}>
+              {[
+                { id: 'Worker List', label: `Worker List (${totalLabourWorkers})` },
+                { id: 'Attendance', label: 'Attendance' },
+                { id: 'Labour Expenses', label: `Labour Expenses (${allLabourExpenses.length})` },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`site-detail-tab-btn ${activeLabourTab === tab.id ? 'active' : ''}`}
+                  onClick={() => setActiveLabourTab(tab.id)}
+                  style={{ paddingBottom: '12px', fontSize: '13.5px' }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Quick workforce financial summary */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                paddingBottom: '12px',
+                fontSize: '12.5px',
+                color: '#64748B',
+              }}
+            >
+              <span>
+                Total Paid:{' '}
+                <strong style={{ color: '#16A34A', fontWeight: 600 }}>
+                  {formatExactCurrency(totalLabourPaid)}
+                </strong>
+              </span>
+              <span>•</span>
+              <span>
+                Pending:{' '}
+                <strong style={{ color: totalLabourPending > 0 ? '#E11D48' : '#172033', fontWeight: 600 }}>
+                  {formatExactCurrency(totalLabourPending)}
+                </strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Subtab 1: Worker List */}
+          {activeLabourTab === 'Worker List' && (
+            <div className="sites-table-scroll">
+              <table className="expenses-table">
+                <thead>
+                  <tr>
+                    <th className="th-desc" style={{ padding: '14px 20px', width: '28%' }}>WORKER</th>
+                    <th className="th-cat" style={{ padding: '14px 20px', width: '18%' }}>TRADE</th>
+                    <th className="th-amount" style={{ padding: '14px 20px', width: '18%', textAlign: 'right' }}>DAILY RATE</th>
+                    <th className="th-paid" style={{ padding: '14px 20px', width: '18%', textAlign: 'right' }}>TOTAL PAID</th>
+                    <th className="th-pending" style={{ padding: '14px 20px', width: '18%', textAlign: 'right' }}>PENDING</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingLabour ? (
+                    <tr>
+                      <td colSpan={5} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
+                        Loading labour records for {siteName}...
+                      </td>
+                    </tr>
+                  ) : workersWithMetrics.length > 0 ? (
+                    workersWithMetrics.map((w) => (
+                      <tr key={w._id || w.id} className="expense-row">
+                        <td className="td-description" style={{ padding: '14px 20px' }}>
+                          <div style={{ fontWeight: 600, color: '#172033', fontSize: '13.5px' }}>{w.name}</div>
+                          {w.phone && (
+                            <div style={{ fontSize: '12px', color: '#70829F', marginTop: '2px' }}>
+                              {w.phone}
+                            </div>
+                          )}
+                        </td>
+                        <td className="td-category" style={{ padding: '14px 20px' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '3px 10px',
+                              borderRadius: '4px',
+                              backgroundColor: '#F1F5F9',
+                              color: '#334155',
+                              fontSize: '12px',
+                              fontWeight: 500,
+                            }}
+                          >
+                            {w.trade || 'Worker'}
+                          </span>
+                        </td>
+                        <td className="td-amount" style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 500, color: '#172033' }}>
+                          {formatExactCurrency(w.dailyRate)}
+                        </td>
+                        <td className="td-paid" style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: '#16A34A' }}>
+                          {formatExactCurrency(w.totalPaid)}
+                        </td>
+                        <td className="td-pending" style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600 }}>
+                          <span style={{ color: w.outstanding > 0 ? '#E11D48' : '#172033' }}>
+                            {formatExactCurrency(w.outstanding)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
+                        No labour records currently registered for {siteName}.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Subtab 2: Attendance */}
+          {activeLabourTab === 'Attendance' && (
+            <div className="sites-table-scroll">
+              <table className="expenses-table">
+                <thead>
+                  <tr>
+                    <th className="th-date" style={{ padding: '14px 20px', width: '16%' }}>DATE</th>
+                    <th className="th-desc" style={{ padding: '14px 20px', width: '26%' }}>WORKER</th>
+                    <th className="th-cat" style={{ padding: '14px 20px', width: '16%' }}>TRADE</th>
+                    <th className="th-amount" style={{ padding: '14px 20px', width: '14%', textAlign: 'center' }}>STATUS</th>
+                    <th className="th-amount" style={{ padding: '14px 20px', width: '14%', textAlign: 'right' }}>DAILY WAGE</th>
+                    <th className="th-desc" style={{ padding: '14px 20px', width: '14%' }}>REMARKS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {siteWorkers.length > 0 ? (
+                    siteWorkers.map((w) => (
+                      <tr key={`att-${w._id || w.id}`} className="expense-row">
+                        <td className="td-date" style={{ padding: '14px 20px' }}>
+                          {w.joiningDate
+                            ? new Date(w.joiningDate).toLocaleDateString('en-GB')
+                            : new Date().toLocaleDateString('en-GB')}
+                        </td>
+                        <td className="td-description" style={{ padding: '14px 20px', fontWeight: 600, color: '#172033' }}>
+                          {w.name}
+                        </td>
+                        <td className="td-category" style={{ padding: '14px 20px' }}>
+                          {w.trade || 'Worker'}
+                        </td>
+                        <td className="td-amount" style={{ padding: '14px 20px', textAlign: 'center' }}>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '2px 10px',
+                              borderRadius: '999px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              backgroundColor: '#DCFCE7',
+                              color: '#15803D',
+                            }}
+                          >
+                            {w.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="td-amount" style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 500, color: '#172033' }}>
+                          {formatExactCurrency(w.dailyRate)}
+                        </td>
+                        <td className="td-description" style={{ padding: '14px 20px', color: '#64748B', fontSize: '12.5px' }}>
+                          {w.remarks || 'Regular daily shift'}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
+                        No attendance records currently available for {siteName}.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Subtab 3: Labour Expenses */}
+          {activeLabourTab === 'Labour Expenses' && (
+            <div className="sites-table-scroll">
+              <table className="expenses-table">
+                <thead>
+                  <tr>
+                    <th className="th-date">DATE</th>
+                    <th className="th-desc">LABOUR DESCRIPTION</th>
+                    <th className="th-amount">AMOUNT</th>
+                    <th className="th-paid">PAID</th>
+                    <th className="th-pending">PENDING</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allLabourExpenses.length > 0 ? (
+                    allLabourExpenses.map((item) => (
                       <tr key={item._id} className="expense-row">
                         <td className="td-date">
                           {item.date ? new Date(item.date).toLocaleDateString('en-GB') : '-'}
                         </td>
-                        <td className="td-description">{item.remark || item.category || 'Labour Charges'}</td>
+                        <td className="td-description">
+                          {item.remark || item.category || 'Labour Charges'}
+                          {item.workerName && (
+                            <span style={{ fontSize: '12px', color: '#64748B', marginLeft: '6px' }}>
+                              ({item.trade || 'Worker'})
+                            </span>
+                          )}
+                        </td>
                         <td className="td-amount">{formatExactCurrency(item.amount)}</td>
                         <td className="td-paid">{item.paidAmount ? formatExactCurrency(item.paidAmount) : '-'}</td>
                         <td className="td-pending">
@@ -625,16 +874,17 @@ export default function SiteDetailPage({
                         </td>
                       </tr>
                     ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
-                      No labour expenses currently recorded for {siteName}.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
+                        No labour expenses currently recorded for {siteName}.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -650,7 +900,7 @@ export default function SiteDetailPage({
                   <th className="th-desc" style={{ padding: '16px 20px', width: '16%' }}>CONTACT</th>
                   <th className="th-amount" style={{ padding: '16px 20px', width: '14%', textAlign: 'right' }}>TOTAL PURCHASE</th>
                   <th className="th-paid" style={{ padding: '16px 20px', width: '12%', textAlign: 'right' }}>TOTAL PAID</th>
-                  <th className="th-pending" style={{ padding: '16px 20px', width: '10%', textAlign: 'right' }}>OUTSTANDING</th>
+                  <th className="th-pending" style={{ padding: '16px 20px', width: '10%', textAlign: 'right' }}>PENDING</th>
                   <th className="th-date" style={{ padding: '16px 20px', width: '8%', textAlign: 'center' }}>LAST</th>
                 </tr>
               </thead>

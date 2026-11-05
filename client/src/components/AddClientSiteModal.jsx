@@ -499,7 +499,7 @@ export default function AddClientSiteModal({
               {/* Calculated Read-Only Balance Receivable */}
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
                 <label className="form-label">
-                  Balance Receivable (₹) <span style={{ color: '#94A3B8' }}>(Calculated)</span>
+                  Pending (₹) <span style={{ color: '#94A3B8' }}>(Calculated)</span>
                 </label>
                 <div
                   style={{

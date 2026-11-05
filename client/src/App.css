@@ -4961,3 +4961,531 @@
 
 
 
+
+
+/* ==========================================================================
+   MOBILE RESPONSIVE STYLES
+   Breakpoints:
+     1024px — tablet landscape
+      768px — tablet portrait / large phone
+      480px — small phone
+   ========================================================================== */
+
+/* ------------------------------------------------------------------
+   TABLET LANDSCAPE  (≤ 1024px)
+   ------------------------------------------------------------------ */
+@media (max-width: 1024px) {
+  /* Content padding */
+  .content-body {
+    padding: 20px 20px 40px 20px;
+    gap: 20px;
+  }
+
+  /* Header search shrink */
+  .header-search {
+    width: 300px;
+  }
+
+  /* Stat-card grids: 2-col at tablet */
+  .stat-cards-grid,
+  .sites-stat-grid,
+  .site-detail-stat-grid,
+  .payments-cards-grid,
+  .sod-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Sites grid already 2-col at 1080px; ensure it stays */
+  .sites-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Form grids */
+  .form-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Supplier cards grid */
+  .suppliers-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ------------------------------------------------------------------
+   TABLET PORTRAIT / LARGE PHONE  (≤ 768px)
+   ------------------------------------------------------------------ */
+@media (max-width: 768px) {
+
+  /* ---- App layout ---- */
+  .app-container {
+    flex-direction: column;
+  }
+
+  /* ---- Sidebar → bottom navigation bar ---- */
+  .sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    width: 100%;
+    height: auto;
+    min-height: 58px;
+    max-height: 68px;
+    flex-direction: row;
+    border-right: none;
+    border-top: 1.5px solid #E5EAF1;
+    z-index: 100;
+    overflow-y: visible;
+    overflow-x: auto;
+    background-color: #FAFDFF;
+    padding: 0;
+  }
+
+  /* Hide brand logo in bottom nav */
+  .sidebar-brand {
+    display: none;
+  }
+
+  /* Section title hidden */
+  .sidebar-section-title {
+    display: none;
+  }
+
+  /* Nav container becomes full-width horizontal row */
+  .sidebar-nav-container {
+    padding: 0;
+    flex-direction: row;
+    width: 100%;
+  }
+
+  /* Nav list itself — horizontal */
+  .sidebar-nav {
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    width: 100%;
+    gap: 0;
+  }
+
+  /* Each nav item — vertical icon + small label */
+  .sidebar-nav-item {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 4px;
+    font-size: 10px;
+    border-radius: 8px;
+    flex: 1;
+    min-width: 48px;
+    max-width: 72px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .sidebar-nav-icon {
+    color: #556987;
+  }
+
+  /* Badge in bottom nav */
+  .sidebar-nav-badge {
+    display: none;
+  }
+
+  /* Main layout needs bottom padding so bottom nav doesn't cover content */
+  .main-layout {
+    padding-bottom: 68px;
+  }
+
+  /* ---- Top Header ---- */
+  .top-header {
+    height: auto;
+    min-height: 52px;
+    padding: 8px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+
+  /* Search bar: full width, below header actions on mobile */
+  .header-search {
+    width: 100%;
+    order: 2;
+    min-width: 0;
+  }
+
+  .header-actions {
+    order: 1;
+    gap: 8px;
+  }
+
+  /* Compress header buttons — keep icon, shrink padding */
+  .btn {
+    padding: 0 10px;
+    font-size: 12px;
+    height: 32px;
+  }
+
+  .btn span {
+    display: none; /* hide text labels on small screens */
+  }
+
+  /* ---- Content Body ---- */
+  .content-body {
+    padding: 14px 14px 80px 14px;
+    gap: 16px;
+  }
+
+  /* ---- Stat-card grids ---- */
+  .stat-cards-grid,
+  .sites-stat-grid,
+  .site-detail-stat-grid,
+  .payments-cards-grid,
+  .sod-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* ---- Sites / Suppliers cards grid ---- */
+  .sites-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .suppliers-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ---- Form grids ---- */
+  .form-grid,
+  .modal-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-remark-group,
+  .form-submit-group {
+    grid-column: span 1;
+  }
+
+  .form-bottom-row,
+  .form-bottom-row.form-bottom-row-5col {
+    grid-template-columns: 1fr;
+  }
+
+  /* ---- Welcome section ---- */
+  .welcome-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  /* ---- Labour Page ---- */
+  .labour-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .labour-filter-left {
+    width: 100%;
+  }
+
+  .labour-actions-right {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .btn-mark-attendance,
+  .btn-record-payments {
+    flex: 1;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  /* Labour tabs — allow horizontal scroll on small screens */
+  .labour-tabs-bar {
+    overflow-x: auto;
+    gap: 20px;
+    padding-bottom: 2px;
+    white-space: nowrap;
+  }
+
+  /* Labour table card */
+  .labour-table-card {
+    padding: 14px 14px 14px 14px;
+  }
+
+  /* ---- Labour Modals (lmodal) ---- */
+  .lmodal-overlay {
+    padding: 10px;
+    align-items: flex-end;
+  }
+
+  .lmodal-box {
+    width: 100%;
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  /* Edit Worker grid — single column */
+  .ledit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* lmodal footer buttons */
+  .lmodal-footer {
+    gap: 8px;
+  }
+
+  .ledit-cancel,
+  .ledit-save {
+    flex: 1;
+    text-align: center;
+  }
+
+  /* Worker detail view grid */
+  .lview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ---- Generic Modal Container ---- */
+  .modal-overlay {
+    padding: 10px;
+    align-items: flex-end;
+  }
+
+  .modal-container {
+    width: 100%;
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .modal-footer {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .modal-footer button {
+    flex: 1;
+    min-width: 100px;
+  }
+
+  /* ---- Tables: smooth touch scroll ---- */
+  .sites-table-scroll,
+  .table-responsive-container,
+  .labour-table-scroll {
+    -webkit-overflow-scrolling: touch;
+    overflow-x: auto;
+  }
+
+  /* ---- Site detail header ---- */
+  .site-detail-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .site-detail-header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* ---- Expenses page filter row ---- */
+  .expenses-filter-row,
+  .exp-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .expenses-filter-row select,
+  .expenses-filter-row input,
+  .exp-filter-row select,
+  .exp-filter-row input {
+    width: 100%;
+  }
+
+  /* ---- Suppliers page filter row ---- */
+  .sup-filter-row,
+  .suppliers-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  /* ---- Materials page ---- */
+  .mat-filter-row,
+  .materials-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  /* ---- Payments page ---- */
+  .gpay-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
+  .gpay-search-box,
+  .gpay-select-wrap,
+  .gpay-select {
+    width: 100%;
+  }
+
+  .gpay-secondary-filters {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .gpay-header-right {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .gpay-summary-pill {
+    flex: 1;
+    text-align: center;
+  }
+
+  /* ---- Site Owners page ---- */
+  .sod-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  /* ---- Site detail tabs ---- */
+  .site-detail-tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+    gap: 16px;
+    padding-bottom: 2px;
+  }
+
+  /* ---- Add Site / Add Expense form modal ---- */
+  .modal-box {
+    width: 100%;
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  /* Page-level action buttons row */
+  .page-action-row,
+  .header-action-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Sites page header */
+  .sites-header-wrap {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .sites-header-right {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
+/* ------------------------------------------------------------------
+   SMALL PHONE  (≤ 480px)
+   ------------------------------------------------------------------ */
+@media (max-width: 480px) {
+
+  /* ---- Stat-card grids: 1-col on small phones ---- */
+  .stat-cards-grid,
+  .sites-stat-grid,
+  .site-detail-stat-grid,
+  .payments-cards-grid,
+  .sod-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ---- Content body ---- */
+  .content-body {
+    padding: 12px 10px 80px 10px;
+    gap: 12px;
+  }
+
+  /* ---- Header ---- */
+  .top-header {
+    padding: 6px 10px;
+  }
+
+  /* ---- Labour table card ---- */
+  .labour-table-card {
+    padding: 10px 10px 10px 10px;
+  }
+
+  /* ---- Buttons ---- */
+  .btn-mark-attendance,
+  .btn-record-payments {
+    font-size: 12px;
+    height: 34px;
+    padding: 0 10px;
+  }
+
+  /* ---- Modal footer ---- */
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .modal-footer button {
+    width: 100%;
+  }
+
+  /* ---- lmodal footer ---- */
+  .lmodal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .ledit-cancel,
+  .ledit-save {
+    width: 100%;
+  }
+
+  /* ---- Site cards ---- */
+  .sites-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ---- Suppliers cards ---- */
+  .suppliers-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ---- Bank accounts grid ---- */
+  .bank-accounts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ---- Welcome title font size ---- */
+  .welcome-title {
+    font-size: 20px;
+  }
+
+  /* ---- Sidebar bottom nav: smaller text ---- */
+  .sidebar-nav-label {
+    font-size: 9px;
+  }
+
+  .sidebar-nav-item {
+    padding: 4px 2px;
+    min-width: 40px;
+  }
+}
+

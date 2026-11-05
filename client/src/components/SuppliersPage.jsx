@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   CreditCard,
   AlertTriangle,
@@ -200,49 +200,7 @@ export default function SuppliersPage({
     }
   }
 
-  // Reference fallback suppliers matching screenshot
-  const sampleSuppliers = [
-    {
-      _id: 's1',
-      name: 'Bharat Steel Traders',
-      categories: 'Steel',
-      phone: '+91234567892',
-      totalPurchase: 480000,
-      totalPaid: 480000,
-      outstanding: 0,
-      lastDate: '11/08/2026',
-    },
-    {
-      _id: 's2',
-      name: 'Shree Cement Co.',
-      categories: 'Cement',
-      phone: '+91234567892',
-      totalPurchase: 480000,
-      totalPaid: 380000,
-      outstanding: 100000,
-      lastDate: '11/08/2026',
-    },
-    {
-      _id: 's3',
-      name: 'Mahalaxmi Bricks',
-      categories: 'Bricks',
-      phone: '+91234567892',
-      totalPurchase: 480000,
-      totalPaid: 440000,
-      outstanding: 40000,
-      lastDate: '11/08/2026',
-    },
-    {
-      _id: 's4',
-      name: 'Sai Aggregates',
-      categories: 'River Sand',
-      phone: '+91234567892',
-      totalPurchase: 480000,
-      totalPaid: 280000,
-      outstanding: 200000,
-      lastDate: '11/08/2026',
-    },
-  ]
+  // Dynamic suppliers only
 
   // If a supplier was selected for detailed view, show the full page
   if (selectedSupplierForDetail) {
@@ -256,7 +214,7 @@ export default function SuppliersPage({
     )
   }
 
-  const displayList = suppliers.length > 0 ? suppliers : sampleSuppliers
+  const displayList = suppliers || []
 
   // Client-side filtering
   const filteredSuppliers = displayList.filter((item) => {
@@ -287,7 +245,7 @@ export default function SuppliersPage({
     if (sortFilter === 'Purchase: High to Low') {
       return (b.totalPurchase || 0) - (a.totalPurchase || 0)
     }
-    if (sortFilter === 'Outstanding: High to Low') {
+    if (sortFilter === 'Pending: High to Low' || sortFilter === 'Outstanding: High to Low') {
       return (b.outstanding || 0) - (a.outstanding || 0)
     }
     return 0
@@ -312,7 +270,7 @@ export default function SuppliersPage({
   const totalPurchasesNum = summary?.totalPurchases !== undefined ? summary.totalPurchases : displayList.reduce((acc, s) => acc + (Number(s.totalPurchase) || 0), 0)
   const totalPaidNum = summary?.totalPaid !== undefined ? summary.totalPaid : displayList.reduce((acc, s) => acc + (Number(s.totalPaid) || 0), 0)
   const outstandingNum = summary?.outstanding !== undefined ? summary.outstanding : Math.max(0, totalPurchasesNum - totalPaidNum)
-  const categoriesCount = summary?.categoriesCount || 7
+  const categoriesCount = summary?.categoriesCount !== undefined ? summary.categoriesCount : new Set(displayList.map((s) => s.categories).filter(Boolean)).size
   const overdueCount = summary?.overdueCount !== undefined ? summary.overdueCount : displayList.filter((s) => (Number(s.outstanding) || 0) > 0).length
   const clearedPercent = totalPurchasesNum > 0 ? Math.round((totalPaidNum / totalPurchasesNum) * 100) : 100
 
@@ -335,7 +293,7 @@ export default function SuppliersPage({
           </div>
           <h1 className="suppliers-title">Supplier's</h1>
           <p className="suppliers-subtitle">
-            Manage supplier relationships, purchases and outstanding dues
+            Manage supplier relationships, purchases and pending dues
           </p>
         </div>
         <button
@@ -392,10 +350,10 @@ export default function SuppliersPage({
           </div>
         </div>
 
-        {/* Card 4: Outstanding */}
+        {/* Card 4: Pending */}
         <div className="suppliers-kpi-card">
           <div className="suppliers-card-top">
-            <span className="suppliers-card-label">Outstanding</span>
+            <span className="suppliers-card-label">Pending</span>
             <div className="suppliers-card-icon suppliers-card-icon-red">
               <AlertTriangle size={17} />
             </div>
@@ -477,7 +435,7 @@ export default function SuppliersPage({
               <option value="Newest First">Newest First</option>
               <option value="Oldest First">Oldest First</option>
               <option value="Purchase: High to Low">Purchase: High to Low</option>
-              <option value="Outstanding: High to Low">Outstanding: High to Low</option>
+              <option value="Pending: High to Low">Pending: High to Low</option>
             </select>
             <ChevronDown size={14} className="site-select-arrow" />
           </div>
@@ -495,7 +453,7 @@ export default function SuppliersPage({
                 <th style={{ padding: '16px 20px', width: '14%' }}>CONTACT</th>
                 <th style={{ padding: '16px 20px', width: '14%' }}>TOTAL PURCHASE</th>
                 <th style={{ padding: '16px 20px', width: '12%' }}>TOTAL PAID</th>
-                <th style={{ padding: '16px 20px', width: '10%' }}>OUTSTANDING</th>
+                <th style={{ padding: '16px 20px', width: '10%' }}>PENDING</th>
                 <th style={{ padding: '16px 20px', width: '8%' }}>LAST</th>
                 <th style={{ padding: '16px 20px', width: '8%', textAlign: 'center' }}>ACTIONS</th>
               </tr>

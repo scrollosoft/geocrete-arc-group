@@ -229,7 +229,7 @@ export default function AddBankModal({
             {/* 5. Initial Deposit / Opening Balance */}
             <div className="form-group">
               <label className="form-label">
-                Initial Deposit / Opening Balance (â‚¹) <span style={{ color: '#EF4444' }}>*</span>
+                Initial Deposit / Opening Balance (₹) <span style={{ color: '#EF4444' }}>*</span>
               </label>
               <input
                 type="number"

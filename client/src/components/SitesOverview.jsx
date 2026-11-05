@@ -2,7 +2,7 @@ import React from 'react'
 import { ArrowRight } from 'lucide-react'
 import SiteCard from './SiteCard.jsx'
 
-export default function SitesOverview({ sites = [], loading = false, onNavigateSites }) {
+export default function SitesOverview({ sites = [], loading = false, onNavigateSites, onViewSite }) {
   // If fewer than 3 sites, replicate or pad with defaults so desktop always has 3 balanced cards matching the screenshot
   const displaySites = sites.length >= 3 ? sites.slice(0, 3) : sites
 
@@ -32,7 +32,11 @@ export default function SitesOverview({ sites = [], loading = false, onNavigateS
           ))
         ) : displaySites.length > 0 ? (
           displaySites.map((site) => (
-            <SiteCard key={site._id} site={site} />
+            <SiteCard
+              key={site._id || site.id}
+              site={site}
+              onViewSite={onViewSite}
+            />
           ))
         ) : (
           <div className="empty-state">No active sites found</div>

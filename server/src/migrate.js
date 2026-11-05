@@ -253,9 +253,9 @@ const migrate = async () => {
              joining_date, payment_type, address, remarks, status, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            l.name, l.phone || '+91234567892', l.trade || 'Mason',
+            l.name, l.phone || '', l.trade || '',
             siteId || null,
-            Number(l.dailyRate) || 1000, Number(l.wagesEarned) || 0, Number(l.totalPaid) || 0,
+            Number(l.dailyRate) || 0, Number(l.wagesEarned) || 0, Number(l.totalPaid) || 0,
             toDateStr(l.joiningDate) || new Date().toISOString().slice(0, 10),
             l.paymentType || 'Daily', l.address || '', l.remarks || '',
             l.status || 'Active',

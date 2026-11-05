@@ -4,19 +4,6 @@ import { expenseService } from '../services/expenseService.js'
 
 const getTodayString = () => new Date().toISOString().split('T')[0]
 
-const ALL_MATERIALS = [
-  'Cement',
-  'Structural steel',
-  'Bricks & Blocks',
-  'River Sand',
-  'Aggregates',
-  'Ready-Mix Concrete',
-  'Masonry labour',
-  'Excavator rental',
-  'Plumbing Supplies',
-  'Electrical Cables',
-]
-
 export default function DailyExpenseForm({
   sites = [],
   suppliers = [],
@@ -29,7 +16,7 @@ export default function DailyExpenseForm({
     date: initialData?.date || getTodayString(),
     site: initialData?.site?._id || initialData?.site || '',
     supplier: initialData?.supplier?._id || initialData?.supplier || '',
-    material: initialData?.material || 'Cement',
+    material: initialData?.material || '',
     quantity: initialData?.quantity ?? '',
     unit: initialData?.unit || 'Bags',
     ratePerUnit: initialData?.ratePerUnit ?? '',
@@ -54,7 +41,7 @@ export default function DailyExpenseForm({
         date: initialData.date || getTodayString(),
         site: initialData.site?._id || initialData.site || '',
         supplier: initialData.supplier?._id || initialData.supplier || '',
-        material: initialData.material || 'Cement',
+        material: initialData.material || '',
         quantity: initialData.quantity ?? '',
         unit: initialData.unit || 'Bags',
         ratePerUnit: initialData.ratePerUnit ?? '',
@@ -66,21 +53,30 @@ export default function DailyExpenseForm({
     }
   }, [initialData])
 
-  // Derive the list of materials to show based on selected supplier's categories
+  // Derive the list of materials dynamically based on selected supplier's categories or all suppliers
   const materialOptions = useMemo(() => {
-    if (!formData.supplier) return ALL_MATERIALS
-    const selectedSupplier = suppliers.find(
-      (s) => String(s._id || s.id) === String(formData.supplier)
-    )
-    if (!selectedSupplier?.categories) return ALL_MATERIALS
-    const supplierCats = selectedSupplier.categories
-      .split(',')
-      .map((c) => c.trim())
-      .filter(Boolean)
-    if (supplierCats.length === 0) return ALL_MATERIALS
-    // Only show ALL_MATERIALS entries that exist in this supplier's categories
-    const filtered = ALL_MATERIALS.filter((m) => supplierCats.includes(m))
-    return filtered.length > 0 ? filtered : supplierCats
+    if (formData.supplier) {
+      const selectedSupplier = suppliers.find(
+        (s) => String(s._id || s.id) === String(formData.supplier)
+      )
+      if (selectedSupplier?.categories) {
+        return selectedSupplier.categories
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean)
+      }
+      return []
+    }
+    const set = new Set()
+    suppliers.forEach((s) => {
+      if (s.categories) {
+        s.categories.split(',').forEach((c) => {
+          const trimmed = c.trim()
+          if (trimmed) set.add(trimmed)
+        })
+      }
+    })
+    return Array.from(set).sort()
   }, [formData.supplier, suppliers])
 
   const handleChange = (e) => {
@@ -95,9 +91,7 @@ export default function DailyExpenseForm({
         const cats = newSupplier?.categories
           ? newSupplier.categories.split(',').map((c) => c.trim()).filter(Boolean)
           : []
-        const allFiltered = ALL_MATERIALS.filter((m) => cats.includes(m))
-        const available = allFiltered.length > 0 ? allFiltered : (cats.length > 0 ? cats : ALL_MATERIALS)
-        if (prev.material && !available.includes(prev.material)) {
+        if (prev.material && cats.length > 0 && !cats.includes(prev.material)) {
           updated.material = ''
         }
       }
@@ -194,7 +188,7 @@ export default function DailyExpenseForm({
         date: getTodayString(),
         site: '',
         supplier: '',
-        material: 'Cement',
+        material: '',
         quantity: '',
         unit: 'Bags',
         ratePerUnit: '',
@@ -280,7 +274,7 @@ export default function DailyExpenseForm({
               value={formData.supplier}
               onChange={handleChange}
             >
-              <option value="">e.g. Shree cement co.</option>
+              <option value="">-- Select supplier --</option>
               {suppliers.map((sup) => (
                 <option key={sup._id} value={sup._id}>
                   {sup.name}
