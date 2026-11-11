@@ -1,5 +1,14 @@
 import { WorkerPayment } from '../models/WorkerPayment.js'
 
+export async function getAllWorkerPayments(req, res, next) {
+  try {
+    const data = await WorkerPayment.getAllPayments()
+    res.json({ ok: true, data })
+  } catch (err) {
+    next(err)
+  }
+}
+
 export async function createWorkerPayment(req, res, next) {
   try {
     const { workerId, siteId, bankAccountId, amount, paymentDate, paymentType, remarks, createdBy } = req.body

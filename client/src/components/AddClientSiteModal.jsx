@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { X, Building2, ShieldAlert } from 'lucide-react'
 import { siteService } from '../services/siteService.js'
 import { bankAccountService } from '../services/bankAccountService.js'
@@ -17,6 +17,7 @@ export default function AddClientSiteModal({
   onCreated,
   showNotification,
   bankAccounts: initialBankAccounts,
+  embeddedMode = false,
 }) {
   const [formData, setFormData] = useState(() => ({
     name: '',
@@ -63,7 +64,7 @@ export default function AddClientSiteModal({
     return Math.max(0, pVal - rec)
   }, [formData.projectValue, formData.totalReceived])
 
-  if (!isOpen) return null
+  if (!isOpen && !embeddedMode) return null
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -213,6 +214,300 @@ export default function AddClientSiteModal({
       currency: 'INR',
       maximumFractionDigits: 2,
     }).format(Number(val || 0))
+  }
+
+  if (embeddedMode) {
+    return (
+      <section className="daily-expense-section" id="add-site-form">
+        <div className="section-header-compact">
+          <h2 className="section-title">Add Construction Site</h2>
+          <p className="section-subtitle">
+            Create a construction site, add owner details, and configure project finances.
+          </p>
+        </div>
+
+        {error && (
+          <div className="form-alert form-alert-error" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <ShieldAlert size={16} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="daily-expense-form">
+          <div className="modal-body" style={{ padding: 0 }}>
+            {/* Section A: Site and Client Information */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div
+                style={{
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  color: '#70829F',
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  borderBottom: '1px solid #E5EAF1',
+                  paddingBottom: '4px',
+                }}
+              >
+                A. Site & Client Information
+              </div>
+
+              <div className="dashboard-site-form-grid">
+                <div className="form-group">
+                  <label className="form-label">
+                    Site Name <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    className="form-input"
+                    placeholder="e.g. Aarav Heights"
+                    value={formData.name}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    Site Owner / Client Name <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="siteOwner"
+                    className="form-input"
+                    placeholder="e.g. Rajesh Mehta"
+                    value={formData.siteOwner}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    Contact Number <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="contactNumber"
+                    className="form-input"
+                    placeholder="e.g. +91 98220 11001"
+                    value={formData.contactNumber}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Email Address (Optional)</label>
+                  <input
+                    type="email"
+                    name="email"
+                    className="form-input"
+                    placeholder="e.g. client@example.com"
+                    value={formData.email}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    Location (Site) <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="location"
+                    className="form-input"
+                    placeholder="e.g. Baner, Pune"
+                    value={formData.location}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Address / City (Client/Owner)</label>
+                  <input
+                    type="text"
+                    name="address"
+                    className="form-input"
+                    placeholder="e.g. Flat 402, MG Road, Pune"
+                    value={formData.address}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Start Date</label>
+                  <input
+                    type="date"
+                    name="startDate"
+                    className="form-input"
+                    value={formData.startDate}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Expected Completion</label>
+                  <input
+                    type="date"
+                    name="expectedCompletionDate"
+                    className="form-input"
+                    value={formData.expectedCompletionDate}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Project Status</label>
+                  <select
+                    name="status"
+                    className="form-select"
+                    value={formData.status}
+                    onChange={handleChange}
+                  >
+                    <option value="Active">Active</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Section B: Project Financial Details */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
+              <div
+                style={{
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  color: '#70829F',
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  borderBottom: '1px solid #E5EAF1',
+                  paddingBottom: '4px',
+                }}
+              >
+                B. Project Financial Details
+              </div>
+
+              <div className="dashboard-site-form-grid">
+                <div className="form-group">
+                  <label className="form-label">
+                    Project Value (₹) <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="projectValue"
+                    className="form-input"
+                    placeholder="e.g. 10000"
+                    min="0"
+                    step="any"
+                    value={formData.projectValue}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Advance Amount (₹)</label>
+                  <input
+                    type="number"
+                    name="advanceAmount"
+                    className="form-input"
+                    placeholder="e.g. 5000"
+                    min="0"
+                    step="any"
+                    value={formData.advanceAmount}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Total Received (₹)</label>
+                  <input
+                    type="number"
+                    name="totalReceived"
+                    className="form-input"
+                    placeholder="e.g. 5000"
+                    min="0"
+                    step="any"
+                    value={formData.totalReceived}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    Bank Account{' '}
+                    {Number(formData.totalReceived) > 0 ? (
+                      <span style={{ color: '#EF4444' }}>*</span>
+                    ) : (
+                      <span style={{ color: '#94A3B8', fontWeight: 400 }}>(Optional)</span>
+                    )}
+                  </label>
+                  <select
+                    name="bankAccountId"
+                    className="form-select"
+                    value={formData.bankAccountId}
+                    onChange={handleChange}
+                    disabled={loadingBanks}
+                  >
+                    <option value="">
+                      {loadingBanks
+                        ? 'Loading banks...'
+                        : bankAccounts.length === 0
+                        ? 'No bank accounts available'
+                        : 'Select Bank Account'}
+                    </option>
+                    {bankAccounts.map((b) => (
+                      <option key={b.id || b._id} value={b.id || b._id}>
+                        {b.bankName} ({maskAccountNumber(b.accountNumber)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group dashboard-site-pending">
+                  <label className="form-label">
+                    Pending (₹) <span style={{ color: '#94A3B8' }}>(Calculated)</span>
+                  </label>
+                  <div
+                    style={{
+                      backgroundColor: '#F8FAFD',
+                      border: '1px solid #E5EAF1',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <span style={{ fontSize: '12px', color: '#70829F', fontWeight: 600 }}>
+                      Project Value − Total Actual Received:
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '16px',
+                        fontWeight: 800,
+                        color: balanceReceivable > 0 ? '#0293DE' : '#059669',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {formatINR(balanceReceivable)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+            <button
+              type="submit"
+              className="btn btn-primary-action"
+              disabled={submitting}
+            >
+              {submitting ? 'Saving Site & Finances...' : 'Save Site'}
+            </button>
+          </div>
+        </form>
+      </section>
+    )
   }
 
   return (

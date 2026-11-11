@@ -307,12 +307,7 @@ export default function SiteDetailPage({
   const workersWithMetrics = useMemo(() => {
     return siteWorkers.map((w) => {
       const dailyRate = Number(w.dailyRate || 0)
-      const attendanceDays = Array.isArray(w.attendance)
-        ? w.attendance.filter((a) => a && (a.status === 'Present' || a.status === 'Active' || !a.status)).length
-        : Number(w.attendanceDays || w.daysWorked || 0)
-      const wagesFromAttendance = attendanceDays > 0 ? attendanceDays * dailyRate : 0
-      const recordWagesEarned = Number(w.wagesEarned || 0)
-      const totalWagesEarned = wagesFromAttendance > 0 ? wagesFromAttendance : recordWagesEarned
+      const totalWagesEarned = Number(w.wagesEarned || 0)
       const totalPaid = Number(w.totalPaid !== undefined ? w.totalPaid : (w.advanceAmount || 0))
       const outstanding = Math.max(0, totalWagesEarned - totalPaid)
 
@@ -692,7 +687,6 @@ export default function SiteDetailPage({
             <div style={{ display: 'flex', gap: '28px' }}>
               {[
                 { id: 'Worker List', label: `Worker List (${totalLabourWorkers})` },
-                { id: 'Attendance', label: 'Attendance' },
                 { id: 'Labour Expenses', label: `Labour Expenses (${allLabourExpenses.length})` },
               ].map((tab) => (
                 <button
@@ -805,70 +799,6 @@ export default function SiteDetailPage({
             </div>
           )}
 
-          {/* Subtab 2: Attendance */}
-          {activeLabourTab === 'Attendance' && (
-            <div className="sites-table-scroll">
-              <table className="expenses-table">
-                <thead>
-                  <tr>
-                    <th className="th-date" style={{ padding: '14px 20px', width: '16%' }}>DATE</th>
-                    <th className="th-desc" style={{ padding: '14px 20px', width: '26%' }}>WORKER</th>
-                    <th className="th-cat" style={{ padding: '14px 20px', width: '16%' }}>TRADE</th>
-                    <th className="th-amount" style={{ padding: '14px 20px', width: '14%', textAlign: 'center' }}>STATUS</th>
-                    <th className="th-amount" style={{ padding: '14px 20px', width: '14%', textAlign: 'right' }}>DAILY WAGE</th>
-                    <th className="th-desc" style={{ padding: '14px 20px', width: '14%' }}>REMARKS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {siteWorkers.length > 0 ? (
-                    siteWorkers.map((w) => (
-                      <tr key={`att-${w._id || w.id}`} className="expense-row">
-                        <td className="td-date" style={{ padding: '14px 20px' }}>
-                          {w.joiningDate
-                            ? new Date(w.joiningDate).toLocaleDateString('en-GB')
-                            : new Date().toLocaleDateString('en-GB')}
-                        </td>
-                        <td className="td-description" style={{ padding: '14px 20px', fontWeight: 600, color: '#172033' }}>
-                          {w.name}
-                        </td>
-                        <td className="td-category" style={{ padding: '14px 20px' }}>
-                          {w.trade || 'Worker'}
-                        </td>
-                        <td className="td-amount" style={{ padding: '14px 20px', textAlign: 'center' }}>
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              padding: '2px 10px',
-                              borderRadius: '999px',
-                              fontSize: '11px',
-                              fontWeight: 600,
-                              backgroundColor: '#DCFCE7',
-                              color: '#15803D',
-                            }}
-                          >
-                            {w.status || 'Active'}
-                          </span>
-                        </td>
-                        <td className="td-amount" style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 500, color: '#172033' }}>
-                          {formatExactCurrency(w.dailyRate)}
-                        </td>
-                        <td className="td-description" style={{ padding: '14px 20px', color: '#64748B', fontSize: '12.5px' }}>
-                          {w.remarks || 'Regular daily shift'}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
-                        No attendance records currently available for {siteName}.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
 
           {/* Subtab 3: Labour Expenses */}
           {activeLabourTab === 'Labour Expenses' && (

@@ -2,6 +2,8 @@
 import { X, Receipt } from 'lucide-react'
 import { expenseService } from '../services/expenseService.js'
 import { materialService } from '../services/materialService.js'
+import WhatsAppSharePromptModal from './WhatsAppSharePromptModal.jsx'
+
 
 const getTodayString = () => new Date().toISOString().split('T')[0]
 
@@ -54,6 +56,7 @@ export default function AddExpenseModal({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [materialsList, setMaterialsList] = useState([])
+  const [whatsappExpense, setWhatsappExpense] = useState(null)
 
   // Load actual materials when modal opens
   useEffect(() => {
@@ -328,6 +331,7 @@ export default function AddExpenseModal({
         if (onExpenseCreated) {
           onExpenseCreated(created)
         }
+        setWhatsappExpense(created)
       }
       onClose()
     } catch (err) {
@@ -339,6 +343,7 @@ export default function AddExpenseModal({
   }
 
   return (
+    <>
     <div className="modal-overlay" onClick={onClose}>
       <div
         className="modal-container"
@@ -701,5 +706,17 @@ export default function AddExpenseModal({
         </form>
       </div>
     </div>
+
+    {whatsappExpense && (
+      <WhatsAppSharePromptModal
+        isOpen={Boolean(whatsappExpense)}
+        onClose={() => setWhatsappExpense(null)}
+        expense={whatsappExpense}
+        suppliers={suppliers}
+        sites={sites}
+        showNotification={showNotification}
+      />
+    )}
+    </>
   )
 }

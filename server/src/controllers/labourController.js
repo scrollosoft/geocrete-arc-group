@@ -25,6 +25,7 @@ export const createLabour = async (req, res, next) => {
       site,
       joiningDate,
       dailyRate,
+      totalAmount,
       advancePayment,
       advanceAmount,
       bankAccountId,
@@ -54,8 +55,10 @@ export const createLabour = async (req, res, next) => {
       return res.status(400).json({ error: 'Selected Construction Site does not exist.' })
     }
 
-    if (!dailyRate || Number(dailyRate) <= 0) {
-      return res.status(400).json({ error: 'Daily Wage must be greater than zero.' })
+    const rawAmount = totalAmount !== undefined && totalAmount !== '' ? totalAmount : dailyRate
+    const parsedTotalAmount = Number(rawAmount)
+    if (!rawAmount || isNaN(parsedTotalAmount) || parsedTotalAmount <= 0) {
+      return res.status(400).json({ error: 'Total Amount must be greater than zero.' })
     }
 
     // Validate Advance Payment
@@ -110,11 +113,12 @@ export const createLabour = async (req, res, next) => {
         trade: finalTrade,
         site: siteDoc._id,
         joiningDate: joiningDate ? new Date(joiningDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-        dailyRate: Number(dailyRate),
+        dailyRate: parsedTotalAmount,
+        totalAmount: parsedTotalAmount,
         advanceAmount: parsedAdvance,
         bankAccountId: parsedAdvance > 0 ? Number(bankAccountId) : null,
         totalPaid: parsedAdvance,
-        wagesEarned: 0,
+        wagesEarned: parsedTotalAmount,
         paymentType: 'Daily',
         status: 'Active',
         address: address ? address.trim() : '',
@@ -122,6 +126,19 @@ export const createLabour = async (req, res, next) => {
       },
       conn,
     )
+
+    if (parsedAdvance > 0 && bankAccountId) {
+      const workerId = worker.id || worker._id
+      const formattedDate = joiningDate ? new Date(joiningDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
+      const referenceId = `TXN-WRK-${String(workerId).padStart(4, '0')}`
+      const advRemarks = `Advance payment of ₹${parsedAdvance.toLocaleString('en-IN')}`
+      await conn.query(
+        `INSERT INTO worker_payments
+          (worker_id, site_id, bank_account_id, payment_date, amount, payment_type, payment_method, reference_id, remarks, created_by)
+         VALUES (?, ?, ?, ?, ?, 'Advance Payment', 'Bank Transfer', ?, ?, 'Admin')`,
+        [workerId, siteDoc._id, Number(bankAccountId), formattedDate, parsedAdvance, referenceId, advRemarks],
+      )
+    }
 
     await conn.commit()
     conn.release()

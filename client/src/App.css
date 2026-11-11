@@ -1655,7 +1655,12 @@
 }
 
 .sites-table-card-header {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+}
+
+.sites-table-card .sites-filter-row {
+  margin-top: 0;
+  margin-bottom: 16px;
 }
 
 .sites-table-title {
@@ -1782,23 +1787,39 @@
 
 /* Action Column & Icon Buttons */
 .th-site-actions {
-  text-align: center;
-  width: 110px;
-  min-width: 110px;
+  text-align: center !important;
+  width: 250px;
+  min-width: 250px;
 }
 
 .td-site-actions {
-  text-align: center;
+  text-align: center !important;
   white-space: nowrap;
-  width: 110px;
-  min-width: 110px;
+  width: 250px;
+  min-width: 250px;
+  vertical-align: middle;
+}
+
+.th-actions {
+  text-align: center !important;
+  width: 290px;
+  min-width: 290px;
+}
+
+.td-actions {
+  text-align: center !important;
+  white-space: nowrap;
+  width: 290px;
+  min-width: 290px;
+  vertical-align: middle;
 }
 
 .site-actions-group {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
+  vertical-align: middle;
 }
 
 .site-action-btn {
@@ -1813,6 +1834,16 @@
   cursor: pointer;
   transition: all 0.15s ease;
   padding: 0;
+  flex-shrink: 0;
+}
+
+.site-action-btn-whatsapp {
+  color: #25D366;
+}
+.site-action-btn-whatsapp:hover {
+  background-color: #ECFDF5;
+  border-color: #25D366;
+  color: #128C7E;
 }
 
 .site-action-btn-view {
@@ -2032,13 +2063,13 @@
 
 @media (max-width: 1080px) {
   .sites-stat-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
 @media (max-width: 768px) {
   .sites-stat-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(4, 1fr);
   }
   .sites-filter-row {
     flex-direction: column;
@@ -2520,26 +2551,6 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-.btn-mark-attendance {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 38px;
-  padding: 0 16px;
-  border-radius: 8px;
-  background-color: #0284C7;
-  border: 1px solid #0284C7;
-  color: #FFFFFF;
-  font-size: 13.5px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.btn-mark-attendance:hover {
-  background-color: #0369A1;
 }
 
 .btn-record-payments {
@@ -4992,11 +5003,15 @@
 
   /* Stat-card grids: 2-col at tablet */
   .stat-cards-grid,
-  .sites-stat-grid,
   .site-detail-stat-grid,
   .payments-cards-grid,
   .sod-stat-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* sites-stat-grid stays 4-col (one row) at all breakpoints */
+  .sites-stat-grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 
   /* Sites grid already 2-col at 1080px; ensure it stays */
@@ -5145,11 +5160,15 @@
 
   /* ---- Stat-card grids ---- */
   .stat-cards-grid,
-  .sites-stat-grid,
   .site-detail-stat-grid,
   .payments-cards-grid,
   .sod-stat-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* sites-stat-grid stays 4-col (one row) */
+  .sites-stat-grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 
   /* ---- Sites / Suppliers cards grid ---- */
@@ -5201,7 +5220,6 @@
     flex-wrap: wrap;
   }
 
-  .btn-mark-attendance,
   .btn-record-payments {
     flex: 1;
     justify-content: center;
@@ -5412,11 +5430,15 @@
 
   /* ---- Stat-card grids: 1-col on small phones ---- */
   .stat-cards-grid,
-  .sites-stat-grid,
   .site-detail-stat-grid,
   .payments-cards-grid,
   .sod-stat-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* sites-stat-grid: 2-col on small phones */
+  .sites-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   /* ---- Content body ---- */
@@ -5436,7 +5458,6 @@
   }
 
   /* ---- Buttons ---- */
-  .btn-mark-attendance,
   .btn-record-payments {
     font-size: 12px;
     height: 34px;
@@ -5493,3 +5514,315 @@
   }
 }
 
+
+/* -- Dashboard Tabs: Expenses | Site | Labour ----------------- */
+.dashboard-tabs-section {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.dashboard-tab-nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  border-bottom: 1px solid #E5EAF1;
+  margin-bottom: 0;
+  background: #fff;
+  padding: 0 4px;
+}
+
+.dashboard-tab-btn {
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: #70829F;
+  padding: 10px 0 14px 0;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+
+.dashboard-tab-btn:hover {
+  color: #172033;
+}
+
+.dashboard-tab-btn--active {
+  color: #0284C7;
+  font-weight: 600;
+}
+
+.dashboard-tab-btn--active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: #0284C7;
+  border-radius: 2px 2px 0 0;
+  pointer-events: none;
+}
+
+.dashboard-tab-content {
+  padding-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dashboard-tab-content .sites-page,
+.dashboard-tab-content .expenses-page {
+  gap: 0;
+}
+
+@media (max-width: 600px) {
+  .dashboard-tab-nav {
+    gap: 18px;
+  }
+  .dashboard-tab-btn {
+    font-size: 13px;
+  }
+}
+
+/* ── Dashboard Add Worker Form (3 Columns Desktop, 2 Tablet, 1 Mobile) ── */
+.dashboard-worker-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.dashboard-worker-form-grid .dashboard-worker-address {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-worker-form-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-worker-form-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* ── Dashboard Add Construction Site Form (4 Columns Desktop, 2 Tablet, 1 Mobile) ── */
+.dashboard-site-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 1.15fr);
+  gap: 14px;
+}
+
+.dashboard-site-form-grid .form-label {
+  font-size: 13px;
+  line-height: 1.3;
+  white-space: nowrap;
+  letter-spacing: -0.15px;
+}
+
+.dashboard-site-form-grid .dashboard-site-pending {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-site-form-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .dashboard-site-form-grid .form-label {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-site-form-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Dashboard Financial Summary – 4 Cards in 1 Horizontal Row
+   ══════════════════════════════════════════════════════════════════════════════ */
+.dashboard-financial-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.dashboard-financial-summary .site-stat-card {
+  margin: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Bank Accounts Chart Panel (Moved to Right Side of Forms) ── */
+.dashboard-form-chart-row {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.dashboard-form-col {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.dashboard-chart-col {
+  flex: 0 0 320px;
+  display: flex;
+  flex-direction: column;
+  align-self: flex-start;
+}
+
+.dashboard-form-chart-card {
+  background: #FFFFFF;
+  border: 1px solid #E5EAF1;
+  border-radius: var(--radius-md);
+  padding: 20px 22px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  box-sizing: border-box;
+}
+
+.dfs-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.dfs-chart-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #172033;
+}
+
+.dfs-chart-subtitle {
+  font-size: 12px;
+  color: #70829F;
+  font-weight: 500;
+}
+
+.dfs-chart-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 4px;
+}
+
+.dfs-chart-empty {
+  font-size: 13px;
+  color: #8C9CAB;
+  text-align: center;
+  padding: 12px 0;
+}
+
+/* Individual bank bar row */
+.dfs-bank-bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dfs-bank-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: #172033;
+  font-weight: 500;
+}
+
+.dfs-bank-label span:last-child {
+  color: #0284C7;
+  font-weight: 600;
+}
+
+.dfs-bank-track {
+  background: #F0F4F8;
+  border-radius: 4px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.dfs-bank-fill {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #0293DE, #0284C7);
+  transition: width 0.45s ease;
+}
+
+.dashboard-tables-container {
+  margin-top: 24px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1080px) {
+  .dashboard-financial-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dashboard-form-chart-row {
+    flex-direction: column;
+  }
+  .dashboard-chart-col {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-financial-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ── Make Payment button in table Action column ── */
+.site-action-btn-pay {
+  width: auto !important;
+  min-width: 116px;
+  height: 30px;
+  padding: 0 12px;
+  background-color: #ECFDF5;
+  color: #059669;
+  border: 1px solid #A7F3D0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  line-height: 1;
+}
+
+.site-action-btn-pay:hover:not(:disabled) {
+  background-color: #059669;
+  color: #FFFFFF;
+  border-color: #059669;
+  box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+}
+
+.site-action-btn-pay:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background-color: #F8FAFC;
+  color: #94A3B8;
+  border-color: #E2E8F0;
+  box-shadow: none;
+}

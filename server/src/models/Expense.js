@@ -13,7 +13,14 @@ const toApi = (row) => {
   let site = null
   if (row.site_id) {
     site = row.site_name
-      ? { _id: String(row.site_id), id: String(row.site_id), name: row.site_name, location: row.site_location || '' }
+      ? {
+          _id: String(row.site_id),
+          id: String(row.site_id),
+          name: row.site_name,
+          location: row.site_location || '',
+          clientName: row.site_owner || '',
+          siteOwner: row.site_owner || '',
+        }
       : String(row.site_id)
   }
 
@@ -21,7 +28,13 @@ const toApi = (row) => {
   let supplier = null
   if (row.supplier_id) {
     supplier = row.supplier_name
-      ? { _id: String(row.supplier_id), id: String(row.supplier_id), name: row.supplier_name, companyName: row.supplier_company_name || '' }
+      ? {
+          _id: String(row.supplier_id),
+          id: String(row.supplier_id),
+          name: row.supplier_name,
+          companyName: row.supplier_company_name || '',
+          phone: row.supplier_phone || '',
+        }
       : String(row.supplier_id)
   }
 
@@ -53,8 +66,10 @@ const POPULATE_SELECT = `
   e.*,
   s.name        AS site_name,
   s.location    AS site_location,
+  s.site_owner  AS site_owner,
   sup.name      AS supplier_name,
-  sup.company_name AS supplier_company_name
+  sup.company_name AS supplier_company_name,
+  sup.phone     AS supplier_phone
 `
 
 const POPULATE_JOIN = `

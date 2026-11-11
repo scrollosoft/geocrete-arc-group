@@ -7,6 +7,7 @@ export const siteService = {
   },
   getById: (id) => request(`/sites/${id}`),
   getPayments: (siteId) => request(`/sites/${siteId}/payments`),
+  recordPayment: (siteId, data) => request(`/sites/${siteId}/payments`, { method: 'POST', body: JSON.stringify(data) }),
   create: (data) => request('/sites', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/sites/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/sites/${id}`, { method: 'DELETE' }),

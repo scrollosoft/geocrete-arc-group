@@ -17,7 +17,6 @@ import labourRoutes from './routes/labourRoutes.js'
 import materialRoutes from './routes/materialRoutes.js'
 import siteOwnerRoutes from './routes/siteOwnerRoutes.js'
 import settingRoutes from './routes/settingRoutes.js'
-import attendanceRoutes from './routes/attendanceRoutes.js'
 import workerPaymentRoutes from './routes/workerPaymentRoutes.js'
 
 dotenv.config()
@@ -53,7 +52,6 @@ app.use('/api/labour', labourRoutes)
 app.use('/api/materials', materialRoutes)
 app.use('/api/site-owners', siteOwnerRoutes)
 app.use('/api/settings', settingRoutes)
-app.use('/api/attendance', attendanceRoutes)
 app.use('/api/worker-payments', workerPaymentRoutes)
 
 if (isProduction) {

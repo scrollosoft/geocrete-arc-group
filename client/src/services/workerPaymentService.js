@@ -1,6 +1,9 @@
 import { request } from './api.js'
 
 export const workerPaymentService = {
+  getAll: () =>
+    request('/worker-payments'),
+
   create: (data) =>
     request('/worker-payments', { method: 'POST', body: JSON.stringify(data) }),
 

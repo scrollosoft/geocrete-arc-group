@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   CreditCard,
   AlertTriangle,
@@ -7,20 +7,16 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  UserCheck,
   Receipt,
   Eye,
   Pencil,
   Trash2,
   X,
   ArrowLeft,
-  MoreHorizontal,
 } from 'lucide-react'
 import { labourService } from '../services/labourService.js'
-import { attendanceService } from '../services/attendanceService.js'
 import { workerPaymentService } from '../services/workerPaymentService.js'
 import { bankAccountService } from '../services/bankAccountService.js'
-import MarkAttendanceModal from './MarkAttendanceModal.jsx'
 import RecordWorkerPaymentModal from './RecordWorkerPaymentModal.jsx'
 
 export default function LabourPage({
@@ -31,8 +27,12 @@ export default function LabourPage({
   loading = false,
   onLabourChanged,
   onRefreshAccounts,
+  hideHeader = false,
+  onViewWorker,
+  initialWorker = null,
+  onBackFromDetail,
 }) {
-  const [activeTab, setActiveTab] = useState('Attendance')
+  const [activeTab, setActiveTab] = useState('Payments')
   const [search, setSearch] = useState('')
   const [siteFilter, setSiteFilter] = useState('All Sites')
   const [pageSize, setPageSize] = useState(10)
@@ -42,8 +42,12 @@ export default function LabourPage({
   const [localWorkers, setLocalWorkers] = useState(null)
 
   // View worker detail page
-  const [viewWorker, setViewWorker] = useState(null)
-  const [detailTab, setDetailTab] = useState('Attendance')
+  const [viewWorker, setViewWorker] = useState(initialWorker)
+
+  useEffect(() => {
+    setViewWorker(initialWorker)
+  }, [initialWorker])
+  const [detailTab, setDetailTab] = useState('Payments')
 
   // Edit modal
   const [editWorker, setEditWorker] = useState(null)
@@ -69,33 +73,37 @@ export default function LabourPage({
       .finally(() => setLoadingBanks(false))
   }, [])
 
-  // Attendance & Payment Modals
-  const [showMarkAttendance, setShowMarkAttendance] = useState(false)
+  // Record Payment modal
   const [showRecordPayment, setShowRecordPayment] = useState(false)
-
-  // Real attendance history for worker detail view
-  const [workerAttendanceHistory, setWorkerAttendanceHistory] = useState([])
-  const [loadingAttendance, setLoadingAttendance] = useState(false)
 
   // Real payment history for worker detail view
   const [workerPaymentHistory, setWorkerPaymentHistory] = useState([])
   const [loadingPayments, setLoadingPayments] = useState(false)
+
+  // All payments list for Payments tab
+  const [paymentsList, setPaymentsList] = useState([])
+  const [loadingPaymentsList, setLoadingPaymentsList] = useState(false)
+
+  // View Payment modal
+  const [viewPayment, setViewPayment] = useState(null)
+  const [viewPaymentHistory, setViewPaymentHistory] = useState([])
+  const [loadingViewHistory, setLoadingViewHistory] = useState(false)
+
+  // Edit Payment modal
+  const [editPayment, setEditPayment] = useState(null)
+  const [editPaymentForm, setEditPaymentForm] = useState({})
+  const [editPaymentSaving, setEditPaymentSaving] = useState(false)
+  const [editPaymentError, setEditPaymentError] = useState('')
+
+  // Delete Payment confirmation
+  const [deletePaymentItem, setDeletePaymentItem] = useState(null)
+  const [deletingPayment, setDeletingPayment] = useState(false)
 
   // Load real data when viewing a worker's detail
   useEffect(() => {
     if (!viewWorker) return
     const id = viewWorker._id || viewWorker.id
     if (!id) return
-
-    // Load attendance history
-    setLoadingAttendance(true)
-    attendanceService.getWorkerHistory(id)
-      .then((res) => {
-        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
-        setWorkerAttendanceHistory(list)
-      })
-      .catch(() => setWorkerAttendanceHistory([]))
-      .finally(() => setLoadingAttendance(false))
 
     // Load payment history
     setLoadingPayments(true)
@@ -107,6 +115,22 @@ export default function LabourPage({
       .catch(() => setWorkerPaymentHistory([]))
       .finally(() => setLoadingPayments(false))
   }, [viewWorker])
+
+  // Load all payments for the Payments tab
+  const loadAllPayments = () => {
+    setLoadingPaymentsList(true)
+    workerPaymentService.getAll()
+      .then((res) => {
+        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+        setPaymentsList(list)
+      })
+      .catch((err) => console.error('Failed to load payments:', err))
+      .finally(() => setLoadingPaymentsList(false))
+  }
+
+  useEffect(() => {
+    loadAllPayments()
+  }, [workers, localWorkers])
 
   const formatExactCurrency = (amount) => {
     if (amount === undefined || amount === null || isNaN(amount)) return '₹0.00'
@@ -165,31 +189,78 @@ export default function LabourPage({
     return matchesSearch && matchesSite
   })
 
-  // Real DB worker payments
-  const allPayments = displayWorkers
-    .filter((w) => Number(w.totalPaid) > 0)
-    .map((w, idx) => ({
-      id: `dbp-${w._id || idx}`,
-      date: w.joiningDate ? new Date(w.joiningDate).toLocaleDateString('en-GB') : '-',
-      workerName: w.name,
-      siteName: w.siteName || w.site?.name || '-',
-      type: 'Paid',
-      method: w.paymentType === 'Daily' ? 'Cash' : 'Bank Transfer',
-      amount: Number(w.totalPaid),
-      remark: w.remarks || 'Wage / Advance payment',
-    }))
+  // Build allPayments from real API paymentsList
+  const allPayments = useMemo(() => {
+    if (paymentsList.length > 0) {
+      return paymentsList.map((p) => {
+        const raw = p.rawDate || p.paymentDate || p.date || ''
+        let displayDate = '-'
+        if (raw) {
+          const d = new Date(raw)
+          displayDate = !isNaN(d.getTime()) ? d.toLocaleDateString('en-GB') : String(raw)
+        }
+        return {
+          id: p.id || p._id,
+          workerId: p.workerId || p.worker_id,
+          workerName: p.workerName || p.worker_name || '',
+          trade: p.trade || '',
+          siteName: p.siteName || p.site_name || '',
+          date: displayDate,
+          paymentDate: displayDate,
+          rawDate: raw,
+          type: p.paymentType || p.type || 'Paid',
+          paymentType: p.paymentType || p.type || 'Paid',
+          method: p.paymentMethod || p.method || 'Cash',
+          paymentMethod: p.paymentMethod || p.method || 'Cash',
+          advance: Number(p.advance !== undefined ? p.advance : (p.amount || 0)),
+          amount: Number(p.advance !== undefined ? p.advance : (p.amount || 0)),
+          totalAmount: Number(p.totalAmount || 0),
+          totalPaid: Number(p.totalPaid !== undefined ? p.totalPaid : 0),
+          pending: Number(p.pending !== undefined ? p.pending : 0),
+          bankName: p.bankName || p.bank_name || '',
+          remarks: p.remarks || p.remark || '',
+          remark: p.remarks || p.remark || '',
+        }
+      })
+    }
+    // Fallback: derive from displayWorkers
+    return displayWorkers
+      .filter((w) => Number(w.totalPaid) > 0)
+      .map((w, idx) => ({
+        id: `dbp-${w._id || idx}`,
+        workerId: w._id,
+        workerName: w.name,
+        trade: w.trade || '',
+        siteName: w.siteName || '',
+        date: w.joiningDate ? new Date(w.joiningDate).toLocaleDateString('en-GB') : '-',
+        paymentDate: w.joiningDate ? new Date(w.joiningDate).toLocaleDateString('en-GB') : '-',
+        rawDate: w.joiningDate || '',
+        type: 'Paid',
+        paymentType: 'Paid',
+        method: w.paymentType === 'Daily' ? 'Cash' : 'Bank Transfer',
+        paymentMethod: w.paymentType === 'Daily' ? 'Cash' : 'Bank Transfer',
+        advance: Number(w.totalPaid),
+        amount: Number(w.totalPaid),
+        totalAmount: Number(w.wagesEarned),
+        totalPaid: Number(w.totalPaid || 0),
+        pending: Math.max(0, Number(w.wagesEarned) - Number(w.totalPaid)),
+        bankName: '',
+        remarks: w.remarks || 'Wage / Advance payment',
+        remark: w.remarks || 'Wage / Advance payment',
+      }))
+  }, [paymentsList, displayWorkers])
 
   const filteredPayments = allPayments.filter((p) => {
     const matchesSearch =
       !search ||
-      p.workerName.toLowerCase().includes(search.toLowerCase()) ||
-      p.remark.toLowerCase().includes(search.toLowerCase()) ||
-      p.method.toLowerCase().includes(search.toLowerCase()) ||
-      p.type.toLowerCase().includes(search.toLowerCase())
+      (p.workerName || '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.remarks || p.remark || '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.method || p.paymentMethod || '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.type || p.paymentType || '').toLowerCase().includes(search.toLowerCase())
 
     const matchesSite =
       siteFilter === 'All Sites' ||
-      p.siteName.toLowerCase() === siteFilter.toLowerCase()
+      (p.siteName || '').toLowerCase() === siteFilter.toLowerCase()
 
     return matchesSearch && matchesSite
   })
@@ -224,10 +295,102 @@ export default function LabourPage({
     return items
   }
 
-  // ── VIEW ──────────────────────────────────────────────────────────────────
-  const handleView = (item) => setViewWorker(item)
+  // ── VIEW WORKER ───────────────────────────────────────────────────────────
+  const handleView = (item) => {
+    if (onViewWorker) {
+      onViewWorker(item)
+    } else {
+      setViewWorker(item)
+    }
+  }
 
-  // ── EDIT ──────────────────────────────────────────────────────────────────
+  // ── VIEW PAYMENT ──────────────────────────────────────────────────────────
+  const handleViewPayment = (p) => {
+    setViewPayment(p)
+    setViewPaymentHistory([])
+    if (p?.workerId) {
+      setLoadingViewHistory(true)
+      workerPaymentService.getByWorker(p.workerId)
+        .then((res) => {
+          const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+          setViewPaymentHistory(list)
+        })
+        .catch((err) => console.error('Failed to load payment history:', err))
+        .finally(() => setLoadingViewHistory(false))
+    }
+  }
+
+  // ── EDIT PAYMENT ──────────────────────────────────────────────────────────
+  const handleEditPayment = (p) => {
+    setEditPayment(p)
+    // Parse rawDate for date input (YYYY-MM-DD)
+    let dateVal = ''
+    const rd = p.rawDate || p.paymentDate || p.date || ''
+    if (rd) {
+      const d = new Date(rd)
+      if (!isNaN(d.getTime())) {
+        dateVal = d.toISOString().slice(0, 10)
+      }
+    }
+    setEditPaymentForm({
+      paymentDate: dateVal,
+      paymentType: p.paymentType || p.type || '',
+      amount: p.advance !== undefined ? p.advance : (p.amount || ''),
+      bankAccountId: '',
+      remarks: p.remarks || p.remark || '',
+    })
+    setEditPaymentError('')
+  }
+
+  const handleEditPaymentSave = async () => {
+    if (editPaymentSaving) return
+    if (!editPaymentForm.paymentDate) { setEditPaymentError('Payment date is required.'); return }
+    if (!editPaymentForm.paymentType) { setEditPaymentError('Payment type is required.'); return }
+    if (!editPaymentForm.amount || Number(editPaymentForm.amount) <= 0) { setEditPaymentError('Amount must be greater than 0.'); return }
+
+    setEditPaymentSaving(true)
+    setEditPaymentError('')
+    try {
+      await workerPaymentService.update(editPayment.id, {
+        paymentDate: editPaymentForm.paymentDate,
+        paymentType: editPaymentForm.paymentType,
+        amount: Number(editPaymentForm.amount),
+        bankAccountId: editPaymentForm.bankAccountId || undefined,
+        remarks: editPaymentForm.remarks,
+      })
+      setEditPayment(null)
+      loadAllPayments()
+      if (onLabourChanged) onLabourChanged()
+      if (onRefreshAccounts) onRefreshAccounts()
+    } catch (err) {
+      setEditPaymentError(err.message || 'Update failed.')
+    } finally {
+      setEditPaymentSaving(false)
+    }
+  }
+
+  // ── DELETE PAYMENT ────────────────────────────────────────────────────────
+  const handleDeletePayment = (p) => {
+    setDeletePaymentItem(p)
+  }
+
+  const handleConfirmDeletePayment = async () => {
+    if (deletingPayment || !deletePaymentItem) return
+    setDeletingPayment(true)
+    try {
+      await workerPaymentService.delete(deletePaymentItem.id)
+      setDeletePaymentItem(null)
+      loadAllPayments()
+      if (onLabourChanged) onLabourChanged()
+      if (onRefreshAccounts) onRefreshAccounts()
+    } catch (err) {
+      window.alert('Delete failed: ' + (err.message || 'Unknown error'))
+    } finally {
+      setDeletingPayment(false)
+    }
+  }
+
+  // ── EDIT WORKER ───────────────────────────────────────────────────────────
   const handleEdit = (item) => {
     setEditWorker(item)
     const prevAdv = Number(item.advancePaid !== undefined ? item.advancePaid : (item.advanceAmount || 0))
@@ -345,7 +508,7 @@ export default function LabourPage({
     }
   }
 
-  // ── DELETE ────────────────────────────────────────────────────────────────
+  // ── DELETE WORKER ─────────────────────────────────────────────────────────
   const handleDelete = async (item) => {
     if (!window.confirm(`Delete worker "${item.name}"? This cannot be undone.`)) return
     setDeletingId(item._id)
@@ -363,6 +526,83 @@ export default function LabourPage({
     }
   }
 
+  // ── VIEW PAYMENT HISTORY (useMemo) ────────────────────────────────────────
+  const viewHistoryRecords = useMemo(() => {
+    if (!viewPayment) return []
+    const source = viewPaymentHistory.length > 0
+      ? viewPaymentHistory
+      : allPayments.filter((p) => String(p.workerId) === String(viewPayment.workerId))
+
+    // Sort ascending for accurate cumulative calculation
+    const sorted = [...source].sort((a, b) => {
+      const da = new Date(a.rawDate || a.paymentDate || a.date || 0).getTime()
+      const db = new Date(b.rawDate || b.paymentDate || b.date || 0).getTime()
+      if (da !== db) return da - db
+      if (a.isInitialAdvance) return -1
+      if (b.isInitialAdvance) return 1
+      const ca = new Date(a.createdAt || 0).getTime()
+      const cb = new Date(b.createdAt || 0).getTime()
+      if (ca !== cb) return ca - cb
+      return (Number(a.id) || 0) - (Number(b.id) || 0)
+    })
+
+    // Determine total agreed amount
+    const totalAgreed = Number(viewPayment.totalAmount || 0)
+
+    let cumulative = 0
+    const calculatedRows = sorted.map((p) => {
+      const amt = Number(p.amount !== undefined ? p.amount : (p.advance || 0))
+      cumulative += amt
+      const pendingAfter = Math.max(0, totalAgreed - cumulative)
+
+      const raw = p.rawDate || p.paymentDate || p.date || ''
+      let displayDate = '-'
+      if (raw) {
+        const d = new Date(raw)
+        displayDate = !isNaN(d.getTime()) ? d.toLocaleDateString('en-GB') : String(raw)
+      }
+
+      return {
+        id: p.id || p._id,
+        isInitialAdvance: p.isInitialAdvance,
+        rawDate: raw,
+        createdAt: p.createdAt,
+        displayDate,
+        paymentType: p.paymentType || p.type || '—',
+        paymentMethod: p.paymentMethod || p.method || '—',
+        bankName: p.bankName || '—',
+        amount: amt, // Only individual transaction amount!
+        pendingAfter,
+      }
+    })
+
+    // Sort descending (latest date first; if same date, latest created transaction first)
+    calculatedRows.sort((a, b) => {
+      const da = new Date(a.rawDate || 0).getTime()
+      const db = new Date(b.rawDate || 0).getTime()
+      if (da !== db) return db - da
+      if (a.isInitialAdvance) return 1
+      if (b.isInitialAdvance) return -1
+      const ca = new Date(a.createdAt || 0).getTime()
+      const cb = new Date(b.createdAt || 0).getTime()
+      if (ca !== cb) return cb - ca
+      return (Number(b.id) || 0) - (Number(a.id) || 0)
+    })
+
+    return calculatedRows
+  }, [viewPayment, viewPaymentHistory, allPayments])
+
+  const modalTotalPaid = useMemo(() => {
+    if (!viewPayment) return 0
+    if (viewHistoryRecords.length > 0) {
+      return viewHistoryRecords.reduce((sum, r) => sum + Number(r.amount || 0), 0)
+    }
+    return Number(viewPayment.totalPaid || 0)
+  }, [viewPayment, viewHistoryRecords])
+
+  const modalTotalAgreed = Number(viewPayment?.totalAmount || 0)
+  const modalRemainingPending = Math.max(0, modalTotalAgreed - modalTotalPaid)
+
   return (
     <>
       {viewWorker ? (
@@ -373,7 +613,10 @@ export default function LabourPage({
               <button
                 type="button"
                 className="labour-back-link"
-                onClick={() => setViewWorker(null)}
+                onClick={() => {
+                  setViewWorker(null)
+                  if (onBackFromDetail) onBackFromDetail()
+                }}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -446,7 +689,7 @@ export default function LabourPage({
                 </div>
               </div>
               <div className="stat-value">{formatExactCurrency(viewWorker.wagesEarned)}</div>
-              <span className="stat-desc">Opening wages + recorded attendance</span>
+              <span className="stat-desc">Total wages earned</span>
             </div>
 
             {/* Card 3: Total Paid */}
@@ -478,7 +721,7 @@ export default function LabourPage({
           <div className="labour-table-card" style={{ padding: '18px 24px 24px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E5EAF1', paddingBottom: '0', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
-                {['Attendance', 'Payments'].map((tab) => (
+                {['Payments'].map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -494,14 +737,6 @@ export default function LabourPage({
               <div className="labour-actions-right" style={{ marginBottom: '8px' }}>
                 <button
                   type="button"
-                  className="btn-mark-attendance"
-                  onClick={() => setShowMarkAttendance(true)}
-                >
-                  <UserCheck size={16} />
-                  <span>Mark Attendance</span>
-                </button>
-                <button
-                  type="button"
                   className="btn-record-payments"
                   onClick={() => setShowRecordPayment(true)}
                 >
@@ -511,62 +746,7 @@ export default function LabourPage({
               </div>
             </div>
 
-            {/* Tab: Attendance */}
-            {detailTab === 'Attendance' && (
-              <div className="sites-table-scroll">
-                {loadingAttendance && (
-                  <div style={{ textAlign: 'center', padding: '32px', color: '#70829F' }}>Loading attendance...</div>
-                )}
-                {!loadingAttendance && workerAttendanceHistory.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '32px', color: '#70829F', fontSize: '14px' }}>
-                    No attendance records found for {viewWorker.name}.
-                  </div>
-                )}
-                {!loadingAttendance && workerAttendanceHistory.length > 0 && (
-                  <table className="labour-table">
-                    <thead>
-                      <tr>
-                        <th style={{ padding: '12px 14px' }}>DATE</th>
-                        <th style={{ padding: '12px 14px' }}>SITE</th>
-                        <th style={{ padding: '12px 14px' }}>UNITS</th>
-                        <th style={{ padding: '12px 14px' }}>STATUS</th>
-                        <th style={{ padding: '12px 14px' }}>DAILY WAGE</th>
-                        <th style={{ padding: '12px 14px' }}>EARNED</th>
-                        <th style={{ padding: '12px 14px' }}>REMARKS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {workerAttendanceHistory.map((a) => {
-                        const statusColors = {
-                          Present: { bg: '#DCFCE7', color: '#15803D' },
-                          'Half Day': { bg: '#FEF9C3', color: '#A16207' },
-                          Absent: { bg: '#FEE2E2', color: '#B91C1C' },
-                          Leave: { bg: '#E0E7FF', color: '#4338CA' },
-                        }
-                        const sc = statusColors[a.status] || { bg: '#F1F5F9', color: '#64748B' }
-                        return (
-                          <tr key={a.id} className="labour-data-row">
-                            <td style={{ padding: '14px', fontWeight: 600, color: '#172033' }}>{a.attendanceDate}</td>
-                            <td style={{ padding: '14px', color: '#70829F' }}>{a.siteName}</td>
-                            <td style={{ padding: '14px', color: '#172033' }}>{a.units}</td>
-                            <td style={{ padding: '14px' }}>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, background: sc.bg, color: sc.color }}>
-                                {a.status}
-                              </span>
-                            </td>
-                            <td style={{ padding: '14px', fontWeight: 600, color: '#172033' }}>{formatExactCurrency(a.dailyWage)}</td>
-                            <td style={{ padding: '14px', fontWeight: 600, color: '#15803D' }}>{formatExactCurrency(a.earnedWage)}</td>
-                            <td style={{ padding: '14px', color: '#70829F' }}>{a.remarks || '—'}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            )}
-
-            {/* Tab 3: Payments */}
+            {/* Tab: Payments */}
             {detailTab === 'Payments' && (
               <div className="sites-table-scroll">
                 {loadingPayments && (
@@ -620,399 +800,715 @@ export default function LabourPage({
       ) : (
         <div className="labour-page">
           {/* 1. Header with Breadcrumb and Action Button */}
-          <div className="sites-header-wrap">
-            <div className="sites-header-left">
-              <div className="sites-breadcrumb">
-                <span className="breadcrumb-root">WORKSPACE</span>
-                <span className="breadcrumb-slash">/</span>
-                <span className="breadcrumb-active">LABOUR</span>
+          {!hideHeader && (
+            <div className="sites-header-wrap">
+              <div className="sites-header-left">
+                <div className="sites-breadcrumb">
+                  <span className="breadcrumb-root">WORKSPACE</span>
+                  <span className="breadcrumb-slash">/</span>
+                  <span className="breadcrumb-active">LABOUR</span>
+                </div>
+                <h1 className="sites-title">Labour</h1>
+                <p className="sites-subtitle">Manage your workforce and wage settlements.</p>
               </div>
-              <h1 className="sites-title">Labour</h1>
-              <p className="sites-subtitle">Manage your workforce, daily attendance and wage settlements.</p>
-            </div>
 
-            <button
-              type="button"
-              className="btn btn-primary-action btn-add-site-header"
-              onClick={onOpenAddWorker}
-            >
-              <Plus size={16} />
-              <span>Add Worker</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                className="btn btn-primary-action btn-add-site-header"
+                onClick={onOpenAddWorker}
+              >
+                <Plus size={16} />
+                <span>Add Worker</span>
+              </button>
+            </div>
+          )}
 
           {/* 2. Top Summary Metric Cards (4 in a row) */}
-          <div className="sites-stat-grid">
-            {/* Card 1: Total Workers */}
-            <div className="site-stat-card">
-              <div className="stat-icon-wrap stat-icon-blue">
-                <CreditCard size={18} />
+          {!hideHeader && (
+            <div className="sites-stat-grid">
+              {/* Card 1: Total Workers */}
+              <div className="site-stat-card">
+                <div className="stat-icon-wrap stat-icon-blue">
+                  <CreditCard size={18} />
+                </div>
+                <span className="stat-label">Total Workers</span>
+                <div className="stat-value">{totalWorkersCount}</div>
+                <span className="stat-desc">Across active construction sites</span>
               </div>
-              <span className="stat-label">Total Workers</span>
-              <div className="stat-value">{totalWorkersCount}</div>
-              <span className="stat-desc">Across active construction sites</span>
-            </div>
 
-            {/* Card 2: Wages Earned */}
-            <div className="site-stat-card">
-              <div className="stat-icon-wrap stat-icon-green">
-                <CreditCard size={18} />
+              {/* Card 2: Wages Earned */}
+              <div className="site-stat-card">
+                <div className="stat-icon-wrap stat-icon-green">
+                  <CreditCard size={18} />
+                </div>
+                <span className="stat-label">Wages Earned</span>
+                <div className="stat-value">{formatExactCurrency(totalWagesEarned)}</div>
+                <span className="stat-desc">Total wages earned</span>
               </div>
-              <span className="stat-label">Wages Earned</span>
-              <div className="stat-value">{formatExactCurrency(totalWagesEarned)}</div>
-              <span className="stat-desc">Opening wages + recorded attendance</span>
-            </div>
 
-            {/* Card 3: Total Paid */}
-            <div className="site-stat-card">
-              <div className="stat-icon-wrap stat-icon-orange">
-                <CreditCard size={18} />
+              {/* Card 3: Total Paid */}
+              <div className="site-stat-card">
+                <div className="stat-icon-wrap stat-icon-orange">
+                  <CreditCard size={18} />
+                </div>
+                <span className="stat-label">Total Paid</span>
+                <div className="stat-value">{formatExactCurrency(totalPaidAmount)}</div>
+                <span className="stat-desc">Wages and advances</span>
               </div>
-              <span className="stat-label">Total Paid</span>
-              <div className="stat-value">{formatExactCurrency(totalPaidAmount)}</div>
-              <span className="stat-desc">Wages and advances</span>
-            </div>
 
-            {/* Card 4: Outstanding */}
-            <div className="site-stat-card">
-              <div className="stat-icon-wrap stat-icon-rose">
-                <AlertTriangle size={18} />
+              {/* Card 4: Outstanding */}
+              <div className="site-stat-card">
+                <div className="stat-icon-wrap stat-icon-rose">
+                  <AlertTriangle size={18} />
+                </div>
+                <span className="stat-label">Pending</span>
+                <div className="stat-value">{formatExactCurrency(totalOutstanding)}</div>
+                <span className="stat-desc">Payable to your workforce</span>
               </div>
-              <span className="stat-label">Pending</span>
-              <div className="stat-value">{formatExactCurrency(totalOutstanding)}</div>
-              <span className="stat-desc">Payable to your workforce</span>
             </div>
-          </div>
+          )}
 
           {/* 3. Main Card with Tabs, Search, Actions, Table and Pagination */}
           <div className="labour-table-card">
-        {/* Navigation Tabs Header */}
-        <div className="labour-tabs-bar">
-          {['Attendance', 'Payments'].map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={`labour-tab-btn ${activeTab === tab ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab(tab)
-                setCurrentPage(1)
-              }}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {/* Filter and Action Row */}
-        <div className="labour-filter-row">
-          <div className="labour-filter-left">
-            {/* Search Input */}
-            <div className="sites-search-box" style={{ width: '280px' }}>
-              <Search size={16} className="sites-search-icon" />
-              <input
-                type="text"
-                className="sites-search-input"
-                placeholder="Search name, trade, phone..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
-                  setCurrentPage(1)
-                }}
-              />
+            {/* Navigation Tabs Header */}
+            <div className="labour-tabs-bar">
+              {['Workers', 'Payments'].map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  className={`labour-tab-btn ${activeTab === tab ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab(tab)
+                    setCurrentPage(1)
+                  }}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
 
-            {/* Site Select Dropdown */}
-            <div className="site-select-wrapper">
-              <select
-                className="site-pill-select"
-                value={siteFilter}
-                onChange={(e) => {
-                  setSiteFilter(e.target.value)
-                  setCurrentPage(1)
-                }}
-              >
-                <option value="All Sites">All Sites</option>
-                {sites.map((s) => (
-                  <option key={s._id} value={s.name}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="site-select-arrow" />
-            </div>
-          </div>
+            {/* Filter and Action Row */}
+            <div className="labour-filter-row">
+              <div className="labour-filter-left">
+                {/* Search Input */}
+                <div className="sites-search-box" style={{ width: '280px' }}>
+                  <Search size={16} className="sites-search-icon" />
+                  <input
+                    type="text"
+                    className="sites-search-input"
+                    placeholder="Search name, trade, phone..."
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                  />
+                </div>
 
-          <div className="labour-actions-right">
-            <button
-              type="button"
-              className="btn-mark-attendance"
-              onClick={() => setShowMarkAttendance(true)}
-            >
-              <UserCheck size={16} />
-              <span>Mark Attendance</span>
-            </button>
-            <button
-              type="button"
-              className="btn-record-payments"
-              onClick={() => setShowRecordPayment(true)}
-            >
-              <Receipt size={16} />
-              <span>Record Payment's</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Table: If activeTab === 'Payments', render Payments Table. Otherwise render Workers Table */}
-        {activeTab === 'Payments' ? (
-          <div className="sites-table-scroll">
-            <table className="labour-table">
-              <thead>
-                <tr>
-                  <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>DATE</th>
-                  <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>WORKER</th>
-                  <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>TYPE</th>
-                  <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>METHOD</th>
-                  <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>AMMOUNT</th>
-                  <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>REMARK</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentPayments.length > 0 ? (
-                  currentPayments.map((p) => (
-                    <tr key={p.id} className="labour-data-row">
-                      <td style={{ padding: '18px 16px', color: '#70829F', fontSize: '13.5px' }}>
-                        {p.date}
-                      </td>
-                      <td style={{ padding: '18px 16px', fontWeight: 700, color: '#172033', fontSize: '13.5px' }}>
-                        {p.workerName}
-                      </td>
-                      <td style={{ padding: '18px 16px' }}>
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '4px 14px',
-                          borderRadius: '999px',
-                          fontSize: '11.5px',
-                          fontWeight: 600,
-                          backgroundColor: p.type === 'Advance' ? '#FFEDD5' : '#DCFCE7',
-                          color: p.type === 'Advance' ? '#C2410C' : '#15803D',
-                        }}>
-                          {p.type}
-                        </span>
-                      </td>
-                      <td style={{ padding: '18px 16px', color: '#475569', fontSize: '13.5px' }}>
-                        {p.method}
-                      </td>
-                      <td style={{ padding: '18px 16px', fontWeight: 500, color: '#172033', fontSize: '13.5px' }}>
-                        {formatExactCurrency(p.amount)}
-                      </td>
-                      <td style={{ padding: '18px 16px', color: '#64748B', fontSize: '13.5px' }}>
-                        {p.remark}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="td-empty" style={{ padding: '36px', textAlign: 'center' }}>
-                      No payment records match the selected filter.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="sites-table-scroll">
-            <table className="labour-table">
-              <thead>
-                <tr>
-                  <th className="th-labour-worker">WORKER</th>
-                  <th className="th-labour-trade">TRADE OR SITE</th>
-                  <th className="th-labour-rate">DAILY RATE</th>
-                  <th className="th-labour-earned">EARNED</th>
-                  <th className="th-labour-paid">PAID</th>
-                  <th className="th-labour-out">PENDING</th>
-                  <th className="th-labour-actions">ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  [1, 2, 3, 4].map((i) => (
-                    <tr key={i} className="skeleton-row">
-                      <td colSpan={7}>
-                        <div className="skeleton-line" style={{ height: '24px', margin: '8px 0' }} />
-                      </td>
-                    </tr>
-                  ))
-                ) : currentRecords.length > 0 ? (
-                  currentRecords.map((item) => (
-                    <tr key={item._id} className="labour-data-row">
-                      {/* Worker: Name and Phone stacked */}
-                      <td className="td-labour-worker">
-                        <div className="worker-cell">
-                          <span className="worker-name">{item.name}</span>
-                          <span className="worker-phone">{item.phone}</span>
-                        </div>
-                      </td>
-
-                      {/* Trade or Site: Trade on top, Site beneath in light grey */}
-                      <td className="td-labour-trade">
-                        <div className="trade-cell">
-                          <span className="trade-title">{item.trade}</span>
-                          <span className="trade-site">{item.siteName}</span>
-                        </div>
-                      </td>
-
-                      {/* Daily Rate */}
-                      <td className="td-labour-rate">{formatExactCurrency(item.dailyRate)}</td>
-
-                      {/* Earned */}
-                      <td className="td-labour-earned">{formatExactCurrency(item.wagesEarned)}</td>
-
-                      {/* Paid */}
-                      <td className="td-labour-paid">{formatExactCurrency(item.totalPaid)}</td>
-
-                      {/* Outstanding with Orange Pill Badge */}
-                      <td className="td-labour-out">
-                        <span className="labour-outstanding-badge">
-                          {formatExactCurrency(item.outstanding)}
-                        </span>
-                      </td>
-
-                      {/* Actions: View / Edit / Delete */}
-                      <td className="td-labour-actions">
-                        <div className="labour-action-btns">
-                          <button type="button" title="View Details" className="labour-action-btn labour-action-view" onClick={() => handleView(item)}>
-                            <Eye size={15} />
-                          </button>
-                          <button type="button" title="Edit Worker" className="labour-action-btn labour-action-edit" onClick={() => handleEdit(item)}>
-                            <Pencil size={15} />
-                          </button>
-                          <button type="button" title="Delete Worker" className="labour-action-btn labour-action-delete" disabled={deletingId === item._id} onClick={() => handleDelete(item)}>
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="td-empty" style={{ padding: '36px', textAlign: 'center' }}>
-                      No labour records match the selected filter.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Scrollbar Indicator Bar */}
-        <div className="sites-scrollbar-indicator" style={{ marginTop: '16px' }}>
-          <div className="scrollbar-thumb-indicator" />
-        </div>
-
-        {/* Dynamic Pagination Footer */}
-        <div className="sites-pagination-row" style={{ marginTop: '16px' }}>
-          <div className="pagination-left">
-            <span className="pagination-show-label">Show</span>
-            <div className="pagination-page-size-select-wrap">
-              <select
-                className="pagination-page-size-select"
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value))
-                  setCurrentPage(1)
-                }}
-              >
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </select>
-              <ChevronDown size={12} className="pagination-select-arrow" />
-            </div>
-            <span className="pagination-range-text">
-              {totalRecords === 0
-                ? '0–0 of 0'
-                : `${startIndex + 1}–${endIndex} of ${totalRecords.toLocaleString('en-IN')}`}
-            </span>
-          </div>
-
-          <div className="pagination-right">
-            <button
-              type="button"
-              className="pagination-nav-btn"
-              disabled={activePage <= 1 || totalRecords === 0}
-              onClick={() => handlePageChange(activePage - 1)}
-            >
-              <ChevronLeft size={14} strokeWidth={1.75} />
-              <span>Back</span>
-            </button>
-
-            {totalPages > 1 &&
-              getPaginationItems().map((item, index) => {
-                if (item === '...') {
-                  return (
-                    <span key={`dots-${index}`} className="pagination-dots">
-                      ...
-                    </span>
-                  )
-                }
-                const isSelected = item === activePage
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`pagination-num-btn ${isSelected ? 'pagination-num-active' : ''}`}
-                    onClick={() => handlePageChange(item)}
+                {/* Site Select Dropdown */}
+                <div className="site-select-wrapper">
+                  <select
+                    className="site-pill-select"
+                    value={siteFilter}
+                    onChange={(e) => {
+                      setSiteFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
                   >
-                    {item}
-                  </button>
-                )
-              })}
+                    <option value="All Sites">All Sites</option>
+                    {sites.map((s) => (
+                      <option key={s._id} value={s.name}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="site-select-arrow" />
+                </div>
+              </div>
 
-            <button
-              type="button"
-              className="pagination-nav-btn"
-              disabled={activePage >= totalPages || totalRecords === 0}
-              onClick={() => handlePageChange(activePage + 1)}
-            >
-              <span>Next</span>
-              <ChevronRight size={14} strokeWidth={1.75} />
-            </button>
+              <div className="labour-actions-right">
+                <button
+                  type="button"
+                  className="btn-record-payments"
+                  onClick={() => setShowRecordPayment(true)}
+                >
+                  <Receipt size={16} />
+                  <span>Record Payment's</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Table: If activeTab === 'Payments', render Payments Table. Otherwise render Workers Table */}
+            {activeTab === 'Payments' ? (
+              <div className="sites-table-scroll">
+                {loadingPaymentsList && (
+                  <div style={{ textAlign: 'center', padding: '32px', color: '#70829F' }}>Loading payments...</div>
+                )}
+                {!loadingPaymentsList && (
+                  <table className="labour-table">
+                    <thead>
+                      <tr>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>DATE</th>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>WORKER</th>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>TYPE</th>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>METHOD</th>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>ADVANCE</th>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>TOTAL AMOUNT</th>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>PENDING</th>
+                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>ACTION</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentPayments.length > 0 ? (
+                        currentPayments.map((p) => {
+                          const typeColors = {
+                            'Advance Payment': { bg: '#FFEDD5', color: '#C2410C' },
+                            'Wage Payment': { bg: '#DCFCE7', color: '#15803D' },
+                            'Final Settlement': { bg: '#E0E7FF', color: '#4338CA' },
+                            'Paid': { bg: '#DCFCE7', color: '#15803D' },
+                          }
+                          const tc = typeColors[p.type || p.paymentType] || { bg: '#F1F5F9', color: '#64748B' }
+                          return (
+                            <tr key={p.id} className="labour-data-row">
+                              <td style={{ padding: '18px 16px', color: '#70829F', fontSize: '13.5px' }}>
+                                {p.date || p.paymentDate}
+                              </td>
+                              <td style={{ padding: '18px 16px', fontWeight: 700, color: '#172033', fontSize: '13.5px' }}>
+                                {p.workerName}
+                              </td>
+                              <td style={{ padding: '18px 16px' }}>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: '4px 14px',
+                                  borderRadius: '999px',
+                                  fontSize: '11.5px',
+                                  fontWeight: 600,
+                                  backgroundColor: tc.bg,
+                                  color: tc.color,
+                                }}>
+                                  {p.type || p.paymentType}
+                                </span>
+                              </td>
+                              <td style={{ padding: '18px 16px', color: '#475569', fontSize: '13.5px' }}>
+                                {p.method || p.paymentMethod}
+                              </td>
+                              <td style={{ padding: '18px 16px', fontWeight: 600, color: '#172033', fontSize: '13.5px' }}>
+                                {formatExactCurrency(p.advance !== undefined ? p.advance : p.amount)}
+                              </td>
+                              <td style={{ padding: '18px 16px', fontWeight: 500, color: '#172033', fontSize: '13.5px' }}>
+                                {formatExactCurrency(p.totalAmount)}
+                              </td>
+                              <td style={{ padding: '18px 16px', fontWeight: 600, color: '#DC2626', fontSize: '13.5px' }}>
+                                {formatExactCurrency(p.pending)}
+                              </td>
+                              <td style={{ padding: '18px 16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <button
+                                    type="button"
+                                    title="View Payment"
+                                    className="labour-action-btn labour-action-view"
+                                    onClick={() => handleViewPayment(p)}
+                                  >
+                                    <Eye size={15} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Edit Payment"
+                                    className="labour-action-btn labour-action-edit"
+                                    onClick={() => handleEditPayment(p)}
+                                  >
+                                    <Pencil size={15} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Delete Payment"
+                                    className="labour-action-btn labour-action-delete"
+                                    onClick={() => handleDeletePayment(p)}
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={8} className="td-empty" style={{ padding: '36px', textAlign: 'center' }}>
+                            No payment records match the selected filter.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            ) : (
+              <div className="sites-table-scroll">
+                <table className="labour-table">
+                  <thead>
+                    <tr>
+                      <th className="th-labour-worker">WORKER</th>
+                      <th className="th-labour-trade">TRADE OR SITE</th>
+                      <th className="th-labour-rate">DAILY RATE</th>
+                      <th className="th-labour-earned">EARNED</th>
+                      <th className="th-labour-paid">PAID</th>
+                      <th className="th-labour-out">PENDING</th>
+                      <th className="th-labour-actions">ACTIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      [1, 2, 3, 4].map((i) => (
+                        <tr key={i} className="skeleton-row">
+                          <td colSpan={7}>
+                            <div className="skeleton-line" style={{ height: '24px', margin: '8px 0' }} />
+                          </td>
+                        </tr>
+                      ))
+                    ) : currentRecords.length > 0 ? (
+                      currentRecords.map((item) => (
+                        <tr key={item._id} className="labour-data-row">
+                          {/* Worker: Name and Phone stacked */}
+                          <td className="td-labour-worker">
+                            <div className="worker-cell">
+                              <span className="worker-name">{item.name}</span>
+                              <span className="worker-phone">{item.phone}</span>
+                            </div>
+                          </td>
+
+                          {/* Trade or Site: Trade on top, Site beneath in light grey */}
+                          <td className="td-labour-trade">
+                            <div className="trade-cell">
+                              <span className="trade-title">{item.trade}</span>
+                              <span className="trade-site">{item.siteName}</span>
+                            </div>
+                          </td>
+
+                          {/* Daily Rate */}
+                          <td className="td-labour-rate">{formatExactCurrency(item.dailyRate)}</td>
+
+                          {/* Earned */}
+                          <td className="td-labour-earned">{formatExactCurrency(item.wagesEarned)}</td>
+
+                          {/* Paid */}
+                          <td className="td-labour-paid">{formatExactCurrency(item.totalPaid)}</td>
+
+                          {/* Outstanding with Orange Pill Badge */}
+                          <td className="td-labour-out">
+                            <span className="labour-outstanding-badge">
+                              {formatExactCurrency(item.outstanding)}
+                            </span>
+                          </td>
+
+                          {/* Actions: View / Edit / Delete */}
+                          <td className="td-labour-actions">
+                            <div className="labour-action-btns">
+                              <button type="button" title="View Details" className="labour-action-btn labour-action-view" onClick={() => handleView(item)}>
+                                <Eye size={15} />
+                              </button>
+                              <button type="button" title="Edit Worker" className="labour-action-btn labour-action-edit" onClick={() => handleEdit(item)}>
+                                <Pencil size={15} />
+                              </button>
+                              <button type="button" title="Delete Worker" className="labour-action-btn labour-action-delete" disabled={deletingId === item._id} onClick={() => handleDelete(item)}>
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="td-empty" style={{ padding: '36px', textAlign: 'center' }}>
+                          No labour records match the selected filter.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Scrollbar Indicator Bar */}
+            <div className="sites-scrollbar-indicator" style={{ marginTop: '16px' }}>
+              <div className="scrollbar-thumb-indicator" />
+            </div>
+
+            {/* Dynamic Pagination Footer */}
+            <div className="sites-pagination-row" style={{ marginTop: '16px' }}>
+              <div className="pagination-left">
+                <span className="pagination-show-label">Show</span>
+                <div className="pagination-page-size-select-wrap">
+                  <select
+                    className="pagination-page-size-select"
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value))
+                      setCurrentPage(1)
+                    }}
+                  >
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                  <ChevronDown size={12} className="pagination-select-arrow" />
+                </div>
+                <span className="pagination-range-text">
+                  {totalRecords === 0
+                    ? '0–0 of 0'
+                    : `${startIndex + 1}–${endIndex} of ${totalRecords.toLocaleString('en-IN')}`}
+                </span>
+              </div>
+
+              <div className="pagination-right">
+                <button
+                  type="button"
+                  className="pagination-nav-btn"
+                  disabled={activePage <= 1 || totalRecords === 0}
+                  onClick={() => handlePageChange(activePage - 1)}
+                >
+                  <ChevronLeft size={14} strokeWidth={1.75} />
+                  <span>Back</span>
+                </button>
+
+                {totalPages > 1 &&
+                  getPaginationItems().map((item, index) => {
+                    if (item === '...') {
+                      return (
+                        <span key={`dots-${index}`} className="pagination-dots">
+                          ...
+                        </span>
+                      )
+                    }
+                    const isSelected = item === activePage
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        className={`pagination-num-btn ${isSelected ? 'pagination-num-active' : ''}`}
+                        onClick={() => handlePageChange(item)}
+                      >
+                        {item}
+                      </button>
+                    )
+                  })}
+
+                <button
+                  type="button"
+                  className="pagination-nav-btn"
+                  disabled={activePage >= totalPages || totalRecords === 0}
+                  onClick={() => handlePageChange(activePage + 1)}
+                >
+                  <span>Next</span>
+                  <ChevronRight size={14} strokeWidth={1.75} />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-  )}
+      )}
 
-      {/* ── MARK ATTENDANCE MODAL ─────────────────────────────────────────── */}
-      {showMarkAttendance && (
-        <MarkAttendanceModal
-          sites={sites}
-          selectedSite={viewWorker ? sites.find((s) => s.name === (viewWorker.siteName || '')) : null}
-          onClose={() => setShowMarkAttendance(false)}
-          onSuccess={() => {
-            // Refresh attendance history if a worker is currently viewed
-            if (viewWorker) {
-              const id = viewWorker._id || viewWorker.id
-              attendanceService.getWorkerHistory(id)
-                .then((res) => {
-                  const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
-                  setWorkerAttendanceHistory(list)
-                })
-                .catch(() => {})
-            }
-          }}
-        />
+      {/* ── VIEW PAYMENT MODAL ─────────────────────────────────────────────── */}
+      {viewPayment && (
+        <div className="lmodal-overlay" onClick={() => setViewPayment(null)}>
+          <div
+            className="lmodal-box"
+            style={{ maxWidth: '760px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="lmodal-header">
+              <h2 className="lmodal-title">Payment Details</h2>
+              <button className="lmodal-close" onClick={() => setViewPayment(null)}><X size={18} /></button>
+            </div>
+            <div className="lmodal-body">
+              {/* Top section: Worker info */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px', marginBottom: '24px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>WORKER NAME</div>
+                  <div style={{ fontWeight: 700, color: '#172033', fontSize: '15px' }}>{viewPayment.workerName}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>TRADE / ROLE</div>
+                  <div style={{ color: '#475569', fontSize: '14px' }}>
+                    {displayWorkers.find((w) => String(w._id) === String(viewPayment.workerId))?.trade || '—'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>CONSTRUCTION SITE</div>
+                  <div style={{ color: '#475569', fontSize: '14px' }}>{viewPayment.siteName || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>PAYMENT DATE</div>
+                  <div style={{ color: '#475569', fontSize: '14px' }}>{viewPayment.date || viewPayment.paymentDate || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>PAYMENT TYPE</div>
+                  <div>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', padding: '4px 14px', borderRadius: '999px',
+                      fontSize: '12px', fontWeight: 600,
+                      background: viewPayment.paymentType === 'Advance Payment' ? '#FFEDD5' : '#DCFCE7',
+                      color: viewPayment.paymentType === 'Advance Payment' ? '#C2410C' : '#15803D',
+                    }}>
+                      {viewPayment.type || viewPayment.paymentType}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>PAYMENT METHOD</div>
+                  <div style={{ color: '#475569', fontSize: '14px' }}>{viewPayment.method || viewPayment.paymentMethod || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>ADVANCE AMOUNT</div>
+                  <div style={{ fontWeight: 700, color: '#0284C7', fontSize: '16px' }}>{formatExactCurrency(viewPayment.advance !== undefined ? viewPayment.advance : viewPayment.amount)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>TOTAL AGREED AMOUNT</div>
+                  <div style={{ fontWeight: 700, color: '#172033', fontSize: '16px' }}>{formatExactCurrency(modalTotalAgreed)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>TOTAL PAID AMOUNT</div>
+                  <div style={{ fontWeight: 700, color: '#15803D', fontSize: '16px' }}>
+                    {formatExactCurrency(modalTotalPaid)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>REMAINING PENDING</div>
+                  <div style={{ fontWeight: 700, color: '#DC2626', fontSize: '16px' }}>{formatExactCurrency(modalRemainingPending)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>BANK ACCOUNT</div>
+                  <div style={{ color: '#475569', fontSize: '14px' }}>{viewPayment.bankName || '—'}</div>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '6px' }}>REMARKS / NOTE</div>
+                  <div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '10px 14px', color: '#475569', fontSize: '13.5px', minHeight: '40px' }}>
+                    {viewPayment.remarks || viewPayment.remark || '—'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment History section */}
+              <div style={{ borderTop: '1px solid #E5EAF1', paddingTop: '20px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#172033', marginBottom: '14px' }}>Payment History</h3>
+                {loadingViewHistory && (
+                  <div style={{ textAlign: 'center', padding: '24px', color: '#70829F' }}>Loading history...</div>
+                )}
+                {!loadingViewHistory && viewHistoryRecords.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '24px', color: '#70829F', fontSize: '13.5px' }}>
+                    No payment history found.
+                  </div>
+                )}
+                {!loadingViewHistory && viewHistoryRecords.length > 0 && (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="labour-table" style={{ fontSize: '13px' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding: '10px 12px', color: '#8C9CAB', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px' }}>DATE</th>
+                          <th style={{ padding: '10px 12px', color: '#8C9CAB', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px' }}>PAYMENT TYPE</th>
+                          <th style={{ padding: '10px 12px', color: '#8C9CAB', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px' }}>PAYMENT METHOD</th>
+                          <th style={{ padding: '10px 12px', color: '#8C9CAB', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px' }}>BANK ACCOUNT</th>
+                          <th style={{ padding: '10px 12px', color: '#8C9CAB', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px' }}>PAID AMOUNT (₹)</th>
+                          <th style={{ padding: '10px 12px', color: '#8C9CAB', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px' }}>PENDING AFTER (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {viewHistoryRecords.map((row, idx) => (
+                          <tr key={row.id || idx} className="labour-data-row">
+                            <td style={{ padding: '12px', color: '#70829F' }}>{row.displayDate || '—'}</td>
+                            <td style={{ padding: '12px' }}>
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: '999px',
+                                fontSize: '11px', fontWeight: 600,
+                                background: row.paymentType === 'Advance Payment' ? '#FFEDD5' : '#DCFCE7',
+                                color: row.paymentType === 'Advance Payment' ? '#C2410C' : '#15803D',
+                              }}>
+                                {row.paymentType}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px', color: '#475569' }}>{row.paymentMethod}</td>
+                            <td style={{ padding: '12px', color: '#475569' }}>{row.bankName}</td>
+                            <td style={{ padding: '12px', fontWeight: 600, color: '#172033' }}>{formatExactCurrency(row.amount)}</td>
+                            <td style={{ padding: '12px', fontWeight: 600, color: '#DC2626' }}>{formatExactCurrency(row.pendingAfter)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="lmodal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-primary-action"
+                style={{
+                  background: '#16A34A',
+                  borderColor: '#16A34A',
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  padding: '7px 16px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onClick={() => {
+                  const targetWorker = displayWorkers.find((w) => String(w._id) === String(viewPayment.workerId)) || {
+                    _id: viewPayment.workerId,
+                    name: viewPayment.workerName,
+                    trade: viewPayment.trade,
+                    siteId: viewPayment.siteId,
+                    outstanding: modalRemainingPending,
+                  }
+                  setViewWorker(targetWorker)
+                  setShowRecordPayment(true)
+                }}
+              >
+                <Receipt size={15} />
+                <span>Record Payment</span>
+              </button>
+              <button className="ledit-cancel" onClick={() => setViewPayment(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT PAYMENT MODAL ─────────────────────────────────────────────── */}
+      {editPayment && (
+        <div className="lmodal-overlay" onClick={() => setEditPayment(null)}>
+          <div className="lmodal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="lmodal-header">
+              <h2 className="lmodal-title">Edit Payment</h2>
+              <button className="lmodal-close" onClick={() => setEditPayment(null)}><X size={18} /></button>
+            </div>
+            <div className="lmodal-body">
+              {editPaymentError && <div className="ledit-error">{editPaymentError}</div>}
+              <div className="ledit-grid">
+                <div className="ledit-field ledit-full">
+                  <label className="ledit-label">Worker</label>
+                  <input
+                    className="ledit-input"
+                    type="text"
+                    readOnly
+                    value={editPayment.workerName || ''}
+                    style={{ background: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' }}
+                  />
+                </div>
+                <div className="ledit-field">
+                  <label className="ledit-label">Payment Date *</label>
+                  <input
+                    className="ledit-input"
+                    type="date"
+                    value={editPaymentForm.paymentDate || ''}
+                    onChange={(e) => setEditPaymentForm(f => ({ ...f, paymentDate: e.target.value }))}
+                  />
+                </div>
+                <div className="ledit-field">
+                  <label className="ledit-label">Payment Type *</label>
+                  <select
+                    className="ledit-input"
+                    value={editPaymentForm.paymentType || ''}
+                    onChange={(e) => setEditPaymentForm(f => ({ ...f, paymentType: e.target.value }))}
+                  >
+                    <option value="">Select type...</option>
+                    <option value="Advance Payment">Advance Payment</option>
+                    <option value="Wage Payment">Wage Payment</option>
+                    <option value="Final Settlement">Final Settlement</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div className="ledit-field">
+                  <label className="ledit-label">Amount (₹) *</label>
+                  <input
+                    className="ledit-input"
+                    type="number"
+                    min="0"
+                    value={editPaymentForm.amount || ''}
+                    onChange={(e) => setEditPaymentForm(f => ({ ...f, amount: e.target.value }))}
+                  />
+                </div>
+                <div className="ledit-field">
+                  <label className="ledit-label">Bank Account</label>
+                  <select
+                    className="ledit-input"
+                    value={editPaymentForm.bankAccountId || ''}
+                    onChange={(e) => setEditPaymentForm(f => ({ ...f, bankAccountId: e.target.value }))}
+                    disabled={loadingBanks}
+                  >
+                    <option value="">{loadingBanks ? 'Loading banks...' : 'Select Bank Name...'}</option>
+                    {bankAccounts.map((b) => (
+                      <option key={b._id || b.id} value={b._id || b.id}>
+                        {b.bankName || b.bank_name} {b.balance !== undefined ? `(₹${Number(b.balance).toLocaleString('en-IN')})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="ledit-field ledit-full">
+                  <label className="ledit-label">Remarks</label>
+                  <input
+                    className="ledit-input"
+                    type="text"
+                    value={editPaymentForm.remarks || ''}
+                    onChange={(e) => setEditPaymentForm(f => ({ ...f, remarks: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="lmodal-footer">
+              <button className="ledit-cancel" onClick={() => setEditPayment(null)}>Cancel</button>
+              <button className="ledit-save" disabled={editPaymentSaving} onClick={handleEditPaymentSave}>
+                {editPaymentSaving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE PAYMENT CONFIRMATION MODAL ─────────────────────────────── */}
+      {deletePaymentItem && (
+        <div className="lmodal-overlay" onClick={() => setDeletePaymentItem(null)}>
+          <div className="lmodal-box" style={{ maxWidth: '420px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="lmodal-header">
+              <h2 className="lmodal-title">Delete Payment</h2>
+              <button className="lmodal-close" onClick={() => setDeletePaymentItem(null)}><X size={18} /></button>
+            </div>
+            <div className="lmodal-body">
+              <p style={{ color: '#475569', fontSize: '14px', lineHeight: '1.6' }}>
+                Are you sure you want to delete this payment of{' '}
+                <strong style={{ color: '#DC2626' }}>
+                  {formatExactCurrency(deletePaymentItem.advance !== undefined ? deletePaymentItem.advance : deletePaymentItem.amount)}
+                </strong>{' '}
+                for <strong>{deletePaymentItem.workerName}</strong>?
+                <br />
+                This action will reverse the related bank transaction and cannot be undone.
+              </p>
+            </div>
+            <div className="lmodal-footer">
+              <button className="ledit-cancel" onClick={() => setDeletePaymentItem(null)}>Cancel</button>
+              <button
+                className="ledit-save"
+                style={{ background: '#DC2626', borderColor: '#DC2626' }}
+                disabled={deletingPayment}
+                onClick={handleConfirmDeletePayment}
+              >
+                {deletingPayment ? 'Deleting…' : 'Yes, Delete Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── RECORD PAYMENT MODAL ──────────────────────────────────────────── */}
       {showRecordPayment && (
         <RecordWorkerPaymentModal
           worker={viewWorker || null}
+          workers={displayWorkers}
           sites={sites}
           onClose={() => setShowRecordPayment(false)}
           onSuccess={() => {
@@ -1026,13 +1522,22 @@ export default function LabourPage({
                 })
                 .catch(() => {})
             }
+            if (viewPayment?.workerId) {
+              workerPaymentService.getByWorker(viewPayment.workerId)
+                .then((res) => {
+                  const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+                  setViewPaymentHistory(list)
+                })
+                .catch(() => {})
+            }
+            loadAllPayments()
             if (onLabourChanged) onLabourChanged()
             if (onRefreshAccounts) onRefreshAccounts()
           }}
         />
       )}
 
-      {/* ── EDIT MODAL ────────────────────────────────────────────────────── */}
+      {/* ── EDIT WORKER MODAL ─────────────────────────────────────────────── */}
       {editWorker && (
         <div className="lmodal-overlay" onClick={() => setEditWorker(null)}>
           <div className="lmodal-box" onClick={(e) => e.stopPropagation()}>

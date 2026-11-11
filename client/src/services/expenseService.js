@@ -15,4 +15,6 @@ export const expenseService = {
   create: (data) => request('/expenses', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/expenses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/expenses/${id}`, { method: 'DELETE' }),
+  getPayments: (id) => request(`/expenses/${id}/payments`),
+  recordPayment: (id, data) => request(`/expenses/${id}/payments`, { method: 'POST', body: JSON.stringify(data) }),
 }

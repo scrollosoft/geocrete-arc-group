@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar.jsx'
 import TopHeader from './components/TopHeader.jsx'
 import WelcomeSection from './components/WelcomeSection.jsx'
 import BankAccounts from './components/BankAccounts.jsx'
+import DashboardFinancialSummary, { BankAccountsChart } from './components/DashboardFinancialSummary.jsx'
 import DailyExpenseForm from './components/DailyExpenseForm.jsx'
 import RecentExpenses from './components/RecentExpenses.jsx'
 import SitesOverview from './components/SitesOverview.jsx'
@@ -102,8 +103,14 @@ export default function App() {
   const [notification, setNotification] = useState(null)
   const [selectedSupplierId, setSelectedSupplierId] = useState(null)
   const [selectedSiteForDetail, setSelectedSiteForDetail] = useState(null)
+  const [siteDetailReturnTab, setSiteDetailReturnTab] = useState('sites')
+  const [selectedWorkerForDetail, setSelectedWorkerForDetail] = useState(null)
+  const [workerDetailReturnTab, setWorkerDetailReturnTab] = useState('labour')
+  const [selectedExpenseForDetail, setSelectedExpenseForDetail] = useState(null)
+  const [expenseDetailReturnTab, setExpenseDetailReturnTab] = useState('expenses')
   const [settingsKey, setSettingsKey] = useState(0)
   const [ownerProfile, setOwnerProfile] = useState(null)
+  const [dashboardTab, setDashboardTab] = useState('expenses')
 
   // 1. Fetch Bank Accounts
   const loadBankAccounts = useCallback(async () => {
@@ -260,8 +267,10 @@ export default function App() {
       setSelectedSiteForDetail(null)
       loadSites()
     } else if (newTab === 'labour') {
+      setSelectedWorkerForDetail(null)
       loadLabour()
     } else if (newTab === 'expenses') {
+      setSelectedExpenseForDetail(null)
       loadExpenses()
     } else if (newTab === 'payments') {
       loadBankAccounts()
@@ -273,6 +282,9 @@ export default function App() {
     } else if (newTab === 'site-owners') {
       setClientRefreshTrigger((prev) => prev + 1)
     } else if (newTab === 'dashboard') {
+      setSelectedSiteForDetail(null)
+      setSelectedWorkerForDetail(null)
+      setSelectedExpenseForDetail(null)
       loadSites()
       loadBankAccounts()
       loadExpenses()
@@ -291,9 +303,40 @@ export default function App() {
   const handleViewSite = useCallback((site) => {
     const siteId = site?._id || site?.id
     const fullSite = sites.find((s) => String(s._id || s.id) === String(siteId)) || site
+    setSiteDetailReturnTab(activeTab === 'dashboard' ? 'dashboard' : 'sites')
     setSelectedSiteForDetail(fullSite)
     handleTabChange('site-detail')
-  }, [sites, handleTabChange])
+  }, [sites, handleTabChange, activeTab])
+
+  const handleViewWorker = useCallback((worker) => {
+    const wId = worker?._id || worker?.id
+    const fullWorker = (workers || []).find((w) => String(w._id || w.id) === String(wId)) || worker
+    setWorkerDetailReturnTab(activeTab === 'dashboard' ? 'dashboard' : 'labour')
+    setSelectedWorkerForDetail(fullWorker)
+    setActiveTab('labour')
+    try {
+      if (window.location.pathname !== '/labour') {
+        window.history.pushState({ tab: 'labour' }, '', '/labour')
+      }
+    } catch {
+      // ignore
+    }
+  }, [workers, activeTab])
+
+  const handleViewExpense = useCallback((expense) => {
+    const expId = expense?._id || expense?.id
+    const fullExpense = (expenses || []).find((e) => String(e._id || e.id) === String(expId)) || expense
+    setExpenseDetailReturnTab(activeTab === 'dashboard' ? 'dashboard' : 'expenses')
+    setSelectedExpenseForDetail(fullExpense)
+    setActiveTab('expenses')
+    try {
+      if (window.location.pathname !== '/expenses') {
+        window.history.pushState({ tab: 'expenses' }, '', '/expenses')
+      }
+    } catch {
+      // ignore
+    }
+  }, [expenses, activeTab])
 
   const handleNavigateOwnerProfile = () => {
     handleTabChange('settings')
@@ -350,7 +393,7 @@ export default function App() {
               expenses={expenses}
               onBack={() => {
                 setSelectedSiteForDetail(null)
-                handleTabChange('sites')
+                handleTabChange(siteDetailReturnTab || 'sites')
               }}
               onOpenAddExpense={handleScrollToAddExpense}
               onOpenAddWorker={() => setIsAddWorkerOpen(true)}
@@ -367,6 +410,7 @@ export default function App() {
               onSitesChanged={loadSites}
               onRefreshAccounts={loadBankAccounts}
               showNotification={setNotification}
+              onViewSite={handleViewSite}
             />
           ) : activeTab === 'expenses' ? (
             <ExpensesPage
@@ -378,6 +422,13 @@ export default function App() {
               loading={loadingExpenses}
               onExpenseChanged={handlePaymentCompleted}
               showNotification={setNotification}
+              initialExpense={selectedExpenseForDetail}
+              onBackFromDetail={() => {
+                setSelectedExpenseForDetail(null)
+                if (expenseDetailReturnTab === 'dashboard') {
+                  handleTabChange('dashboard')
+                }
+              }}
             />
           ) : activeTab === 'labour' ? (
             <LabourPage
@@ -389,6 +440,13 @@ export default function App() {
               loading={loadingLabour}
               onLabourChanged={loadLabour}
               onRefreshAccounts={loadBankAccounts}
+              initialWorker={selectedWorkerForDetail}
+              onBackFromDetail={() => {
+                setSelectedWorkerForDetail(null)
+                if (workerDetailReturnTab === 'dashboard') {
+                  handleTabChange('dashboard')
+                }
+              }}
             />
           ) : activeTab === 'materials' ? (
             <MaterialsPage
@@ -456,33 +514,133 @@ export default function App() {
               {/* Welcome Section */}
               <WelcomeSection ownerProfile={ownerProfile} />
 
-              {/* Bank Accounts Section (4 cards in a row) */}
-              <BankAccounts
-                accounts={accounts}
-                loading={loadingAccounts}
-              />
-
-              {/* Add Daily Expenses Form */}
-              <DailyExpenseForm
+              {/* Financial Summary (4 stat cards in a single horizontal row) */}
+              <DashboardFinancialSummary
                 sites={sites}
-                suppliers={suppliers}
-                bankAccounts={accounts}
-                onExpenseCreated={handleExpenseCreated}
-                showNotification={setNotification}
-              />
-
-              {/* Recent Expense Entries Table */}
-              <RecentExpenses
                 expenses={expenses}
-                sites={sites}
-                selectedSiteFilter={selectedSiteFilter}
-                setSelectedSiteFilter={setSelectedSiteFilter}
-                dateFilter={dateFilter}
-                setDateFilter={setDateFilter}
-                loading={loadingExpenses}
+                loading={loadingSites || loadingExpenses}
               />
 
-              {/* Sites Overview (3 cards in a row) */}
+              {/* ── Dashboard Tabs: Expenses | Site | Labour ── */}
+              <div className="dashboard-tabs-section">
+                {/* Tab Navigation */}
+                <div className="dashboard-tab-nav">
+                  {[
+                    { key: 'expenses', label: 'Expenses' },
+                    { key: 'site', label: 'Site' },
+                    { key: 'labour', label: 'Labour' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      className={`dashboard-tab-btn ${dashboardTab === tab.key ? 'dashboard-tab-btn--active' : ''}`}
+                      onClick={() => setDashboardTab(tab.key)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="dashboard-tab-content">
+                  {/* Two-Column Layout: Form on Left, Bank Accounts Chart on Right */}
+                  <div className="dashboard-form-chart-row">
+                    <div className="dashboard-form-col">
+                      {dashboardTab === 'expenses' && (
+                        <DailyExpenseForm
+                          sites={sites}
+                          suppliers={suppliers}
+                          bankAccounts={accounts}
+                          onExpenseCreated={handleExpenseCreated}
+                          showNotification={setNotification}
+                        />
+                      )}
+                      {dashboardTab === 'site' && (
+                        <AddClientSiteModal
+                          isOpen={false}
+                          embeddedMode={true}
+                          onClose={() => {}}
+                          bankAccounts={accounts}
+                          onCreated={(newSite) => {
+                            loadSites()
+                            loadBankAccounts()
+                            setClientRefreshTrigger((prev) => prev + 1)
+                          }}
+                          showNotification={setNotification}
+                        />
+                      )}
+                      {dashboardTab === 'labour' && (
+                        <AddWorkerModal
+                          isOpen={false}
+                          embeddedMode={true}
+                          onClose={() => {}}
+                          sites={sites}
+                          bankAccounts={accounts}
+                          onWorkerCreated={() => {
+                            loadLabour()
+                            loadBankAccounts()
+                          }}
+                          showNotification={setNotification}
+                        />
+                      )}
+                    </div>
+
+                    <div className="dashboard-chart-col">
+                      <BankAccountsChart
+                        accounts={accounts}
+                        loading={loadingAccounts}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Tables Section below Form + Chart */}
+                  <div className="dashboard-tables-container">
+                    {dashboardTab === 'expenses' && (
+                      <ExpensesPage
+                        expenses={expenses}
+                        sites={sites}
+                        suppliers={suppliers}
+                        bankAccounts={accounts}
+                        onOpenAddExpense={handleScrollToAddExpense}
+                        loading={loadingExpenses}
+                        onExpenseChanged={handlePaymentCompleted}
+                        showNotification={setNotification}
+                        hideHeader={true}
+                        onViewExpense={handleViewExpense}
+                      />
+                    )}
+                    {dashboardTab === 'site' && (
+                      <SitesPage
+                        sites={sites}
+                        expenses={expenses}
+                        onOpenAddSite={() => setIsAddSiteOpen(true)}
+                        onOpenAddExpense={handleScrollToAddExpense}
+                        loading={loadingSites}
+                        onSitesChanged={loadSites}
+                        onRefreshAccounts={loadBankAccounts}
+                        showNotification={setNotification}
+                        hideHeader={true}
+                        onViewSite={handleViewSite}
+                      />
+                    )}
+                    {dashboardTab === 'labour' && (
+                      <LabourPage
+                        workers={workers}
+                        summary={labourSummary}
+                        sites={sites}
+                        bankAccounts={accounts}
+                        onOpenAddWorker={() => setIsAddWorkerOpen(true)}
+                        loading={loadingLabour}
+                        onLabourChanged={loadLabour}
+                        onRefreshAccounts={loadBankAccounts}
+                        hideHeader={true}
+                        onViewWorker={handleViewWorker}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sites Overview (3 cards in a row) — always visible */}
               <SitesOverview
                 sites={siteOverview.length > 0 ? siteOverview : sites}
                 loading={loadingSites}

@@ -1,5 +1,6 @@
 import express from 'express'
 import {
+  getAllWorkerPayments,
   createWorkerPayment,
   getWorkerPayments,
   updateWorkerPayment,
@@ -8,6 +9,7 @@ import {
 
 const router = express.Router()
 
+router.get('/', getAllWorkerPayments)
 router.post('/', createWorkerPayment)
 router.get('/worker/:workerId', getWorkerPayments)
 router.put('/:id', updateWorkerPayment)

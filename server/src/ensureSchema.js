@@ -119,6 +119,13 @@ export async function ensureSchema() {
     // ignore
   }
 
+  // Ensure worker_payments.payment_type is VARCHAR(50) to allow all payment types
+  try {
+    await pool.query(`ALTER TABLE worker_payments MODIFY COLUMN payment_type VARCHAR(50) NOT NULL DEFAULT 'Wage Payment'`)
+  } catch (err) {
+    // ignore
+  }
+
   // Ensure bank_account_id column on expenses table
   if (!(await columnExists(pool, 'expenses', 'bank_account_id'))) {
     await pool.query(`ALTER TABLE expenses ADD COLUMN bank_account_id INT UNSIGNED NULL DEFAULT NULL AFTER supplier_id`)
@@ -177,5 +184,40 @@ export async function ensureSchema() {
     }
   } catch (err) {
     console.warn('Historical quantity repair check skipped:', err.message)
+  }
+
+  // Ensure expense_payments table exists for tracking individual and partial expense payments
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS expense_payments (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        expense_id INT UNSIGNED NOT NULL,
+        site_id INT UNSIGNED NOT NULL,
+        supplier_id INT UNSIGNED NULL DEFAULT NULL,
+        bank_account_id INT UNSIGNED NOT NULL,
+        amount DECIMAL(15,2) NOT NULL,
+        payment_date DATE NOT NULL,
+        payment_method VARCHAR(50) NOT NULL DEFAULT 'Bank Transfer',
+        reference VARCHAR(100) NULL DEFAULT '',
+        notes TEXT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_ep_expense (expense_id),
+        INDEX idx_ep_site (site_id),
+        INDEX idx_ep_bank (bank_account_id),
+        INDEX idx_ep_date (payment_date)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `)
+
+    // Backfill any existing expenses with paid_amount > 0 into expense_payments if not already there
+    await pool.query(`
+      INSERT INTO expense_payments (expense_id, site_id, supplier_id, bank_account_id, amount, payment_date, payment_method, reference, notes)
+      SELECT e.id, e.site_id, e.supplier_id, e.bank_account_id, e.paid_amount, e.date, e.payment_method, e.remark, 'Initial Expense Payment'
+      FROM expenses e
+      WHERE e.paid_amount > 0 
+        AND e.bank_account_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM expense_payments ep WHERE ep.expense_id = e.id)
+    `)
+  } catch (err) {
+    console.warn('expense_payments table init skipped:', err.message)
   }
 }

@@ -527,3 +527,139 @@ export const getSitePayments = async (req, res, next) => {
     next(error)
   }
 }
+
+export const recordSitePayment = async (req, res, next) => {
+  const pool = getPool()
+  const conn = await pool.getConnection()
+  try {
+    const siteId = req.params.id
+    const {
+      amount,
+      paymentDate,
+      paymentMethod,
+      bankAccountId,
+      reference,
+      notes,
+    } = req.body
+
+    const numAmount = Number(amount)
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ error: 'Payment amount must be greater than zero.' })
+    }
+
+    if (!bankAccountId) {
+      return res.status(400).json({ error: 'Please select a bank account.' })
+    }
+
+    await conn.beginTransaction()
+
+    // 1. Fetch site with row lock
+    const [[site]] = await conn.query(
+      'SELECT * FROM sites WHERE id = ? FOR UPDATE',
+      [siteId]
+    )
+    if (!site) {
+      await conn.rollback()
+      conn.release()
+      return res.status(404).json({ error: 'Site not found.' })
+    }
+
+    const totalBudget = Number(site.total_budget) || 0
+    const totalReceived = Number(site.total_received) || 0
+    const pending = Math.max(0, totalBudget - totalReceived)
+
+    if (pending <= 0) {
+      await conn.rollback()
+      conn.release()
+      return res.status(400).json({ error: 'This site is already fully paid by client.' })
+    }
+
+    if (numAmount > pending) {
+      await conn.rollback()
+      conn.release()
+      return res.status(400).json({
+        error: `Payment amount (₹${numAmount.toLocaleString('en-IN')}) cannot exceed remaining pending amount of ₹${pending.toLocaleString('en-IN')}.`,
+      })
+    }
+
+    // 2. Verify bank account with lock
+    const [[bank]] = await conn.query(
+      'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+      [bankAccountId]
+    )
+    if (!bank) {
+      await conn.rollback()
+      conn.release()
+      return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+    }
+
+    // 3. Credit bank account
+    await conn.query(
+      'UPDATE bank_accounts SET balance = balance + ? WHERE id = ?',
+      [numAmount, bankAccountId]
+    )
+
+    // 4. Update site total_received
+    await conn.query(
+      'UPDATE sites SET total_received = total_received + ? WHERE id = ?',
+      [numAmount, siteId]
+    )
+
+    // 5. Find or link site owner
+    let ownerId = null
+    const [ownerRows] = await conn.query(
+      'SELECT id FROM site_owners WHERE site_id = ? LIMIT 1',
+      [siteId]
+    )
+    if (ownerRows.length > 0) {
+      ownerId = ownerRows[0].id
+      await conn.query(
+        'UPDATE site_owners SET total_received = total_received + ? WHERE id = ?',
+        [numAmount, ownerId]
+      )
+    } else {
+      const [nameOwnerRows] = await conn.query(
+        'SELECT id FROM site_owners WHERE name = ? LIMIT 1',
+        [(site.site_owner || '').trim()]
+      )
+      if (nameOwnerRows.length > 0) {
+        ownerId = nameOwnerRows[0].id
+        await conn.query('UPDATE site_owners SET total_received = total_received + ? WHERE id = ?', [numAmount, ownerId])
+      }
+    }
+
+    // 6. Insert into client_payments with type 'credit'
+    const pDate = paymentDate
+      ? new Date(paymentDate).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10)
+
+    const paymentTitle = 'Client Payment Received'
+    const paymentRef = reference || notes || 'Client payment received'
+
+    await conn.query(
+      `INSERT INTO client_payments
+        (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Paid', 'credit')`,
+      [
+        ownerId,
+        siteId,
+        bankAccountId,
+        numAmount,
+        pDate,
+        paymentTitle,
+        paymentMethod || 'Bank Transfer',
+        paymentRef,
+      ]
+    )
+
+    await conn.commit()
+    conn.release()
+
+    const [updatedRows] = await pool.query('SELECT * FROM sites WHERE id = ?', [siteId])
+    return res.json({ success: true, message: 'Client payment recorded successfully', site: updatedRows[0] })
+  } catch (error) {
+    await conn.rollback()
+    conn.release()
+    next(error)
+  }
+}

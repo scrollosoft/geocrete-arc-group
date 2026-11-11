@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Calendar, Plus } from 'lucide-react'
 import { expenseService } from '../services/expenseService.js'
+import WhatsAppSharePromptModal from './WhatsAppSharePromptModal.jsx'
 
 const getTodayString = () => new Date().toISOString().split('T')[0]
 
@@ -34,6 +35,7 @@ export default function DailyExpenseForm({
   })()
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [whatsappExpense, setWhatsappExpense] = useState(null)
 
   useEffect(() => {
     if (initialData) {
@@ -201,6 +203,7 @@ export default function DailyExpenseForm({
       if (onExpenseCreated) {
         onExpenseCreated(created)
       }
+      setWhatsappExpense(created)
     } catch (err) {
       setErrorMessage(err.message || 'Failed to record expense. Please try again.')
       if (showNotification) {
@@ -215,7 +218,8 @@ export default function DailyExpenseForm({
   }
 
   return (
-    <section className="daily-expense-section" id="daily-expense-form">
+    <>
+      <section className="daily-expense-section" id="daily-expense-form">
       <div className="section-header-compact">
         <h2 className="section-title">Add Daily Expenses</h2>
         <p className="section-subtitle">Record today's material purchase and supplier payment.</p>
@@ -453,5 +457,17 @@ export default function DailyExpenseForm({
         </div>
       </form>
     </section>
+
+    {whatsappExpense && (
+      <WhatsAppSharePromptModal
+        isOpen={Boolean(whatsappExpense)}
+        onClose={() => setWhatsappExpense(null)}
+        expense={whatsappExpense}
+        suppliers={suppliers}
+        sites={sites}
+        showNotification={showNotification}
+      />
+    )}
+  </>
   )
 }

@@ -12,10 +12,12 @@ import {
   Edit2,
   Trash2,
   X,
+  CreditCard,
 } from 'lucide-react'
 import { siteService } from '../services/siteService.js'
 import { bankAccountService } from '../services/bankAccountService.js'
 import SiteDetailPage from './SiteDetailPage.jsx'
+import MakeSitePaymentModal from './MakeSitePaymentModal.jsx'
 
 export default function SitesPage({
   sites = [],
@@ -26,6 +28,8 @@ export default function SitesPage({
   onSitesChanged,
   onRefreshAccounts,
   showNotification,
+  hideHeader = false,
+  onViewSite,
 }) {
   const [selectedSiteForDetail, setSelectedSiteForDetail] = useState(null)
   const [search, setSearch] = useState('')
@@ -70,6 +74,7 @@ export default function SitesPage({
       totalReceived: formatIndianBudget(received),
       totalSpent: formatIndianBudget(spent),
       balanceReceivable: formatIndianBudget(balanceReceivable),
+      rawPending: balanceReceivable,
       remaining: formatIndianBudget(remainingBudget),
       status: s.status === 'Completed' ? 'Completed' : (s.status === 'On Hold' || s.status === 'On hold') ? 'On hold' : 'In Progress',
     }
@@ -160,6 +165,7 @@ export default function SitesPage({
   }
 
   // Action Modals State
+  const [payingSite, setPayingSite] = useState(null)
   const [viewingSite, setViewingSite] = useState(null)
   const [editingSite, setEditingSite] = useState(null)
   const [editFormData, setEditFormData] = useState({
@@ -186,7 +192,12 @@ export default function SitesPage({
 
   // View handler - opens full Site Details Page matching reference design
   const handleView = (row) => {
-    setSelectedSiteForDetail(row.raw || row)
+    const target = row.raw || row
+    if (onViewSite) {
+      onViewSite(target)
+    } else {
+      setSelectedSiteForDetail(target)
+    }
   }
 
   // Edit handler
@@ -355,135 +366,139 @@ export default function SitesPage({
   return (
     <div className="sites-page">
       {/* 1. Breadcrumb & Title Row */}
-      <div className="sites-header-wrap">
-        <div className="sites-header-left">
-          <div className="sites-breadcrumb">
-            <span className="breadcrumb-root">WORKSPACE</span>
-            <span className="breadcrumb-slash">/</span>
-            <span className="breadcrumb-active">SITES</span>
+      {!hideHeader && (
+        <div className="sites-header-wrap">
+          <div className="sites-header-left">
+            <div className="sites-breadcrumb">
+              <span className="breadcrumb-root">WORKSPACE</span>
+              <span className="breadcrumb-slash">/</span>
+              <span className="breadcrumb-active">SITES</span>
+            </div>
+            <h1 className="sites-title">Sites</h1>
+            <p className="sites-subtitle">Manage projects, progress and financial health in one place.</p>
           </div>
-          <h1 className="sites-title">Sites</h1>
-          <p className="sites-subtitle">Manage projects, progress and financial health in one place.</p>
-        </div>
 
-        <button type="button" className="btn btn-primary-action btn-add-site-header" onClick={onOpenAddSite}>
-          <Plus size={16} />
-          <span>Add Site</span>
-        </button>
-      </div>
+          <button type="button" className="btn btn-primary-action btn-add-site-header" onClick={onOpenAddSite}>
+            <Plus size={16} />
+            <span>Add Site</span>
+          </button>
+        </div>
+      )}
 
       {/* 2. Top Summary Stat Cards (4 in a row) */}
-      <div className="sites-stat-grid">
-        <div className="site-stat-card">
-          <div className="stat-icon-wrap stat-icon-blue">
-            <Building2 size={18} />
-          </div>
-          <span className="stat-label">Total Sites</span>
-          <div className="stat-value">{actualTotalSites}</div>
-          <span className="stat-desc">{inProgressSites} currently active</span>
-        </div>
-
-        <div className="site-stat-card">
-          <div className="stat-icon-wrap stat-icon-green">
-            <TrendingUp size={18} />
-          </div>
-          <span className="stat-label">Sites In Progress</span>
-          <div className="stat-value">{inProgressSites}</div>
-          <span className="stat-desc">{inProgressPercent}% of all projects</span>
-        </div>
-
-        <div className="site-stat-card">
-          <div className="stat-icon-wrap stat-icon-orange">
-            <TrendingUp size={18} />
-          </div>
-          <span className="stat-label">Completed</span>
-          <div className="stat-value">{completedSites}</div>
-          <span className="stat-desc">{deliveredText}</span>
-        </div>
-
-        <div className="site-stat-card">
-          <div className="stat-icon-wrap stat-icon-purple">
-            <Activity size={18} />
-          </div>
-          <span className="stat-label">On hold</span>
-          <div className="stat-value">{onHoldSites}</div>
-          <span className="stat-desc">Awaiting client approval</span>
-        </div>
-      </div>
-
-      {/* 3. Search and Dropdown Filter Row */}
-      <div className="sites-filter-row">
-        <div className="sites-search-box">
-          <Search size={16} className="sites-search-icon" />
-          <input
-            type="text"
-            className="sites-search-input"
-            placeholder="Search sites, clients, suppliers..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setCurrentPage(1)
-            }}
-          />
-        </div>
-
-        <div className="sites-filters-right">
-          <div className="site-select-wrapper">
-            <select
-              className="site-pill-select"
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="All Status">All Status</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
-              <option value="On hold">On hold</option>
-            </select>
-            <ChevronDown size={14} className="site-select-arrow" />
+      {!hideHeader && (
+        <div className="sites-stat-grid">
+          <div className="site-stat-card">
+            <div className="stat-icon-wrap stat-icon-blue">
+              <Building2 size={18} />
+            </div>
+            <span className="stat-label">Total Sites</span>
+            <div className="stat-value">{actualTotalSites}</div>
+            <span className="stat-desc">{inProgressSites} currently active</span>
           </div>
 
-          <div className="site-select-wrapper">
-            <select
-              className="site-pill-select"
-              value={siteFilter}
-              onChange={(e) => {
-                setSiteFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="All Sites">All Sites</option>
-              {sites.map((s) => (
-                <option key={s._id} value={s.name}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={14} className="site-select-arrow" />
+          <div className="site-stat-card">
+            <div className="stat-icon-wrap stat-icon-green">
+              <TrendingUp size={18} />
+            </div>
+            <span className="stat-label">Sites In Progress</span>
+            <div className="stat-value">{inProgressSites}</div>
+            <span className="stat-desc">{inProgressPercent}% of all projects</span>
           </div>
 
-          <div className="site-select-wrapper">
-            <select
-              className="site-pill-select"
-              value={sortFilter}
-              onChange={(e) => setSortFilter(e.target.value)}
-            >
-              <option value="Newest First">Newest First</option>
-              <option value="Oldest First">Oldest First</option>
-              <option value="Budget High-Low">Budget High-Low</option>
-            </select>
-            <ChevronDown size={14} className="site-select-arrow" />
+          <div className="site-stat-card">
+            <div className="stat-icon-wrap stat-icon-orange">
+              <TrendingUp size={18} />
+            </div>
+            <span className="stat-label">Completed</span>
+            <div className="stat-value">{completedSites}</div>
+            <span className="stat-desc">{deliveredText}</span>
+          </div>
+
+          <div className="site-stat-card">
+            <div className="stat-icon-wrap stat-icon-purple">
+              <Activity size={18} />
+            </div>
+            <span className="stat-label">On hold</span>
+            <div className="stat-value">{onHoldSites}</div>
+            <span className="stat-desc">Awaiting client approval</span>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 4. All Sites Table Container Box */}
       <div className="sites-table-card">
         <div className="sites-table-card-header">
           <h2 className="sites-table-title">All Sites</h2>
           <p className="sites-table-subtitle">Manage projects, progress and financial health in one place.</p>
+        </div>
+
+        {/* 3. Search and Dropdown Filter Row (Inside All Sites container, directly above table) */}
+        <div className="sites-filter-row">
+          <div className="sites-search-box">
+            <Search size={16} className="sites-search-icon" />
+            <input
+              type="text"
+              className="sites-search-input"
+              placeholder="Search sites, clients, suppliers..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setCurrentPage(1)
+              }}
+            />
+          </div>
+
+          <div className="sites-filters-right">
+            <div className="site-select-wrapper">
+              <select
+                className="site-pill-select"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
+              >
+                <option value="All Status">All Status</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Completed">Completed</option>
+                <option value="On hold">On hold</option>
+              </select>
+              <ChevronDown size={14} className="site-select-arrow" />
+            </div>
+
+            <div className="site-select-wrapper">
+              <select
+                className="site-pill-select"
+                value={siteFilter}
+                onChange={(e) => {
+                  setSiteFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
+              >
+                <option value="All Sites">All Sites</option>
+                {sites.map((s) => (
+                  <option key={s._id} value={s.name}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="site-select-arrow" />
+            </div>
+
+            <div className="site-select-wrapper">
+              <select
+                className="site-pill-select"
+                value={sortFilter}
+                onChange={(e) => setSortFilter(e.target.value)}
+              >
+                <option value="Newest First">Newest First</option>
+                <option value="Oldest First">Oldest First</option>
+                <option value="Budget High-Low">Budget High-Low</option>
+              </select>
+              <ChevronDown size={14} className="site-select-arrow" />
+            </div>
+          </div>
         </div>
 
         <div className="sites-table-scroll">
@@ -535,6 +550,16 @@ export default function SitesPage({
                     </td>
                     <td className="td-site-actions">
                       <div className="site-actions-group">
+                        <button
+                          type="button"
+                          className="site-action-btn-pay"
+                          title={(row.rawPending || 0) <= 0 ? 'Fully Paid' : 'Make Payment'}
+                          disabled={(row.rawPending || 0) <= 0}
+                          onClick={() => setPayingSite(row.raw || row)}
+                        >
+                          <CreditCard size={13} />
+                          <span>Make Payment</span>
+                        </button>
                         <button
                           type="button"
                           className="site-action-btn site-action-btn-view"
@@ -649,6 +674,21 @@ export default function SitesPage({
           </div>
         </div>
       </div>
+
+      {/* Make Site Client Payment Modal */}
+      {payingSite && (
+        <MakeSitePaymentModal
+          isOpen={Boolean(payingSite)}
+          site={payingSite}
+          onClose={() => setPayingSite(null)}
+          onPaymentSuccess={() => {
+            setPayingSite(null)
+            if (onSitesChanged) onSitesChanged()
+            if (onRefreshAccounts) onRefreshAccounts()
+          }}
+          showNotification={showNotification}
+        />
+      )}
 
       {/* View Site Modal */}
       {viewingSite && (

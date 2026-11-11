@@ -198,37 +198,40 @@ export const getBankTransactions = async (req, res, next) => {
       WHERE cp.amount > 0
     `)
 
-    // 3. Fetch outgoing / debit transactions (expenses with paid_amount > 0)
+    // 3. Fetch outgoing / debit transactions (expense payments)
     const [expenses] = await pool.query(`
       SELECT 
-        e.id,
+        ep.id,
         'debit' AS txn_type,
-        e.paid_amount AS amount,
+        ep.amount,
         e.amount AS total_bill_amount,
-        CAST(e.created_at AS CHAR) AS created_at_str,
-        CAST(e.date AS CHAR) AS payment_date_str,
-        e.date AS payment_date,
-        e.created_at,
+        e.id AS expense_id,
+        CAST(ep.created_at AS CHAR) AS created_at_str,
+        CAST(ep.payment_date AS CHAR) AS payment_date_str,
+        ep.payment_date,
+        ep.created_at,
         e.category,
-        e.payment_method,
-        e.remark,
+        ep.payment_method,
+        ep.reference AS remark,
+        ep.notes,
         e.status,
         e.applied_to_material,
-        e.bank_account_id,
+        ep.bank_account_id,
         ba.bank_name,
         ba.account_number,
         ba.balance AS bank_current_balance,
-        e.site_id,
+        ep.site_id,
         s.name AS site_name,
         s.location AS site_location,
-        e.supplier_id,
+        ep.supplier_id,
         sup.name AS supplier_name,
         sup.company_name AS supplier_company
-      FROM expenses e
-      INNER JOIN bank_accounts ba ON ba.id = e.bank_account_id AND ba.is_active = 1
-      INNER JOIN sites s ON s.id = e.site_id
-      LEFT JOIN suppliers sup ON sup.id = e.supplier_id
-      WHERE e.paid_amount > 0
+      FROM expense_payments ep
+      INNER JOIN expenses e ON e.id = ep.expense_id
+      INNER JOIN bank_accounts ba ON ba.id = ep.bank_account_id AND ba.is_active = 1
+      INNER JOIN sites s ON s.id = ep.site_id
+      LEFT JOIN suppliers sup ON sup.id = ep.supplier_id
+      WHERE ep.amount > 0
     `)
 
     // 3b. Fetch worker initial advance payments paid from bank accounts on joining
@@ -356,7 +359,15 @@ export const getBankTransactions = async (req, res, next) => {
       let partyName = ''
       let partyType = null
 
-      if (isMaterial) {
+      const isPartialPayment = Boolean(e.notes && e.notes !== 'Initial Expense Payment')
+
+      if (isPartialPayment) {
+        title = 'Expense Payment'
+        category = cat || 'Expense Payment'
+        partyName = supplierParty || e.site_name || 'Expense Payment'
+        partyType = e.supplier_id ? 'Supplier' : 'Expense'
+        subtitle = `${category} · ${e.site_name || 'Construction Site'}`
+      } else if (isMaterial) {
         title = 'Material Purchase'
         category = cat || 'Material'
         partyName = supplierParty || 'Material Supplier'
@@ -383,7 +394,7 @@ export const getBankTransactions = async (req, res, next) => {
       }
 
       return {
-        id: `exp-${e.id}`,
+        id: `ep-${e.id}`,
         rawId: e.id,
         type: 'debit',
         title,
@@ -405,7 +416,7 @@ export const getBankTransactions = async (req, res, next) => {
         partyType,
         paymentMethod: e.payment_method || 'Bank Transfer',
         referenceId: (e.remark && e.remark.trim()) || `TXN-EXP-${String(e.id).padStart(4, '0')}`,
-        remark: e.remark || '',
+        remark: e.remark || e.notes || '',
         balanceAfter: null,
       }
     })

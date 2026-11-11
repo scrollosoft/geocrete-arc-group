@@ -5,12 +5,10 @@ const toApi = (row) => {
   if (!row) return null
 
   const dailyRate = Number(row.daily_rate || 0)
-  const attendanceUnits = Number(row.attendance_units || 0)
-  const attendanceEarned = Number(row.attendance_earned || 0)
   const recordWagesEarned = Number(row.wages_earned || 0)
 
-  // Total Earned Wages = Attendance Units * Daily Wage (or record wages if attendance not yet marked)
-  const wagesEarned = attendanceEarned > 0 ? attendanceEarned : recordWagesEarned
+  // Total Earned Wages = wages recorded on the labour record
+  const wagesEarned = recordWagesEarned
 
   const initialAdvance = Number(row.advance_amount || 0)
   const extraAdvances = Number(row.extra_advances || 0)
@@ -60,11 +58,7 @@ const toApi = (row) => {
     site,
     siteName:        row.site_name || '',
     dailyRate,
-    presentDays:     Number(row.present_days || 0),
-    halfDays:        Number(row.half_days || 0),
-    absentDays:      Number(row.absent_days || 0),
-    leaveDays:       Number(row.leave_days || 0),
-    attendanceUnits,
+    totalAmount:     wagesEarned || dailyRate,
     wagesEarned,
     advancePaid,
     otherPayments,
@@ -90,12 +84,6 @@ const POPULATE_SELECT = `
   s.name AS site_name,
   s.location AS site_location,
   b.bank_name AS bank_name,
-  COALESCE(att.present_days, 0) AS present_days,
-  COALESCE(att.half_days, 0) AS half_days,
-  COALESCE(att.absent_days, 0) AS absent_days,
-  COALESCE(att.leave_days, 0) AS leave_days,
-  COALESCE(att.total_units, 0) AS attendance_units,
-  COALESCE(att.total_earned, 0) AS attendance_earned,
   COALESCE(pay.extra_advances, 0) AS extra_advances,
   COALESCE(pay.other_payments, 0) AS other_payments
 `
@@ -104,18 +92,6 @@ const POPULATE_JOIN = `
   FROM labours l
   LEFT JOIN sites s ON s.id = l.site_id
   LEFT JOIN bank_accounts b ON b.id = l.bank_account_id
-  LEFT JOIN (
-    SELECT 
-      worker_id,
-      SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) AS present_days,
-      SUM(CASE WHEN status = 'Half Day' THEN 1 ELSE 0 END) AS half_days,
-      SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) AS absent_days,
-      SUM(CASE WHEN status = 'Leave' THEN 1 ELSE 0 END) AS leave_days,
-      SUM(units) AS total_units,
-      SUM(earned_wage) AS total_earned
-    FROM worker_attendances
-    GROUP BY worker_id
-  ) att ON att.worker_id = l.id
   LEFT JOIN (
     SELECT
       worker_id,
@@ -174,6 +150,11 @@ export const Labour = {
     const conn = externalConn || getPool()
     const advance = Number(data.advanceAmount) || 0
     const totalPaid = data.totalPaid !== undefined ? Number(data.totalPaid) : advance
+    const totalAmt = data.totalAmount !== undefined && data.totalAmount !== ''
+      ? Number(data.totalAmount)
+      : (data.wagesEarned !== undefined ? Number(data.wagesEarned) : Number(data.dailyRate) || 0)
+    const wagesEarned = data.wagesEarned !== undefined ? Number(data.wagesEarned) : totalAmt
+    const dailyRate = data.dailyRate !== undefined ? Number(data.dailyRate) : totalAmt
     const [result] = await conn.query(
       `INSERT INTO labours
         (name, phone, trade, site_id, daily_rate, wages_earned, total_paid,
@@ -185,8 +166,8 @@ export const Labour = {
         data.phone || '',
         data.trade || '',
         data.site || data.siteId || null,
-        Number(data.dailyRate) || 0,
-        Number(data.wagesEarned) || 0,
+        dailyRate,
+        wagesEarned,
         totalPaid,
         advance,
         data.bankAccountId ? Number(data.bankAccountId) : null,

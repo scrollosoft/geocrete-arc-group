@@ -24,6 +24,7 @@ export default function AddWorkerModal({
   bankAccounts: initialBankAccounts = [],
   onWorkerCreated,
   showNotification,
+  embeddedMode = false,
 }) {
   const [formData, setFormData] = useState(() => ({
     name: '',
@@ -65,7 +66,7 @@ export default function AddWorkerModal({
     }
   }, [isOpen, initialBankAccounts])
 
-  if (!isOpen) return null
+  if (!isOpen && !embeddedMode) return null
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -196,6 +197,200 @@ export default function AddWorkerModal({
     }
   }
 
+  if (embeddedMode) {
+    return (
+      <section className="daily-expense-section" id="add-worker-form">
+        <div className="section-header-compact">
+          <h2 className="section-title">Add Worker</h2>
+          <p className="section-subtitle">Register a worker and assign them to a construction site.</p>
+        </div>
+
+        {serverError && (
+          <div className="form-alert form-alert-error">
+            {serverError}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="daily-expense-form">
+          <div className="dashboard-worker-form-grid">
+            <div className="form-group">
+              <label className="form-label labour-form-label">Worker Full Name *</label>
+              <input
+                type="text"
+                name="name"
+                className={`form-input ${errors.name ? 'input-error' : ''}`}
+                placeholder="e.g. Ramesh Kumar"
+                value={formData.name}
+                onChange={handleChange}
+              />
+              {errors.name && <span className="field-error-msg">{errors.name}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label labour-form-label">Phone Number *</label>
+              <input
+                type="tel"
+                name="phone"
+                className={`form-input ${errors.phone ? 'input-error' : ''}`}
+                placeholder="e.g. +91 98765 43210"
+                value={formData.phone}
+                onChange={handleChange}
+              />
+              {errors.phone && <span className="field-error-msg">{errors.phone}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label labour-form-label">Worker Trade / Role *</label>
+              <select
+                name="trade"
+                className={`form-select ${errors.trade ? 'input-error' : ''}`}
+                value={formData.trade}
+                onChange={handleChange}
+              >
+                {TRADES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              {errors.trade && <span className="field-error-msg">{errors.trade}</span>}
+            </div>
+
+            {formData.trade === 'Other' && (
+              <div className="form-group">
+                <label className="form-label labour-form-label">Specify Trade *</label>
+                <input
+                  type="text"
+                  name="otherTrade"
+                  className={`form-input ${errors.otherTrade ? 'input-error' : ''}`}
+                  placeholder="Specify role / trade"
+                  value={formData.otherTrade}
+                  onChange={handleChange}
+                />
+                {errors.otherTrade && <span className="field-error-msg">{errors.otherTrade}</span>}
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label labour-form-label">Construction Site *</label>
+              <select
+                name="site"
+                className={`form-select ${errors.site ? 'input-error' : ''}`}
+                value={formData.site}
+                onChange={handleChange}
+              >
+                <option value="">Select a construction site...</option>
+                {sites.map((s) => (
+                  <option key={s._id} value={s._id}>
+                    {s.name} {s.location ? `(${s.location})` : ''}
+                  </option>
+                ))}
+              </select>
+              {errors.site && <span className="field-error-msg">{errors.site}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label labour-form-label">Joining Date *</label>
+              <input
+                type="date"
+                name="joiningDate"
+                className={`form-input ${errors.joiningDate ? 'input-error' : ''}`}
+                value={formData.joiningDate}
+                onChange={handleChange}
+              />
+              {errors.joiningDate && <span className="field-error-msg">{errors.joiningDate}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label labour-form-label">Total Amount (₹) *</label>
+              <div className="input-with-currency-wrap">
+                <span className="input-currency-prefix">₹</span>
+                <input
+                  type="number"
+                  name="totalAmount"
+                  className={`form-input input-with-prefix ${errors.totalAmount ? 'input-error' : ''}`}
+                  placeholder="1000"
+                  min="1"
+                  step="any"
+                  value={formData.totalAmount}
+                  onChange={handleChange}
+                />
+              </div>
+              {errors.totalAmount && <span className="field-error-msg">{errors.totalAmount}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label labour-form-label">Advance Payment</label>
+              <div className="input-with-currency-wrap">
+                <span className="input-currency-prefix">₹</span>
+                <input
+                  type="number"
+                  name="advanceAmount"
+                  className={`form-input input-with-prefix ${errors.advanceAmount ? 'input-error' : ''}`}
+                  placeholder="0"
+                  min="0"
+                  step="any"
+                  value={formData.advanceAmount}
+                  onChange={handleChange}
+                />
+              </div>
+              {errors.advanceAmount && <span className="field-error-msg">{errors.advanceAmount}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label labour-form-label">
+                Bank Name {Number(formData.advanceAmount) > 0 && <span style={{ color: '#EF4444' }}>*</span>}
+              </label>
+              <select
+                name="bankAccountId"
+                className={`form-select ${errors.bankAccountId ? 'input-error' : ''}`}
+                value={formData.bankAccountId}
+                onChange={handleChange}
+                disabled={loadingBanks}
+              >
+                <option value="">
+                  {loadingBanks
+                    ? 'Loading banks...'
+                    : bankAccounts.length === 0
+                      ? 'No bank accounts available'
+                      : 'Select Bank Name...'}
+                </option>
+                {bankAccounts.map((b) => (
+                  <option key={b.id || b._id} value={b.id || b._id}>
+                    {b.bankName}
+                  </option>
+                ))}
+              </select>
+              {errors.bankAccountId && <span className="field-error-msg">{errors.bankAccountId}</span>}
+            </div>
+
+            <div className="form-group dashboard-worker-address">
+              <label className="form-label labour-form-label">Address</label>
+              <textarea
+                name="address"
+                className="form-input form-textarea"
+                rows={2}
+                placeholder="Worker residential address or native place..."
+                value={formData.address}
+                onChange={handleChange}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+            <button
+              type="submit"
+              className="btn btn-primary-action"
+              disabled={submitting}
+            >
+              {submitting ? 'Adding Worker...' : 'Add Worker'}
+            </button>
+          </div>
+        </form>
+      </section>
+    )
+  }
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
@@ -321,7 +516,7 @@ export default function AddWorkerModal({
 
               {/* 6. Daily Wage * with ₹ prefix */}
               <div className="form-group">
-                <label className="form-label labour-form-label">Daily Wage *</label>
+                <label className="form-label labour-form-label">Total Amount *</label>
                 <div className="input-with-currency-wrap">
                   <span className="input-currency-prefix">₹</span>
                   <input

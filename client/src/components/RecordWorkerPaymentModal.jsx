@@ -3,9 +3,16 @@ import { X, Receipt, Loader2, AlertTriangle } from 'lucide-react'
 import { workerPaymentService } from '../services/workerPaymentService.js'
 import { bankAccountService } from '../services/bankAccountService.js'
 
-const PAYMENT_TYPES = ['Advance Payment', 'Wage Payment', 'Final Settlement']
+const PAYMENT_TYPES = [
+  'Advance Payment',
+  'Additional Advance',
+  'Remaining Payment',
+  'Wage Payment',
+  'Final Settlement',
+  'Other',
+]
 
-export default function RecordWorkerPaymentModal({ onClose, worker, sites = [], onSuccess }) {
+export default function RecordWorkerPaymentModal({ onClose, worker, workers = [], sites = [], onSuccess }) {
   const today = new Date().toISOString().slice(0, 10)
 
   const [form, setForm] = useState({
@@ -14,7 +21,7 @@ export default function RecordWorkerPaymentModal({ onClose, worker, sites = [], 
     bankAccountId: '',
     amount: '',
     paymentDate: today,
-    paymentType: 'Wage Payment',
+    paymentType: 'Remaining Payment',
     remarks: '',
   })
   const [banks, setBanks] = useState([])
@@ -23,7 +30,8 @@ export default function RecordWorkerPaymentModal({ onClose, worker, sites = [], 
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState(false)
 
-  const outstanding = Number(worker?.outstanding || 0)
+  const activeWorker = worker || workers.find((w) => String(w._id || w.id) === String(form.workerId)) || null
+  const outstanding = Number(activeWorker?.outstanding || 0)
   const selectedBank = banks.find((b) => String(b._id || b.id) === String(form.bankAccountId))
 
   useEffect(() => {
@@ -114,15 +122,15 @@ export default function RecordWorkerPaymentModal({ onClose, worker, sites = [], 
         </div>
 
         {/* Worker Info Banner */}
-        {worker && (
+        {activeWorker && (
           <div style={{ padding: '12px 24px', background: '#F8FAFC', borderBottom: '1px solid #E5EAF1', display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             <div>
               <span style={{ fontSize: '11px', color: '#70829F', fontWeight: 600 }}>WORKER</span>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#172033', marginTop: '2px' }}>{worker.name}</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#172033', marginTop: '2px' }}>{activeWorker.name}</div>
             </div>
             <div>
               <span style={{ fontSize: '11px', color: '#70829F', fontWeight: 600 }}>TRADE</span>
-              <div style={{ fontSize: '14px', color: '#374151', marginTop: '2px' }}>{worker.trade}</div>
+              <div style={{ fontSize: '14px', color: '#374151', marginTop: '2px' }}>{activeWorker.trade || '—'}</div>
             </div>
             <div>
               <span style={{ fontSize: '11px', color: '#70829F', fontWeight: 600 }}>PENDING</span>
@@ -136,6 +144,37 @@ export default function RecordWorkerPaymentModal({ onClose, worker, sites = [], 
         {/* Form */}
         <form onSubmit={handleSubmit}>
           <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+            {/* Select Worker (if not preselected) */}
+            {!worker && (
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                  Select Worker <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <select
+                  value={form.workerId}
+                  onChange={(e) => {
+                    const selId = e.target.value
+                    const selWorker = workers.find((w) => String(w._id || w.id) === String(selId))
+                    setForm((prev) => ({
+                      ...prev,
+                      workerId: selId,
+                      siteId: selWorker?.siteId || selWorker?.site_id || prev.siteId,
+                    }))
+                    setSaveError('')
+                  }}
+                  style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '14px', color: form.workerId ? '#172033' : '#9CA3AF', background: '#fff' }}
+                  required
+                >
+                  <option value="">Select a worker...</option>
+                  {workers.map((w) => (
+                    <option key={w._id || w.id} value={w._id || w.id}>
+                      {w.name} {w.trade ? `(${w.trade})` : ''} — Pending: ₹{Number(w.outstanding || 0).toLocaleString('en-IN')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Payment Type */}
             <div>

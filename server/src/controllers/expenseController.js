@@ -152,6 +152,25 @@ export const createExpense = async (req, res, next) => {
         [calculatedAmount, site],
       )
 
+      if (parsedPaid > 0 && bankAccountId) {
+        await conn.query(
+          `INSERT INTO expense_payments
+            (expense_id, site_id, supplier_id, bank_account_id, amount, payment_date, payment_method, reference, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            result.insertId,
+            site,
+            supplier || null,
+            bankAccountId,
+            parsedPaid,
+            expenseDate,
+            paymentMethod || 'Bank Transfer',
+            remark || '',
+            'Initial Expense Payment',
+          ],
+        )
+      }
+
       if (shouldApplyToMaterial) {
         await Material.applyExpensePurchase(conn, {
           materialName: expenseCategory,
@@ -391,6 +410,7 @@ export const deleteExpense = async (req, res, next) => {
         })
       }
 
+      await conn.query('DELETE FROM expense_payments WHERE expense_id = ?', [req.params.id])
       await conn.query('DELETE FROM expenses WHERE id = ?', [req.params.id])
       await conn.query('UPDATE sites SET total_spent = total_spent - ? WHERE id = ?', [expense.amount, siteId])
 
@@ -410,3 +430,223 @@ export const deleteExpense = async (req, res, next) => {
     next(error)
   }
 }
+
+export const recordExpensePayment = async (req, res, next) => {
+  const pool = getPool()
+  const conn = await pool.getConnection()
+  try {
+    const expenseId = req.params.id
+    const {
+      amount,
+      paymentDate,
+      paymentMethod,
+      bankAccountId,
+      reference,
+      notes,
+    } = req.body
+
+    const numAmount = Number(amount)
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ error: 'Payment amount must be greater than zero.' })
+    }
+
+    if (!bankAccountId) {
+      return res.status(400).json({ error: 'Please select a bank account.' })
+    }
+
+    await conn.beginTransaction()
+
+    // 1. Fetch expense with row lock
+    const [[expense]] = await conn.query(
+      'SELECT * FROM expenses WHERE id = ? FOR UPDATE',
+      [expenseId],
+    )
+    if (!expense) {
+      await conn.rollback()
+      conn.release()
+      return res.status(404).json({ error: 'Expense not found.' })
+    }
+
+    const currentTotal = Number(expense.amount) || 0
+    const currentPaid = Number(expense.paid_amount) || 0
+    const currentPending = Number(
+      expense.pending_amount !== undefined && expense.pending_amount !== null
+        ? expense.pending_amount
+        : Math.max(0, currentTotal - currentPaid)
+    )
+
+    if (currentPending <= 0) {
+      await conn.rollback()
+      conn.release()
+      return res.status(400).json({ error: 'This expense is already fully paid.' })
+    }
+
+    if (numAmount > currentPending) {
+      await conn.rollback()
+      conn.release()
+      return res.status(400).json({
+        error: `Payment amount (₹${numAmount.toLocaleString('en-IN')}) cannot exceed remaining pending amount of ₹${currentPending.toLocaleString('en-IN')}.`,
+      })
+    }
+
+    // 2. Fetch and lock bank account
+    const [[bank]] = await conn.query(
+      'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+      [bankAccountId],
+    )
+    if (!bank) {
+      await conn.rollback()
+      conn.release()
+      return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+    }
+
+    const currentBankBalance = Number(bank.balance) || 0
+    if (currentBankBalance < numAmount) {
+      await conn.rollback()
+      conn.release()
+      return res.status(400).json({
+        error: `Insufficient bank balance in ${bank.bank_name}. Available: ₹${currentBankBalance.toLocaleString('en-IN')}, Requested: ₹${numAmount.toLocaleString('en-IN')}.`,
+      })
+    }
+
+    // 3. Deduct from bank account
+    await conn.query(
+      'UPDATE bank_accounts SET balance = balance - ? WHERE id = ?',
+      [numAmount, bankAccountId],
+    )
+
+    // 4. Update expense paid_amount, pending_amount, status
+    const newPaid = Number((currentPaid + numAmount).toFixed(2))
+    const newPending = Number(Math.max(0, currentTotal - newPaid).toFixed(2))
+    const newStatus = newPending <= 0 ? 'Paid' : 'Partial'
+
+    await conn.query(
+      'UPDATE expenses SET paid_amount = ?, pending_amount = ?, status = ?, bank_account_id = ? WHERE id = ?',
+      [newPaid, newPending, newStatus, bankAccountId, expenseId],
+    )
+
+    // 5. If linked to material, update material paid amount
+    if (expense.applied_to_material || expense.material_id) {
+      await conn.query(
+        'UPDATE materials SET paid_amount = paid_amount + ? WHERE id = ? OR (site_id = ? AND category = ?)',
+        [numAmount, expense.material_id || 0, expense.site_id, expense.category],
+      )
+    }
+
+    // 6. Record payment in expense_payments
+    const pDate = paymentDate
+      ? new Date(paymentDate).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10)
+    await conn.query(
+      `INSERT INTO expense_payments
+        (expense_id, site_id, supplier_id, bank_account_id, amount, payment_date, payment_method, reference, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        expenseId,
+        expense.site_id,
+        expense.supplier_id || null,
+        bankAccountId,
+        numAmount,
+        pDate,
+        paymentMethod || 'Bank Transfer',
+        reference || '',
+        notes || 'Expense partial payment',
+      ],
+    )
+
+    await conn.commit()
+    conn.release()
+
+    const updated = await Expense.findById(expenseId)
+    return res.json({ success: true, message: 'Expense payment recorded successfully', expense: updated })
+  } catch (error) {
+    await conn.rollback()
+    conn.release()
+    next(error)
+  }
+}
+
+export const getExpensePayments = async (req, res, next) => {
+  try {
+    const expenseId = req.params.id
+    const pool = getPool()
+
+    const [rows] = await pool.query(
+      `SELECT 
+         ep.id,
+         ep.expense_id,
+         ep.site_id,
+         ep.supplier_id,
+         ep.bank_account_id,
+         ep.amount,
+         CAST(ep.payment_date AS CHAR) AS payment_date_str,
+         CAST(ep.created_at AS CHAR) AS created_at_str,
+         ep.payment_date,
+         ep.payment_method,
+         ep.reference,
+         ep.notes,
+         ep.created_at,
+         ba.bank_name,
+         ba.account_number
+       FROM expense_payments ep
+       LEFT JOIN bank_accounts ba ON ba.id = ep.bank_account_id
+       WHERE ep.expense_id = ?
+       ORDER BY ep.payment_date ASC, ep.id ASC`,
+      [expenseId],
+    )
+
+    if (rows.length === 0) {
+      const expense = await Expense.findById(expenseId)
+      if (expense && Number(expense.paidAmount) > 0) {
+        return res.json([
+          {
+            id: `initial-${expense._id}`,
+            _id: `initial-${expense._id}`,
+            expenseId: String(expense._id),
+            siteId: expense.site?._id || expense.site || null,
+            supplierId: expense.supplier?._id || expense.supplier || null,
+            bankAccountId: expense.bankAccountId || null,
+            amount: Number(expense.paidAmount),
+            paymentDate: expense.date,
+            paymentDateStr: expense.date,
+            paymentType: 'Debit',
+            paymentMethod: expense.paymentMethod || 'Bank Transfer',
+            reference: expense.remark || '-',
+            notes: 'Initial Expense Payment',
+            bankName: expense.bankAccount?.bankName || '',
+            accountNumber: expense.bankAccount?.accountNumber || '',
+            createdAt: expense.createdAt,
+          },
+        ])
+      }
+      return res.json([])
+    }
+
+    const payments = rows.map((r) => {
+      const dateVal = r.payment_date_str || (r.payment_date ? String(r.payment_date).slice(0, 10) : '')
+      return {
+        id: r.id,
+        _id: String(r.id),
+        expenseId: String(r.expense_id),
+        siteId: String(r.site_id),
+        supplierId: r.supplier_id ? String(r.supplier_id) : null,
+        bankAccountId: r.bank_account_id ? String(r.bank_account_id) : null,
+        amount: Number(r.amount) || 0,
+        paymentDate: dateVal,
+        paymentDateStr: dateVal,
+        paymentType: 'Debit',
+        paymentMethod: r.payment_method || 'Bank Transfer',
+        reference: r.reference || r.notes || '-',
+        notes: r.notes || '',
+        bankName: r.bank_name || '',
+        accountNumber: r.account_number || '',
+        createdAt: r.created_at_str || r.created_at,
+      }
+    })
+
+    return res.json(payments)
+  } catch (error) {
+    next(error)
+  }
+}
+

@@ -120,17 +120,21 @@ export const WorkerPayment = {
   async getPaymentsByWorker(workerId) {
     const pool = getPool()
 
-    // 1. Fetch worker info including initial advance
+    // 1. Fetch worker info including initial advance, trade, site, wages
     const [[worker]] = await pool.query(
-      `SELECT l.id, l.name, l.advance_amount, l.bank_account_id, l.joining_date,
-              l.remarks, l.created_at, ba.bank_name
+      `SELECT l.id, l.name, l.trade, l.site_id, l.advance_amount, l.wages_earned,
+              l.daily_rate, l.total_paid, l.bank_account_id, l.joining_date,
+              l.remarks, l.created_at, ba.bank_name, s.name AS site_name
        FROM labours l
        LEFT JOIN bank_accounts ba ON ba.id = l.bank_account_id
+       LEFT JOIN sites s ON s.id = l.site_id
        WHERE l.id = ?`,
       [workerId],
     )
 
     if (!worker) return []
+
+    const totalAgreed = Number(worker.wages_earned || worker.daily_rate || 0)
 
     // 2. Fetch additional payments from worker_payments
     const [payments] = await pool.query(
@@ -142,25 +146,32 @@ export const WorkerPayment = {
        LEFT JOIN bank_accounts ba ON ba.id = wp.bank_account_id
        LEFT JOIN sites s ON s.id = wp.site_id
        WHERE wp.worker_id = ?
-       ORDER BY wp.payment_date DESC, wp.id DESC`,
+       ORDER BY wp.payment_date ASC, wp.id ASC`,
       [workerId],
     )
 
     const list = []
 
-    // Add initial advance if present
-    if (Number(worker.advance_amount || 0) > 0) {
+    // Add initial advance if present and not already recorded in worker_payments
+    const hasAdvanceInPayments = payments.some(
+      (p) => p.payment_type === 'Advance Payment' && p.reference_id === `TXN-WRK-${String(worker.id).padStart(4, '0')}`
+    )
+    if (!hasAdvanceInPayments && Number(worker.advance_amount || 0) > 0) {
       list.push({
         id: `init-adv-${worker.id}`,
         isInitialAdvance: true,
         workerId: worker.id,
         workerName: worker.name,
+        trade: worker.trade || '',
+        siteId: worker.site_id,
+        siteName: worker.site_name || '',
         paymentDate: fmtDateOnly(worker.joining_date || worker.created_at),
+        rawDate: worker.joining_date || worker.created_at,
         amount: Number(worker.advance_amount),
         paymentType: 'Advance Payment',
-        paymentMethod: 'Bank Transfer',
+        paymentMethod: worker.bank_account_id ? 'Bank Transfer' : 'Cash',
         bankAccountId: worker.bank_account_id,
-        bankName: worker.bank_name || 'Bank Account',
+        bankName: worker.bank_name || (worker.bank_account_id ? 'Bank Account' : null),
         remarks: worker.remarks || 'Initial Advance on Joining',
         referenceId: `TXN-WRK-${String(worker.id).padStart(4, '0')}`,
         createdAt: fmtDate(worker.created_at),
@@ -174,14 +185,16 @@ export const WorkerPayment = {
         isInitialAdvance: false,
         workerId: p.worker_id,
         workerName: worker.name,
-        siteId: p.site_id,
-        siteName: p.site_name,
+        trade: worker.trade || '',
+        siteId: p.site_id || worker.site_id,
+        siteName: p.site_name || worker.site_name || '',
         paymentDate: fmtDateOnly(p.payment_date),
+        rawDate: p.payment_date || p.created_at,
         amount: Number(p.amount),
-        paymentType: p.payment_type,
-        paymentMethod: p.payment_method || 'Bank Transfer',
+        paymentType: p.payment_type || 'Wage Payment',
+        paymentMethod: p.payment_method || (p.bank_account_id ? 'Bank Transfer' : 'Cash'),
         bankAccountId: p.bank_account_id,
-        bankName: p.bank_name || 'Bank Account',
+        bankName: p.bank_name || (p.bank_account_id ? 'Bank Account' : null),
         remarks: p.remarks || '',
         referenceId: p.reference_id || `TXN-WRK-PAY-${p.id}`,
         createdBy: p.created_by,
@@ -189,8 +202,202 @@ export const WorkerPayment = {
       })
     }
 
-    // Sort all chronologically descending
-    list.sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate))
+    // Sort chronologically ASCENDING to calculate cumulative payments & pending after each payment
+    list.sort((a, b) => {
+      const da = new Date(a.rawDate || a.paymentDate || 0).getTime()
+      const db = new Date(b.rawDate || b.paymentDate || 0).getTime()
+      if (da !== db) return da - db
+      // If dates are identical: initial advance always comes first
+      if (a.isInitialAdvance) return -1
+      if (b.isInitialAdvance) return 1
+      // Use transaction creation order (createdAt or id)
+      const ca = new Date(a.createdAt || 0).getTime()
+      const cb = new Date(b.createdAt || 0).getTime()
+      if (ca !== cb) return ca - cb
+      return (Number(a.id) || 0) - (Number(b.id) || 0)
+    })
+
+    let cumulativePaid = 0
+    for (const item of list) {
+      cumulativePaid += Number(item.amount || 0)
+      item.totalAgreedAmount = totalAgreed
+      item.cumulativePaid = cumulativePaid
+      item.pendingAfter = Math.max(0, totalAgreed - cumulativePaid)
+    }
+
+    // Now sort chronologically DESCENDING (latest payment date first) as required
+    list.sort((a, b) => {
+      const da = new Date(a.rawDate || a.paymentDate || 0).getTime()
+      const db = new Date(b.rawDate || b.paymentDate || 0).getTime()
+      if (da !== db) return db - da // Latest date first
+      // If dates are identical: latest created transaction comes first
+      if (a.isInitialAdvance) return 1
+      if (b.isInitialAdvance) return -1
+      const ca = new Date(a.createdAt || 0).getTime()
+      const cb = new Date(b.createdAt || 0).getTime()
+      if (ca !== cb) return cb - ca
+      return (Number(b.id) || 0) - (Number(a.id) || 0)
+    })
+    return list
+  },
+
+  // Get complete payment history across all workers
+  async getAllPayments() {
+    const pool = getPool()
+
+    // 1. Fetch all workers from labours with sites and banks
+    const [workers] = await pool.query(`
+      SELECT l.id, l.name, l.phone, l.trade, l.site_id, l.advance_amount,
+             l.total_paid, l.wages_earned, l.daily_rate, l.joining_date,
+             l.bank_account_id, l.payment_type, l.remarks, l.created_at,
+             ba.bank_name, s.name AS site_name
+      FROM labours l
+      LEFT JOIN bank_accounts ba ON ba.id = l.bank_account_id
+      LEFT JOIN sites s ON s.id = l.site_id
+    `)
+
+    const workerMap = {}
+    for (const w of workers) {
+      workerMap[w.id] = w
+    }
+
+    // 2. Fetch all recorded payments from worker_payments
+    const [payments] = await pool.query(`
+      SELECT wp.id, wp.worker_id, wp.site_id, wp.bank_account_id, wp.payment_date,
+             wp.amount, wp.payment_type, wp.payment_method, wp.reference_id,
+             wp.remarks, wp.created_by, wp.created_at,
+             ba.bank_name, s.name AS site_name
+      FROM worker_payments wp
+      LEFT JOIN bank_accounts ba ON ba.id = wp.bank_account_id
+      LEFT JOIN sites s ON s.id = wp.site_id
+      ORDER BY wp.payment_date DESC, wp.id DESC
+    `)
+
+    const list = []
+
+    // Add initial advance for any worker with advance_amount > 0 and not already recorded in worker_payments
+    const advanceWorkerIds = new Set(
+      payments
+        .filter((p) => p.payment_type === 'Advance Payment' && p.reference_id === `TXN-WRK-${String(p.worker_id).padStart(4, '0')}`)
+        .map((p) => p.worker_id)
+    )
+    for (const w of workers) {
+      const adv = Number(w.advance_amount || 0)
+      if (adv > 0 && !advanceWorkerIds.has(w.id)) {
+        const totalAmount = Number(w.wages_earned || w.daily_rate || 0)
+        const totalPaid = Number(w.total_paid || 0)
+        const pending = Math.max(0, totalAmount - totalPaid)
+        list.push({
+          id: `init-adv-${w.id}`,
+          isInitialAdvance: true,
+          workerId: w.id,
+          workerName: w.name,
+          workerPhone: w.phone,
+          trade: w.trade,
+          siteId: w.site_id,
+          siteName: w.site_name || '',
+          date: fmtDateOnly(w.joining_date || w.created_at),
+          paymentDate: fmtDateOnly(w.joining_date || w.created_at),
+          rawDate: w.joining_date || w.created_at,
+          amount: adv,
+          advance: adv,
+          totalAmount,
+          totalPaid,
+          pending,
+          type: 'Paid',
+          paymentType: 'Advance Payment',
+          method: w.bank_account_id ? 'Bank Transfer' : 'Cash',
+          paymentMethod: w.bank_account_id ? 'Bank Transfer' : 'Cash',
+          bankAccountId: w.bank_account_id,
+          bankName: w.bank_name || 'Bank Account',
+          remarks: w.remarks || 'Advance payment',
+          remark: w.remarks || 'Advance payment',
+          referenceId: `TXN-WRK-${String(w.id).padStart(4, '0')}`,
+          createdBy: 'Admin',
+          createdAt: fmtDate(w.created_at),
+        })
+      }
+    }
+
+    // Add all records from worker_payments
+    for (const p of payments) {
+      const w = workerMap[p.worker_id]
+      const totalAmount = Number(w?.wages_earned || w?.daily_rate || 0)
+      const totalPaid = Number(w?.total_paid || 0)
+      const pending = Math.max(0, totalAmount - totalPaid)
+      list.push({
+        id: p.id,
+        isInitialAdvance: false,
+        workerId: p.worker_id,
+        workerName: w ? w.name : 'Unknown Worker',
+        workerPhone: w ? w.phone : '',
+        trade: w ? w.trade : '',
+        siteId: p.site_id || w?.site_id,
+        siteName: p.site_name || w?.site_name || '',
+        date: fmtDateOnly(p.payment_date),
+        paymentDate: fmtDateOnly(p.payment_date),
+        rawDate: p.payment_date,
+        amount: Number(p.amount),
+        advance: Number(p.amount),
+        totalAmount,
+        totalPaid,
+        pending,
+        type: 'Paid',
+        paymentType: p.payment_type || 'Wage Payment',
+        method: p.payment_method || 'Bank Transfer',
+        paymentMethod: p.payment_method || 'Bank Transfer',
+        bankAccountId: p.bank_account_id,
+        bankName: p.bank_name || 'Bank Account',
+        remarks: p.remarks || '',
+        remark: p.remarks || '',
+        referenceId: p.reference_id || `TXN-WRK-PAY-${p.id}`,
+        createdBy: p.created_by,
+        createdAt: fmtDate(p.created_at),
+      })
+    }
+
+    // Calculate per-worker running cumulative and pending after each payment
+    const paymentsByWorker = {}
+    for (const item of list) {
+      if (!paymentsByWorker[item.workerId]) paymentsByWorker[item.workerId] = []
+      paymentsByWorker[item.workerId].push(item)
+    }
+
+    for (const wId of Object.keys(paymentsByWorker)) {
+      const wList = paymentsByWorker[wId]
+      wList.sort((a, b) => {
+        const da = new Date(a.rawDate || a.paymentDate || 0).getTime()
+        const db = new Date(b.rawDate || b.paymentDate || 0).getTime()
+        if (da !== db) return da - db
+        if (a.isInitialAdvance) return -1
+        if (b.isInitialAdvance) return 1
+        const ca = new Date(a.createdAt || 0).getTime()
+        const cb = new Date(b.createdAt || 0).getTime()
+        if (ca !== cb) return ca - cb
+        return (Number(a.id) || 0) - (Number(b.id) || 0)
+      })
+
+      const totalAmt = Number(wList[0]?.totalAmount || 0)
+      let cum = 0
+      for (const item of wList) {
+        cum += Number(item.amount || 0)
+        item.cumulativePaid = cum
+        item.pendingAfter = Math.max(0, totalAmt - cum)
+        item.pending = item.pendingAfter
+      }
+    }
+
+    list.sort((a, b) => {
+      const da = new Date(a.rawDate || a.paymentDate || 0).getTime()
+      const db = new Date(b.rawDate || b.paymentDate || 0).getTime()
+      if (da !== db) return db - da
+      if (a.isInitialAdvance) return 1
+      if (b.isInitialAdvance) return -1
+      const ca = new Date(a.createdAt || 0).getTime()
+      const cb = new Date(b.createdAt || 0).getTime()
+      if (ca !== cb) return cb - ca
+      return (Number(b.id) || 0) - (Number(a.id) || 0)
+    })
     return list
   },
 
@@ -200,6 +407,72 @@ export const WorkerPayment = {
     const conn = await pool.getConnection()
     try {
       await conn.beginTransaction()
+
+      if (typeof id === 'string' && id.startsWith('init-adv-')) {
+        const workerId = Number(id.replace('init-adv-', ''))
+        const [[worker]] = await conn.query(
+          'SELECT id, advance_amount, bank_account_id, total_paid FROM labours WHERE id = ? FOR UPDATE',
+          [workerId],
+        )
+        if (!worker) throw new Error('Worker record not found.')
+        const oldAmount = Number(worker.advance_amount || 0)
+        const oldBankId = worker.bank_account_id
+        const newAmount = amount !== undefined ? Number(amount) : oldAmount
+        const newBankId = bankAccountId ? Number(bankAccountId) : oldBankId
+        const newDate = paymentDate ? new Date(paymentDate).toISOString().slice(0, 10) : undefined
+
+        if (isNaN(newAmount) || newAmount <= 0) {
+          throw new Error('Payment amount must be greater than zero.')
+        }
+
+        // Adjust bank balances
+        if (oldBankId === newBankId) {
+          const diff = newAmount - oldAmount
+          if (diff !== 0 && newBankId) {
+            const [[bank]] = await conn.query('SELECT balance, bank_name FROM bank_accounts WHERE id = ? FOR UPDATE', [newBankId])
+            if (!bank) throw new Error('Bank account not found.')
+            if (diff > 0 && Number(bank.balance) < diff) {
+              throw new Error(`Insufficient balance in ${bank.bank_name}.`)
+            }
+            await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [diff, newBankId])
+          }
+        } else {
+          if (oldBankId && oldAmount > 0) {
+            await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [oldAmount, oldBankId])
+          }
+          if (newBankId) {
+            const [[newBank]] = await conn.query('SELECT balance, bank_name FROM bank_accounts WHERE id = ? FOR UPDATE', [newBankId])
+            if (!newBank) throw new Error('New bank account not found.')
+            if (Number(newBank.balance) < newAmount) {
+              throw new Error(`Insufficient balance in ${newBank.bank_name}.`)
+            }
+            await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [newAmount, newBankId])
+          }
+        }
+
+        // Recalculate total_paid
+        const [[paySum]] = await conn.query(
+          'SELECT COALESCE(SUM(amount), 0) AS total_extra FROM worker_payments WHERE worker_id = ?',
+          [workerId],
+        )
+        const newTotalPaid = newAmount + Number(paySum?.total_extra || 0)
+
+        const updates = ['advance_amount = ?', 'bank_account_id = ?', 'total_paid = ?']
+        const params = [newAmount, newBankId || null, newTotalPaid]
+        if (newDate) {
+          updates.push('joining_date = ?')
+          params.push(newDate)
+        }
+        if (remarks !== undefined) {
+          updates.push('remarks = ?')
+          params.push(remarks)
+        }
+        params.push(workerId)
+        await conn.query(`UPDATE labours SET ${updates.join(', ')} WHERE id = ?`, params)
+
+        await conn.commit()
+        return { id, amount: newAmount, paymentDate: newDate, bankAccountId: newBankId }
+      }
 
       const [[existing]] = await conn.query(
         'SELECT * FROM worker_payments WHERE id = ? FOR UPDATE',
@@ -277,6 +550,29 @@ export const WorkerPayment = {
     const conn = await pool.getConnection()
     try {
       await conn.beginTransaction()
+
+      if (typeof id === 'string' && id.startsWith('init-adv-')) {
+        const workerId = Number(id.replace('init-adv-', ''))
+        const [[worker]] = await conn.query(
+          'SELECT id, advance_amount, bank_account_id, total_paid FROM labours WHERE id = ? FOR UPDATE',
+          [workerId],
+        )
+        if (!worker) throw new Error('Worker record not found.')
+        const numAmount = Number(worker.advance_amount || 0)
+        if (worker.bank_account_id && numAmount > 0) {
+          await conn.query(
+            'UPDATE bank_accounts SET balance = balance + ? WHERE id = ?',
+            [numAmount, worker.bank_account_id],
+          )
+        }
+        const newTotalPaid = Math.max(0, Number(worker.total_paid || 0) - numAmount)
+        await conn.query(
+          'UPDATE labours SET advance_amount = 0, total_paid = ? WHERE id = ?',
+          [newTotalPaid, workerId],
+        )
+        await conn.commit()
+        return { id, reversedAmount: numAmount, workerId }
+      }
 
       const [[payment]] = await conn.query(
         'SELECT * FROM worker_payments WHERE id = ? FOR UPDATE',
