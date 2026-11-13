@@ -84,13 +84,15 @@ export default function AddWorkerModal({
       newErrors.name = 'Worker Full Name is required.'
     }
 
-    if (!formData.phone || !formData.phone.trim()) {
-      newErrors.phone = 'Phone Number is required.'
-    } else {
-      const cleanPhone = formData.phone.trim()
-      const phoneRegex = /^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]{7,15}$/
-      if (!phoneRegex.test(cleanPhone)) {
-        newErrors.phone = 'Please enter a valid telephone number.'
+    if (!embeddedMode) {
+      if (!formData.phone || !formData.phone.trim()) {
+        newErrors.phone = 'Phone Number is required.'
+      } else {
+        const cleanPhone = formData.phone.trim()
+        const phoneRegex = /^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]{7,15}$/
+        if (!phoneRegex.test(cleanPhone)) {
+          newErrors.phone = 'Please enter a valid telephone number.'
+        }
       }
     }
 
@@ -104,8 +106,10 @@ export default function AddWorkerModal({
       newErrors.site = 'A valid construction site must be selected.'
     }
 
-    if (!formData.joiningDate) {
-      newErrors.joiningDate = 'Joining Date is required.'
+    if (!embeddedMode) {
+      if (!formData.joiningDate) {
+        newErrors.joiningDate = 'Joining Date is required.'
+      }
     }
 
     if (!formData.dailyRate || Number(formData.dailyRate) <= 0) {
@@ -226,6 +230,8 @@ export default function AddWorkerModal({
               {errors.name && <span className="field-error-msg">{errors.name}</span>}
             </div>
 
+            {/* Phone Number — hidden in Dashboard embedded form */}
+            {!embeddedMode && (
             <div className="form-group">
               <label className="form-label labour-form-label">Phone Number *</label>
               <input
@@ -238,6 +244,7 @@ export default function AddWorkerModal({
               />
               {errors.phone && <span className="field-error-msg">{errors.phone}</span>}
             </div>
+            )}
 
             <div className="form-group">
               <label className="form-label labour-form-label">Worker Trade / Role *</label>
@@ -289,6 +296,8 @@ export default function AddWorkerModal({
               {errors.site && <span className="field-error-msg">{errors.site}</span>}
             </div>
 
+            {/* Joining Date — hidden in Dashboard embedded form */}
+            {!embeddedMode && (
             <div className="form-group">
               <label className="form-label labour-form-label">Joining Date *</label>
               <input
@@ -300,6 +309,7 @@ export default function AddWorkerModal({
               />
               {errors.joiningDate && <span className="field-error-msg">{errors.joiningDate}</span>}
             </div>
+            )}
 
             <div className="form-group">
               <label className="form-label labour-form-label">Total Amount (₹) *</label>
@@ -364,6 +374,8 @@ export default function AddWorkerModal({
               {errors.bankAccountId && <span className="field-error-msg">{errors.bankAccountId}</span>}
             </div>
 
+            {/* Address — hidden in Dashboard embedded form */}
+            {!embeddedMode && (
             <div className="form-group dashboard-worker-address">
               <label className="form-label labour-form-label">Address</label>
               <textarea
@@ -375,6 +387,7 @@ export default function AddWorkerModal({
                 onChange={handleChange}
               />
             </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>

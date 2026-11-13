@@ -2311,6 +2311,68 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
+/* ==========================================================================
+   Site Detail – Materials Tab Filter Row
+   ========================================================================== */
+.sdp-mat-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #E5EAF1;
+  background-color: #FAFBFD;
+  flex-wrap: wrap;
+}
+
+.sdp-mat-filter-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sdp-mat-filter-select {
+  height: 36px !important;
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+  min-width: 160px;
+  max-width: 260px;
+  border: 1px solid #DCE5E8 !important;
+  border-radius: 6px !important;
+  background-color: #FFFFFF !important;
+  cursor: pointer;
+}
+
+.sdp-mat-filter-clear {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748B;
+  background-color: #F1F5F9;
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sdp-mat-filter-clear:hover {
+  background-color: #E2E8F0;
+  color: #334155;
+}
+
+.sdp-mat-filter-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: #94A3B8;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .site-box-title {
   font-size: 15px;
   font-weight: 700;
@@ -5038,6 +5100,8 @@
   /* ---- App layout ---- */
   .app-container {
     flex-direction: column;
+    overflow-x: hidden;
+    width: 100%;
   }
 
   /* ---- Sidebar → bottom navigation bar ---- */
@@ -5048,17 +5112,24 @@
     right: 0;
     top: auto;
     width: 100%;
-    height: auto;
-    min-height: 58px;
-    max-height: 68px;
+    height: 60px;
+    min-height: 60px;
+    max-height: 60px;
     flex-direction: row;
     border-right: none;
     border-top: 1.5px solid #E5EAF1;
-    z-index: 100;
-    overflow-y: visible;
+    z-index: 1000;
+    overflow-y: hidden;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
     background-color: #FAFDFF;
-    padding: 0;
+    padding: 0 4px;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+  }
+
+  .sidebar::-webkit-scrollbar {
+    display: none;
   }
 
   /* Hide brand logo in bottom nav */
@@ -5075,16 +5146,18 @@
   .sidebar-nav-container {
     padding: 0;
     flex-direction: row;
-    width: 100%;
+    width: max-content;
+    min-width: 100%;
   }
 
-  /* Nav list itself — horizontal */
+  /* Nav list itself — horizontal scrollable */
   .sidebar-nav {
     flex-direction: row;
-    justify-content: space-around;
     align-items: center;
-    width: 100%;
-    gap: 0;
+    width: max-content;
+    min-width: 100%;
+    gap: 3px;
+    padding: 0 4px;
   }
 
   /* Each nav item — vertical icon + small label */
@@ -5093,14 +5166,14 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
-    padding: 6px 4px;
+    padding: 6px 8px;
     font-size: 10px;
     border-radius: 8px;
-    flex: 1;
-    min-width: 48px;
+    min-width: 58px;
     max-width: 72px;
     white-space: nowrap;
     overflow: hidden;
+    flex-shrink: 0;
   }
 
   .sidebar-nav-icon {
@@ -5114,48 +5187,107 @@
 
   /* Main layout needs bottom padding so bottom nav doesn't cover content */
   .main-layout {
-    padding-bottom: 68px;
+    width: 100%;
+    overflow-x: hidden;
+    padding-bottom: 74px;
   }
 
   /* ---- Top Header ---- */
   .top-header {
     height: auto;
     min-height: 52px;
-    padding: 8px 14px;
+    padding: 10px 14px;
+    display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 8px;
     position: sticky;
     top: 0;
     z-index: 50;
+    background: #FFFFFF;
+    border-bottom: 1px solid #E5EAF1;
   }
 
-  /* Search bar: full width, below header actions on mobile */
+  /* Header actions on Row 1: Action buttons on left, Profile on right */
+  .header-actions {
+    order: 1;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .top-header .btn {
+    padding: 0;
+    font-size: 12px;
+    height: 34px;
+    width: 34px;
+    min-width: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  .top-header .btn span {
+    display: none; /* hide text labels inside header buttons on mobile */
+  }
+
+  .header-divider {
+    display: none;
+  }
+
+  .user-profile {
+    margin-left: auto;
+    gap: 6px;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .profile-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .profile-info {
+    max-width: 130px;
+    min-width: 0;
+  }
+
+  .profile-name {
+    font-size: 12.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .profile-role {
+    font-size: 10.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Search bar: full width on Row 2 */
   .header-search {
     width: 100%;
     order: 2;
     min-width: 0;
-  }
-
-  .header-actions {
-    order: 1;
-    gap: 8px;
-  }
-
-  /* Compress header buttons — keep icon, shrink padding */
-  .btn {
-    padding: 0 10px;
-    font-size: 12px;
-    height: 32px;
-  }
-
-  .btn span {
-    display: none; /* hide text labels on small screens */
+    margin: 0;
   }
 
   /* ---- Content Body ---- */
   .content-body {
-    padding: 14px 14px 80px 14px;
-    gap: 16px;
+    padding: 12px 12px 84px 12px;
+    gap: 14px;
+    overflow-x: hidden;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   /* ---- Stat-card grids ---- */
@@ -5770,17 +5902,272 @@
 @media (max-width: 1080px) {
   .dashboard-financial-summary {
     grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
   }
   .dashboard-form-chart-row {
     flex-direction: column;
+    gap: 16px;
   }
   .dashboard-chart-col {
     flex: 1 1 100%;
     width: 100%;
+    max-width: 100%;
+  }
+  .dashboard-form-chart-card {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 16px 14px;
+    height: auto;
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
+  /* ── 2. Compact 2-column summary cards on mobile ── */
+  .dashboard-financial-summary {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+    width: 100%;
+  }
+
+  .dashboard-financial-summary .site-stat-card {
+    padding: 12px 12px 10px 12px;
+    min-height: auto;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .dashboard-financial-summary .stat-icon-wrap {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 4px;
+  }
+
+  .dashboard-financial-summary .stat-icon-wrap svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .dashboard-financial-summary .stat-label {
+    font-size: 11px;
+    line-height: 1.2;
+    color: #70829F;
+  }
+
+  .dashboard-financial-summary .stat-value {
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.25;
+    margin: 2px 0;
+  }
+
+  .dashboard-financial-summary .stat-desc {
+    font-size: 10px;
+    color: #8C9CAB;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── 3. Dashboard tabs single horizontal row ── */
+  .dashboard-tabs-section {
+    margin-top: 0;
+    width: 100%;
+  }
+
+  .dashboard-tab-nav {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    border-bottom: 1px solid #E5EAF1;
+    margin-bottom: 0;
+    padding: 0 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    scrollbar-width: none;
+    width: 100%;
+  }
+
+  .dashboard-tab-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dashboard-tab-btn {
+    font-size: 13.5px;
+    padding: 8px 0 10px 0;
+    flex-shrink: 0;
+  }
+
+  /* ── 4. Forms and content single column layout ── */
+  .dashboard-tab-content {
+    padding-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+  }
+
+  .daily-expense-section {
+    padding: 16px 14px 18px 14px;
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: var(--radius-md);
+  }
+
+  .section-header-compact {
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    font-size: 16px;
+  }
+
+  .section-subtitle {
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
+  .form-grid,
+  .form-bottom-row,
+  .form-bottom-row.form-bottom-row-5col,
+  .dashboard-site-form-grid,
+  .dashboard-worker-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  .dashboard-site-form-grid .form-label,
+  .dashboard-worker-form-grid .form-label {
+    white-space: normal;
+    font-size: 13px;
+  }
+
+  .form-input,
+  .form-select {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    font-size: 14px;
+    height: 40px;
+  }
+
+  .input-with-prefix,
+  .input-with-icon {
+    width: 100%;
+  }
+
+  .form-submit-group .btn,
+  .daily-expense-form .btn-add-expense-submit {
+    width: 100%;
+    height: 44px;
+    font-size: 14px;
+    font-weight: 600;
+    justify-content: center;
+  }
+
+  .form-submit-group .btn span,
+  .daily-expense-form .btn-add-expense-submit span {
+    display: inline !important;
+  }
+
+  /* ── 5. Bank Accounts chart on mobile ── */
+  .dashboard-chart-col {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    align-self: stretch;
+  }
+
+  .dashboard-form-chart-card {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 16px 14px;
+    height: auto;
+  }
+
+  .dfs-chart-header {
+    margin-bottom: 12px;
+  }
+
+  .dfs-chart-body {
+    gap: 14px;
+  }
+
+  /* ── 6. Tables container & mobile friendly scrolling ── */
+  .dashboard-tables-container {
+    margin-top: 16px;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .sites-table-card {
+    padding: 16px 12px 14px 12px;
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: var(--radius-md);
+  }
+
+  .sites-table-card-header {
+    margin-bottom: 12px;
+  }
+
+  .sites-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 12px;
+    width: 100%;
+  }
+
+  .sites-search-box {
+    width: 100%;
+  }
+
+  .sites-filters-right {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .site-select-wrapper {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 130px;
+  }
+
+  .site-select {
+    width: 100%;
+  }
+
+  .sites-table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 12px;
+    border-radius: 6px;
+  }
+
+  .sites-table-scroll table {
+    min-width: 620px;
+  }
+
+  .sites-pagination-row {
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+  }
+
+  .pagination-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+/* Very narrow screens (<= 340px) */
+@media (max-width: 340px) {
   .dashboard-financial-summary {
     grid-template-columns: 1fr;
   }
@@ -5825,4 +6212,383 @@
   color: #94A3B8;
   border-color: #E2E8F0;
   box-shadow: none;
+}
+
+/* ==========================================================================
+   Make Payment – Expense Popup Responsive Layout
+   ========================================================================== */
+
+.mep-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.mep-modal-container {
+  width: 100%;
+  max-width: 540px;
+  max-height: calc(100dvh - 32px);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  background-color: #FFFFFF;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  box-sizing: border-box;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+.mep-modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid #E5EAF1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 12px;
+  background-color: #FFFFFF;
+}
+
+.mep-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mep-header-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background-color: #ECFDF5;
+  color: #059669;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mep-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #172033;
+  line-height: 1.3;
+}
+
+.mep-subtitle {
+  margin: 2px 0 0 0;
+  font-size: 12px;
+  color: #6B7280;
+  line-height: 1.3;
+}
+
+.mep-close-btn {
+  background: transparent;
+  border: none;
+  color: #70829F;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.mep-close-btn:hover {
+  background-color: #F1F4F8;
+  color: #172033;
+}
+
+.mep-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mep-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px 24px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Financial Summary Box */
+.mep-summary-box {
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  box-sizing: border-box;
+}
+
+.mep-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px 16px;
+  font-size: 13px;
+}
+
+.mep-summary-item {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.mep-summary-label {
+  color: #64748B;
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 2px;
+  letter-spacing: 0.3px;
+}
+
+.mep-summary-value {
+  font-weight: 600;
+  color: #0F172A;
+  word-break: break-word;
+}
+
+.mep-total-amount {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1E293B;
+}
+
+.mep-paid-amount {
+  font-weight: 600;
+  color: #059669;
+}
+
+.mep-pending-row {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #CBD5E1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mep-pending-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.mep-pending-badge {
+  font-size: 15px;
+  font-weight: 800;
+  padding: 2px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.mep-pending-due {
+  color: #DC2626;
+  background-color: #FEF2F2;
+  border: 1px solid #FECACA;
+}
+
+.mep-pending-cleared {
+  color: #059669;
+  background-color: #ECFDF5;
+  border: 1px solid #A7F3D0;
+}
+
+/* Error message box */
+.mep-error-box {
+  background-color: #FEF2F2;
+  border: 1px solid #FCA5A5;
+  color: #991B1B;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  word-break: break-word;
+}
+
+/* Form fields grid */
+.mep-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.mep-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mep-field-group .form-label {
+  font-weight: 600;
+  font-size: 13px;
+  color: #172033;
+  margin-bottom: 2px;
+  display: block;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.mep-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 40px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+}
+
+.mep-select {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.mep-balance-hint {
+  font-size: 11.5px;
+  color: #0284C7;
+  margin-top: 4px;
+  display: block;
+  font-weight: 500;
+}
+
+.mep-field-full {
+  grid-column: span 2;
+}
+
+/* Footer */
+.mep-modal-footer {
+  padding: 14px 24px;
+  border-top: 1px solid #E5EAF1;
+  background-color: #FFFFFF;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.mep-btn-cancel {
+  min-width: 90px;
+  height: 38px;
+}
+
+.mep-btn-submit {
+  background-color: #059669 !important;
+  border-color: #059669 !important;
+  color: #FFFFFF !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 140px;
+  height: 38px;
+}
+
+.mep-btn-submit:hover:not(:disabled) {
+  background-color: #047857 !important;
+  border-color: #047857 !important;
+}
+
+/* Mobile responsive media queries */
+@media (max-width: 600px) {
+  .mep-modal-overlay {
+    padding: 10px !important;
+    align-items: center !important;
+  }
+
+  .mep-modal-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - 20px) !important;
+    max-height: calc(100vh - 20px) !important;
+    border-radius: 12px !important;
+    margin: 0 auto !important;
+  }
+
+  .mep-modal-header {
+    padding: 14px 16px !important;
+  }
+
+  .mep-title {
+    font-size: 16px !important;
+  }
+
+  .mep-subtitle {
+    font-size: 11.5px !important;
+  }
+
+  .mep-modal-body {
+    padding: 14px 16px !important;
+  }
+
+  .mep-summary-box {
+    padding: 12px 14px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .mep-fields-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .mep-field-full {
+    grid-column: 1 / -1 !important;
+  }
+
+  .mep-modal-footer {
+    padding: 12px 16px !important;
+    gap: 10px !important;
+  }
+
+  .mep-modal-footer button {
+    flex: 1 !important;
+    min-width: 0 !important;
+    height: 40px !important;
+    font-size: 13.5px !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .mep-modal-overlay {
+    padding: 6px !important;
+  }
+
+  .mep-summary-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .mep-summary-pending-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+  }
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, CreditCard, AlertCircle, CheckCircle2, Loader2, Building, DollarSign } from 'lucide-react'
 import { expenseService } from '../services/expenseService.js'
 import { bankAccountService } from '../services/bankAccountService.js'
@@ -171,119 +172,69 @@ export default function MakeExpensePaymentModal({
     }
   }
 
-  return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
+  const modalContent = (
+    <div className="modal-overlay mep-modal-overlay" onClick={onClose}>
       <div
-        className="modal-container"
-        style={{ maxWidth: '600px', width: '92%' }}
+        className="modal-container mep-modal-container"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '8px',
-                background: '#ECFDF5',
-                color: '#059669',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
+        <div className="modal-header mep-modal-header">
+          <div className="mep-header-left">
+            <div className="mep-header-icon">
               <CreditCard size={20} />
             </div>
             <div>
-              <h3 className="modal-title" style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+              <h3 className="modal-title mep-title">
                 Make Payment – Expense
               </h3>
-              <p style={{ margin: 0, fontSize: '12px', color: '#6B7280' }}>
+              <p className="mep-subtitle">
                 Record money paid out for site expense
               </p>
             </div>
           </div>
-          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="Close">
+          <button type="button" className="modal-close-btn mep-close-btn" onClick={onClose} aria-label="Close">
             <X size={20} />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ padding: '20px 24px', maxHeight: '72vh', overflowY: 'auto' }}>
+        {/* Modal Form */}
+        <form onSubmit={handleSubmit} className="mep-form">
+          <div className="modal-body mep-modal-body">
 
             {/* Read-only Financial Summary Box */}
-            <div
-              style={{
-                background: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                borderRadius: '8px',
-                padding: '14px 16px',
-                marginBottom: '18px',
-              }}
-            >
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(2, 1fr)',
-                  gap: '12px 16px',
-                  fontSize: '13px',
-                }}
-              >
-                <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Site Name
-                  </span>
-                  <span style={{ fontWeight: 600, color: '#0F172A' }}>{siteName}</span>
+            <div className="mep-summary-box">
+              <div className="mep-summary-grid">
+                <div className="mep-summary-item">
+                  <span className="mep-summary-label">Site Name</span>
+                  <span className="mep-summary-value">{siteName}</span>
                 </div>
-                <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Category / Material
-                  </span>
-                  <span style={{ fontWeight: 600, color: '#0F172A' }}>{category}</span>
+                <div className="mep-summary-item">
+                  <span className="mep-summary-label">Category / Material</span>
+                  <span className="mep-summary-value">{category}</span>
                 </div>
-                <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Total Expense Amount
-                  </span>
-                  <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '14px' }}>
+                <div className="mep-summary-item">
+                  <span className="mep-summary-label">Total Expense Amount</span>
+                  <span className="mep-summary-value mep-total-amount">
                     {formatCurrency(totalAmount)}
                   </span>
                 </div>
-                <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '11px', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Previously Paid Amount
-                  </span>
-                  <span style={{ fontWeight: 600, color: '#059669' }}>
+                <div className="mep-summary-item">
+                  <span className="mep-summary-label">Previously Paid Amount</span>
+                  <span className="mep-summary-value mep-paid-amount">
                     {formatCurrency(previouslyPaid)}
                   </span>
                 </div>
               </div>
 
-              <div
-                style={{
-                  marginTop: '12px',
-                  paddingTop: '10px',
-                  borderTop: '1px dashed #CBD5E1',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>
+              <div className="mep-pending-row">
+                <span className="mep-pending-label">
                   Remaining Pending Amount:
                 </span>
                 <span
-                  style={{
-                    fontSize: '15px',
-                    fontWeight: 800,
-                    color: remainingPending > 0 ? '#DC2626' : '#059669',
-                    background: remainingPending > 0 ? '#FEF2F2' : '#ECFDF5',
-                    padding: '2px 10px',
-                    borderRadius: '6px',
-                    border: `1px solid ${remainingPending > 0 ? '#FECACA' : '#A7F3D0'}`,
-                  }}
+                  className={`mep-pending-badge ${
+                    remainingPending > 0 ? 'mep-pending-due' : 'mep-pending-cleared'
+                  }`}
                 >
                   {formatCurrency(remainingPending)}
                 </span>
@@ -292,35 +243,22 @@ export default function MakeExpensePaymentModal({
 
             {/* Error Message */}
             {errorMsg && (
-              <div
-                style={{
-                  background: '#FEF2F2',
-                  border: '1px solid #FCA5A5',
-                  color: '#991B1B',
-                  borderRadius: '6px',
-                  padding: '10px 14px',
-                  marginBottom: '16px',
-                  fontSize: '13px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                }}
-              >
+              <div className="mep-error-box">
                 <AlertCircle size={16} style={{ flexShrink: 0 }} />
                 <span>{errorMsg}</span>
               </div>
             )}
 
             {/* Form Fields Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div className="mep-fields-grid">
               {/* Payment Amount */}
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 600 }}>
+              <div className="form-group mep-field-group">
+                <label className="form-label">
                   Payment Amount (₹) <span style={{ color: '#DC2626' }}>*</span>
                 </label>
                 <input
                   type="number"
-                  className="form-input"
+                  className="form-input mep-input"
                   min="1"
                   max={remainingPending}
                   step="any"
@@ -335,13 +273,13 @@ export default function MakeExpensePaymentModal({
               </div>
 
               {/* Payment Date */}
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 600 }}>
+              <div className="form-group mep-field-group">
+                <label className="form-label">
                   Payment Date <span style={{ color: '#DC2626' }}>*</span>
                 </label>
                 <input
                   type="date"
-                  className="form-input"
+                  className="form-input mep-input"
                   value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
                   required
@@ -349,12 +287,12 @@ export default function MakeExpensePaymentModal({
               </div>
 
               {/* Bank Account */}
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 600 }}>
+              <div className="form-group mep-field-group">
+                <label className="form-label">
                   Bank Account <span style={{ color: '#DC2626' }}>*</span>
                 </label>
                 <select
-                  className="form-input"
+                  className="form-input mep-input mep-select"
                   value={bankAccountId}
                   onChange={(e) => {
                     setBankAccountId(e.target.value)
@@ -371,19 +309,19 @@ export default function MakeExpensePaymentModal({
                   ))}
                 </select>
                 {selectedBank && (
-                  <span style={{ fontSize: '11px', color: '#0284C7', marginTop: '4px', display: 'block' }}>
+                  <span className="mep-balance-hint">
                     Available balance: {formatCurrency(bankBalance)}
                   </span>
                 )}
               </div>
 
               {/* Payment Method */}
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 600 }}>
+              <div className="form-group mep-field-group">
+                <label className="form-label">
                   Payment Method <span style={{ color: '#DC2626' }}>*</span>
                 </label>
                 <select
-                  className="form-input"
+                  className="form-input mep-input mep-select"
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
                   required
@@ -397,13 +335,13 @@ export default function MakeExpensePaymentModal({
               </div>
 
               {/* Reference / Note (Full Width) */}
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>
+              <div className="form-group mep-field-group mep-field-full">
+                <label className="form-label">
                   Reference / Note (Optional)
                 </label>
                 <input
                   type="text"
-                  className="form-input"
+                  className="form-input mep-input"
                   value={reference}
                   onChange={(e) => setReference(e.target.value)}
                   placeholder="e.g. UTR / Cheque No. / Transaction Ref"
@@ -414,19 +352,10 @@ export default function MakeExpensePaymentModal({
           </div>
 
           {/* Modal Footer */}
-          <div
-            className="modal-footer"
-            style={{
-              padding: '14px 24px',
-              borderTop: '1px solid #E5EAF1',
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '12px',
-            }}
-          >
+          <div className="modal-footer mep-modal-footer">
             <button
               type="button"
-              className="btn btn-secondary-action"
+              className="btn btn-secondary-action mep-btn-cancel"
               onClick={onClose}
               disabled={submitting}
             >
@@ -434,14 +363,7 @@ export default function MakeExpensePaymentModal({
             </button>
             <button
               type="submit"
-              className="btn btn-primary-action"
-              style={{
-                background: '#059669',
-                borderColor: '#059669',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
+              className="btn btn-primary-action mep-btn-submit"
               disabled={submitting || remainingPending <= 0}
             >
               {submitting ? (
@@ -461,5 +383,9 @@ export default function MakeExpensePaymentModal({
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined'
+    ? createPortal(modalContent, document.body)
+    : modalContent
 }
 

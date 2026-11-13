@@ -24,6 +24,7 @@ export default function SiteDetailPage({
 }) {
   const [activeSubTab, setActiveSubTab] = useState('Overview')
   const [activeLabourTab, setActiveLabourTab] = useState('Worker List')
+  const [materialFilter, setMaterialFilter] = useState('All Materials')
   const [siteMaterials, setSiteMaterials] = useState([])
   const [allSuppliers, setAllSuppliers] = useState([])
   const [siteExpensesData, setSiteExpensesData] = useState([])
@@ -119,6 +120,29 @@ export default function SiteDetailPage({
   const materialRecords = siteMaterials.length > 0
     ? siteMaterials
     : siteExpenses.filter((e) => e.category && !['labour', 'equipment', 'transport', 'fuel', 'utilities'].includes(e.category.toLowerCase()))
+
+  // Unique material names for the Materials filter dropdown
+  const uniqueMaterialNames = useMemo(() => {
+    const seen = new Set()
+    const names = []
+    materialRecords.forEach((item) => {
+      const name = (item.category || item.materialName || '').trim()
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase())
+        names.push(name)
+      }
+    })
+    return names.sort((a, b) => a.localeCompare(b))
+  }, [materialRecords])
+
+  // Filtered material records based on the selected material filter
+  const filteredMaterialRecords = useMemo(() => {
+    if (materialFilter === 'All Materials') return materialRecords
+    return materialRecords.filter((item) => {
+      const name = (item.category || item.materialName || '').trim().toLowerCase()
+      return name === materialFilter.toLowerCase()
+    })
+  }, [materialRecords, materialFilter])
 
   // Aggregate supplier records for this site across materials & expenses
   const siteSuppliers = useMemo(() => {
@@ -620,6 +644,38 @@ export default function SiteDetailPage({
       {/* Materials Tab */}
       {activeSubTab === 'Materials' && (
         <div className="site-detail-box" style={{ padding: '0', overflow: 'hidden' }}>
+
+          {/* Material Filter Row */}
+          <div className="sdp-mat-filter-row">
+            <label className="sdp-mat-filter-label" htmlFor="sdp-mat-filter-select">
+              Filter by Material:
+            </label>
+            <select
+              id="sdp-mat-filter-select"
+              className="sdp-mat-filter-select form-input"
+              value={materialFilter}
+              onChange={(e) => setMaterialFilter(e.target.value)}
+            >
+              <option value="All Materials">All Materials</option>
+              {uniqueMaterialNames.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+            {materialFilter !== 'All Materials' && (
+              <button
+                type="button"
+                className="sdp-mat-filter-clear"
+                onClick={() => setMaterialFilter('All Materials')}
+                title="Reset filter"
+              >
+                Clear
+              </button>
+            )}
+            <span className="sdp-mat-filter-count">
+              {filteredMaterialRecords.length} record{filteredMaterialRecords.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
           <div className="sites-table-scroll">
             <table className="expenses-table">
               <thead>
@@ -633,8 +689,8 @@ export default function SiteDetailPage({
                 </tr>
               </thead>
               <tbody>
-                {materialRecords.length > 0 ? (
-                  materialRecords.map((item) => (
+                {filteredMaterialRecords.length > 0 ? (
+                  filteredMaterialRecords.map((item) => (
                     <tr key={item._id || item.id} className="expense-row">
                       <td className="td-date">
                         {item.purchaseDate || item.date
@@ -659,7 +715,9 @@ export default function SiteDetailPage({
                 ) : (
                   <tr>
                     <td colSpan={6} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
-                      No material expenses currently recorded for {siteName}.
+                      {materialFilter === 'All Materials'
+                        ? `No material expenses currently recorded for ${siteName}.`
+                        : `No records found for "${materialFilter}".`}
                     </td>
                   </tr>
                 )}
