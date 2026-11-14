@@ -174,7 +174,9 @@ export const createConsulting = async (req, res, next) => {
     }
 
     let validBankId = null
-    if (bankAccountId) {
+    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash'
+
+    if (bankAccountId && !isCashAccount) {
       const [bankRows] = await conn.query(
         'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 LIMIT 1',
         [bankAccountId]
@@ -185,13 +187,13 @@ export const createConsulting = async (req, res, next) => {
       validBankId = Number(bankAccountId)
     }
 
-    if (numReceived > 0 && !validBankId) {
-      return res.status(400).json({ error: 'Please select a Bank Account for the received amount' })
+    if (numReceived > 0 && !validBankId && !isCashAccount) {
+      return res.status(400).json({ error: 'Please select an Account for the received amount' })
     }
 
-    const validPaymentMethod = ['UPI', 'Cheque', 'Cash'].includes(paymentMethod)
-      ? paymentMethod
-      : (paymentMethod || 'UPI')
+    const validPaymentMethod = isCashAccount
+      ? 'Cash'
+      : (['UPI', 'Cheque', 'Cash'].includes(paymentMethod) ? paymentMethod : (paymentMethod || 'UPI'))
 
     const cleanNote = (note || '').trim()
     const consultingDesc = `[CONSULTING] ${JSON.stringify({
@@ -225,8 +227,8 @@ export const createConsulting = async (req, res, next) => {
 
     const siteId = siteResult.insertId
 
-    // If money received, credit bank and insert client_payments record
-    if (numReceived > 0 && validBankId) {
+    // If money received, credit bank or record cash, and insert client_payments record
+    if (numReceived > 0 && (validBankId || isCashAccount)) {
       await conn.query(`
         INSERT INTO client_payments
           (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
@@ -241,11 +243,13 @@ export const createConsulting = async (req, res, next) => {
         cleanNote || 'Consulting receipt',
       ])
 
-      await conn.query(`
-        UPDATE bank_accounts
-        SET balance = balance + ?
-        WHERE id = ?
-      `, [numReceived, validBankId])
+      if (validBankId) {
+        await conn.query(`
+          UPDATE bank_accounts
+          SET balance = balance + ?
+          WHERE id = ?
+        `, [numReceived, validBankId])
+      }
     }
 
     await conn.commit()

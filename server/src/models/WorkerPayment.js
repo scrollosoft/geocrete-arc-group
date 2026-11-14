@@ -1,5 +1,6 @@
 import { getPool } from '../config/db.js'
 import { fmtDate, fmtDateOnly } from './helpers.js'
+import { calculateLiveCashSummary } from '../controllers/cashController.js'
 
 export const WorkerPayment = {
   // Create an additional wage payment, advance, or settlement
@@ -22,29 +23,48 @@ export const WorkerPayment = {
       throw new Error('Bank selection is mandatory.')
     }
 
+    const isCashAccount = String(bankAccountId).toLowerCase() === 'cash'
+    const finalBankAccountId = isCashAccount ? null : Number(bankAccountId)
+    const finalPaymentMethod = isCashAccount ? 'Cash' : 'Bank Transfer'
+
     const pool = getPool()
     const conn = await pool.getConnection()
     try {
       await conn.beginTransaction()
 
-      // 1. Verify and lock the bank account
-      const [[bank]] = await conn.query(
-        'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
-        [bankAccountId],
-      )
+      // 1. Verify and lock the balance (Cash or Bank)
+      if (isCashAccount) {
+        const cashSummary = await calculateLiveCashSummary(conn)
+        if (cashSummary.balance < numAmount) {
+          throw new Error(
+            `Insufficient cash balance. Available: ₹${cashSummary.balance.toLocaleString('en-IN')}, Requested: ₹${numAmount.toLocaleString('en-IN')}. Please add cash or select a bank account.`,
+          )
+        }
+      } else {
+        const [[bank]] = await conn.query(
+          'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+          [finalBankAccountId],
+        )
 
-      if (!bank) {
-        throw new Error('Selected bank account not found or inactive.')
-      }
+        if (!bank) {
+          throw new Error('Selected bank account not found or inactive.')
+        }
 
-      const currentBalance = Number(bank.balance || 0)
-      if (currentBalance <= 0) {
-        throw new Error(`Bank account (${bank.bank_name}) has zero balance. Payment cannot proceed.`)
-      }
+        const currentBalance = Number(bank.balance || 0)
+        if (currentBalance <= 0) {
+          throw new Error(`Bank account (${bank.bank_name}) has zero balance. Payment cannot proceed.`)
+        }
 
-      if (currentBalance < numAmount) {
-        throw new Error(
-          `Insufficient bank balance in ${bank.bank_name}. Available: ₹${currentBalance.toLocaleString('en-IN')}, Requested: ₹${numAmount.toLocaleString('en-IN')}. Please select another account or reduce amount.`,
+        if (currentBalance < numAmount) {
+          throw new Error(
+            `Insufficient bank balance in ${bank.bank_name}. Available: ₹${currentBalance.toLocaleString('en-IN')}, Requested: ₹${numAmount.toLocaleString('en-IN')}. Please select another account or reduce amount.`,
+          )
+        }
+
+        // Deduct from bank account
+        await conn.query(
+          'UPDATE bank_accounts SET balance = balance - ? WHERE id = ?',
+          [numAmount, finalBankAccountId],
         )
       }
 
@@ -64,18 +84,12 @@ export const WorkerPayment = {
       const formattedDate = paymentDate ? new Date(paymentDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
       const referenceId = `TXN-WRK-${Date.now().toString().slice(-6)}`
 
-      // 3. Deduct from bank account
-      await conn.query(
-        'UPDATE bank_accounts SET balance = balance - ? WHERE id = ?',
-        [numAmount, bankAccountId],
-      )
-
       // 4. Insert into worker_payments
       const [insertResult] = await conn.query(
         `INSERT INTO worker_payments
           (worker_id, site_id, bank_account_id, payment_date, amount, payment_type, payment_method, reference_id, remarks, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, 'Bank Transfer', ?, ?, ?)`,
-        [workerId, finalSiteId, bankAccountId, formattedDate, numAmount, paymentType, referenceId, (remarks || '').trim(), createdBy],
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [workerId, finalSiteId, finalBankAccountId, formattedDate, numAmount, paymentType, finalPaymentMethod, referenceId, (remarks || '').trim(), createdBy],
       )
 
       // 5. Recalculate worker's total_paid in labours table

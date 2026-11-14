@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Wallet } from 'lucide-react'
 import AddBankModal from './AddBankModal.jsx'
+import AddCashModal from './AddCashModal.jsx'
+import ManageCashModal from './ManageCashModal.jsx'
 import TransactionHistory from './TransactionHistory.jsx'
 
 const maskAccountNumber = (accNum) => {
@@ -30,13 +32,19 @@ export default function PaymentsPage({
   showNotification,
 }) {
   const [isAddBankOpen, setIsAddBankOpen] = useState(false)
+  const [isAddCashOpen, setIsAddCashOpen] = useState(false)
+  const [isManageCashOpen, setIsManageCashOpen] = useState(false)
   const [txnRefreshTrigger, setTxnRefreshTrigger] = useState(0)
 
   const defaultColors = ['#3980FF', '#00B67A', '#07577A', '#FF9900']
 
-  // Show up to 4 bank account cards
-  const displayAccounts = (accounts || []).slice(0, 4)
-  const emptySlotsCount = Math.max(0, 4 - displayAccounts.length)
+  // Separate Cash account from Bank accounts
+  const cashAccount = (accounts || []).find((a) => a.isCash || a.id === 'cash')
+  const bankAccounts = (accounts || []).filter((a) => !a.isCash && a.id !== 'cash')
+
+  // Calculate empty bank slots to fill the standard row layout
+  const displayBankAccounts = bankAccounts.slice(0, 4)
+  const emptySlotsCount = Math.max(0, 3 - displayBankAccounts.length)
 
   const handleBankCreated = async () => {
     if (onRefreshAccounts) {
@@ -45,9 +53,16 @@ export default function PaymentsPage({
     setTxnRefreshTrigger((prev) => prev + 1)
   }
 
+  const handleCashChanged = async () => {
+    if (onRefreshAccounts) {
+      await onRefreshAccounts()
+    }
+    setTxnRefreshTrigger((prev) => prev + 1)
+  }
+
   return (
     <div className="payments-page-wrap">
-      {/* 1. Header with Breadcrumb and + Add Bank Button */}
+      {/* 1. Header with Breadcrumb, Add Cash Button, and Add Bank Button */}
       <div className="sites-header-wrap">
         <div className="sites-header-left">
           <div className="sites-breadcrumb">
@@ -61,17 +76,36 @@ export default function PaymentsPage({
           </p>
         </div>
 
-        <button
-          type="button"
-          className="btn btn-primary-action btn-add-site-header"
-          onClick={() => setIsAddBankOpen(true)}
-        >
-          <Plus size={16} strokeWidth={2.5} />
-          <span>Add Bank</span>
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-primary-action btn-add-cash-header"
+            onClick={() => setIsAddCashOpen(true)}
+            style={{
+              backgroundColor: '#10B981',
+              borderColor: '#10B981',
+              color: '#FFFFFF',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            <span>Add Cash</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-primary-action btn-add-site-header"
+            onClick={() => setIsAddBankOpen(true)}
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            <span>Add Bank</span>
+          </button>
+        </div>
       </div>
 
-      {/* 2. Four Bank Account Cards in a Single Horizontal Row */}
+      {/* 2. Account Cards Grid: Cash Account Card + Bank Account Cards */}
       <div className="payments-cards-grid">
         {loading ? (
           [1, 2, 3, 4].map((i) => (
@@ -83,7 +117,73 @@ export default function PaymentsPage({
           ))
         ) : (
           <>
-            {displayAccounts.map((account, index) => {
+            {/* Cash Account Card */}
+            {cashAccount && (
+              <div
+                className="payment-bank-card payment-cash-card"
+                style={{
+                  borderTop: '3.5px solid #10B981',
+                }}
+              >
+                <div className="payment-bank-card-top">
+                  <span className="payment-bank-tag" style={{ color: '#047857', fontWeight: 700 }}>
+                    CASH ACCOUNT
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      type="button"
+                      className="payment-cash-manage-btn"
+                      onClick={() => setIsManageCashOpen(true)}
+                      title="Manage cash records (Edit / Delete)"
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: '#059669',
+                        backgroundColor: '#ECFDF5',
+                        border: '1px solid #A7F3D0',
+                        borderRadius: '6px',
+                        padding: '2px 8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      Manage
+                    </button>
+                    <span
+                      className="payment-bank-badge"
+                      style={{
+                        color: '#10B981',
+                        backgroundColor: '#10B98115',
+                      }}
+                    >
+                      CASH
+                    </span>
+                  </div>
+                </div>
+
+                <div className="payment-bank-name" title="Cash in Hand" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Wallet size={16} style={{ color: '#10B981', flexShrink: 0 }} />
+                  <span>Cash in Hand</span>
+                </div>
+
+                <div className="payment-bank-meta">
+                  <span className="payment-bank-accnum">Physical Cash</span>
+                  <span className="payment-bank-ifsc" style={{ color: '#059669' }}>
+                    Available Liquidity
+                  </span>
+                </div>
+
+                <div className="payment-bank-balance-wrap">
+                  <span className="payment-bank-balance-label">Available Cash</span>
+                  <span className="payment-bank-balance-value" style={{ color: '#047857' }}>
+                    {formatBalance(cashAccount.balance)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Bank Account Cards */}
+            {displayBankAccounts.map((account, index) => {
               const accent = account.accentColor || defaultColors[index % defaultColors.length]
               const tag = account.accountNumberTag || `ACCOUNT #${String(index + 1).padStart(2, '0')}`
               const code = account.accountCode || `B${index + 1}`
@@ -134,7 +234,7 @@ export default function PaymentsPage({
               )
             })}
 
-            {/* Empty Card Placeholders to ensure 4 cards are represented */}
+            {/* Empty Card Placeholders to ensure full slots are represented */}
             {Array.from({ length: emptySlotsCount }).map((_, i) => (
               <button
                 type="button"
@@ -153,7 +253,7 @@ export default function PaymentsPage({
         )}
       </div>
 
-      {/* 3. Google Pay-Style Bank Transaction History */}
+      {/* 3. Google Pay-Style Transaction History (Includes Bank & Cash Transactions) */}
       <TransactionHistory
         accounts={accounts}
         refreshTrigger={txnRefreshTrigger}
@@ -164,10 +264,25 @@ export default function PaymentsPage({
         isOpen={isAddBankOpen}
         onClose={() => setIsAddBankOpen(false)}
         onBankCreated={handleBankCreated}
-        existingAccounts={accounts}
+        existingAccounts={bankAccounts}
+        showNotification={showNotification}
+      />
+
+      {/* Add Cash Modal */}
+      <AddCashModal
+        isOpen={isAddCashOpen}
+        onClose={() => setIsAddCashOpen(false)}
+        onCashAdded={handleCashChanged}
+        showNotification={showNotification}
+      />
+
+      {/* Manage Cash Modal (Edit / Delete) */}
+      <ManageCashModal
+        isOpen={isManageCashOpen}
+        onClose={() => setIsManageCashOpen(false)}
+        onCashUpdated={handleCashChanged}
         showNotification={showNotification}
       />
     </div>
   )
 }
-

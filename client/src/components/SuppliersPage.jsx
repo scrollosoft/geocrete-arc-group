@@ -365,85 +365,85 @@ export default function SuppliersPage({
         </div>
       </div>
 
-      {/* 3. Filter Bar */}
-      <div className="suppliers-filter-bar">
-        {/* Search */}
-        <div className="suppliers-search-wrap">
-          <Search size={16} className="suppliers-search-icon" />
-          <input
-            type="text"
-            className="suppliers-search-input"
-            placeholder="Search suppliers..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setCurrentPage(1)
-            }}
-          />
+      {/* 4. Suppliers Table Card with Search and Filters inside */}
+      <div className="sites-table-card">
+        {/* 3. Filter Bar */}
+        <div className="suppliers-filter-bar" style={{ marginBottom: '16px' }}>
+          {/* Search */}
+          <div className="suppliers-search-wrap">
+            <Search size={16} className="suppliers-search-icon" />
+            <input
+              type="text"
+              className="suppliers-search-input"
+              placeholder="Search suppliers..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setCurrentPage(1)
+              }}
+            />
+          </div>
+
+          {/* Right side filter controls */}
+          <div className="suppliers-filters-group">
+            {/* Status Dropdown */}
+            <div className="site-select-wrapper">
+              <select
+                className="suppliers-select-pill"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
+              >
+                <option value="All Status">All Status</option>
+                <option value="Active">Active</option>
+                <option value="With Balance">With Balance</option>
+                <option value="Cleared">Cleared</option>
+              </select>
+              <ChevronDown size={14} className="site-select-arrow" />
+            </div>
+
+            {/* Sites Dropdown */}
+            <div className="site-select-wrapper">
+              <select
+                className="suppliers-select-pill"
+                value={siteFilter}
+                onChange={(e) => {
+                  setSiteFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
+              >
+                <option value="All Sites">All Sites</option>
+                {sites.map((site) => (
+                  <option key={site._id || site.id} value={site.name}>
+                    {site.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="site-select-arrow" />
+            </div>
+
+            {/* Sort Dropdown */}
+            <div className="site-select-wrapper">
+              <select
+                className="suppliers-select-pill"
+                value={sortFilter}
+                onChange={(e) => {
+                  setSortFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
+              >
+                <option value="Newest First">Newest First</option>
+                <option value="Oldest First">Oldest First</option>
+                <option value="Purchase: High to Low">Purchase: High to Low</option>
+                <option value="Pending: High to Low">Pending: High to Low</option>
+              </select>
+              <ChevronDown size={14} className="site-select-arrow" />
+            </div>
+          </div>
         </div>
 
-        {/* Right side filter controls */}
-        <div className="suppliers-filters-group">
-          {/* Status Dropdown */}
-          <div className="site-select-wrapper">
-            <select
-              className="suppliers-select-pill"
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="All Status">All Status</option>
-              <option value="Active">Active</option>
-              <option value="With Balance">With Balance</option>
-              <option value="Cleared">Cleared</option>
-            </select>
-            <ChevronDown size={14} className="site-select-arrow" />
-          </div>
-
-          {/* Sites Dropdown */}
-          <div className="site-select-wrapper">
-            <select
-              className="suppliers-select-pill"
-              value={siteFilter}
-              onChange={(e) => {
-                setSiteFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="All Sites">All Sites</option>
-              {sites.map((site) => (
-                <option key={site._id || site.id} value={site.name}>
-                  {site.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={14} className="site-select-arrow" />
-          </div>
-
-          {/* Sort Dropdown */}
-          <div className="site-select-wrapper">
-            <select
-              className="suppliers-select-pill"
-              value={sortFilter}
-              onChange={(e) => {
-                setSortFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="Newest First">Newest First</option>
-              <option value="Oldest First">Oldest First</option>
-              <option value="Purchase: High to Low">Purchase: High to Low</option>
-              <option value="Pending: High to Low">Pending: High to Low</option>
-            </select>
-            <ChevronDown size={14} className="site-select-arrow" />
-          </div>
-        </div>
-      </div>
-
-      {/* 4. Suppliers Table Card */}
-      <div className="sites-table-card" style={{ padding: '0 0 16px 0', border: '1px solid #E5EAF1' }}>
         <div className="sites-table-scroll">
           <table className="sites-table">
             <thead>

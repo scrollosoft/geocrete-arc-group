@@ -109,9 +109,11 @@ export const createSite = async (req, res, next) => {
       return res.status(400).json({ error: 'Total received cannot exceed total project value' })
     }
 
-    // Bank account validation
+    // Bank / Cash account validation
     let validBankId = null
-    if (bankAccountId) {
+    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash'
+
+    if (bankAccountId && !isCashAccount) {
       const [bankRows] = await connection.query(
         'SELECT id FROM bank_accounts WHERE id = ? AND is_active = 1 LIMIT 1',
         [bankAccountId]
@@ -122,8 +124,8 @@ export const createSite = async (req, res, next) => {
       validBankId = Number(bankAccountId)
     }
 
-    if (totReceived > 0 && !validBankId) {
-      return res.status(400).json({ error: 'Bank account selection is required when payment is received' })
+    if (totReceived > 0 && !validBankId && !isCashAccount) {
+      return res.status(400).json({ error: 'Bank account or Cash selection is required when payment is received' })
     }
 
     // Begin atomic database transaction
@@ -208,18 +210,20 @@ export const createSite = async (req, res, next) => {
     }
 
     // 3. If totalReceived > 0, record payment in client_payments & update bank balance
-    if (totReceived > 0 && validBankId) {
+    if (totReceived > 0 && (validBankId || isCashAccount)) {
       await connection.query(
         `INSERT INTO client_payments
           (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status)
-         VALUES (?, ?, ?, ?, ?, 'Initial client payment', 'Bank transfer', 'Initial payment receipt', 'Paid')`,
-        [ownerId, siteId, validBankId, totReceived, cleanStartDate]
+         VALUES (?, ?, ?, ?, ?, 'Initial client payment', ?, 'Initial payment receipt', 'Paid')`,
+        [ownerId, siteId, validBankId, totReceived, cleanStartDate, isCashAccount ? 'Cash' : 'Bank transfer']
       )
 
-      await connection.query(
-        `UPDATE bank_accounts SET balance = balance + ? WHERE id = ?`,
-        [totReceived, validBankId]
-      )
+      if (validBankId) {
+        await connection.query(
+          `UPDATE bank_accounts SET balance = balance + ? WHERE id = ?`,
+          [totReceived, validBankId]
+        )
+      }
     }
 
     await connection.commit()
@@ -582,22 +586,28 @@ export const recordSitePayment = async (req, res, next) => {
       })
     }
 
-    // 2. Verify bank account with lock
-    const [[bank]] = await conn.query(
-      'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
-      [bankAccountId]
-    )
-    if (!bank) {
-      await conn.rollback()
-      conn.release()
-      return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
-    }
+    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash'
+    let validBankId = null
 
-    // 3. Credit bank account
-    await conn.query(
-      'UPDATE bank_accounts SET balance = balance + ? WHERE id = ?',
-      [numAmount, bankAccountId]
-    )
+    // 2. Verify bank account with lock if not cash
+    if (!isCashAccount) {
+      const [[bank]] = await conn.query(
+        'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+        [bankAccountId]
+      )
+      if (!bank) {
+        await conn.rollback()
+        conn.release()
+        return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+      }
+
+      // 3. Credit bank account
+      await conn.query(
+        'UPDATE bank_accounts SET balance = balance + ? WHERE id = ?',
+        [numAmount, bankAccountId]
+      )
+      validBankId = Number(bankAccountId)
+    }
 
     // 4. Update site total_received
     await conn.query(
@@ -643,11 +653,11 @@ export const recordSitePayment = async (req, res, next) => {
       [
         ownerId,
         siteId,
-        bankAccountId,
+        validBankId,
         numAmount,
         pDate,
         paymentTitle,
-        paymentMethod || 'Bank Transfer',
+        isCashAccount ? 'Cash' : (paymentMethod || 'Bank Transfer'),
         paymentRef,
       ]
     )

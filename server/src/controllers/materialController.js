@@ -2,6 +2,7 @@ import { Material } from '../models/Material.js'
 import { Site } from '../models/Site.js'
 import { Supplier } from '../models/Supplier.js'
 import { getPool } from '../config/db.js'
+import { calculateLiveCashSummary } from './cashController.js'
 
 // Helper: insert a mirrored row into expenses after a purchase is saved
 async function insertExpenseForPurchase({ materialId, purchaseDate, siteId, supplierId, category, quantity, unit, unitPrice, totalCost, paidAmount, paymentMethod, notes, paymentStatus, bankAccountId }, externalConn) {
@@ -140,6 +141,10 @@ export const createMaterial = async (req, res, next) => {
     const baseRefNumber = refNumber || (await Material.generateRefNumber())
     const bankAccountId = req.body.bankAccountId || req.body.bankAccount || null
 
+    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash' || String(req.body.paymentMethod || '').toLowerCase() === 'cash'
+    const finalBankAccountId = isCashAccount ? null : (bankAccountId ? Number(bankAccountId) : null)
+    const finalPaymentMethod = isCashAccount ? 'Cash' : (req.body.paymentMethod || 'Bank Transfer')
+
     // If multiple items submitted
     if (Array.isArray(items) && items.length > 0) {
       let totalPaidAll = 0
@@ -159,25 +164,35 @@ export const createMaterial = async (req, res, next) => {
       try {
         await conn.beginTransaction()
 
-        if (bankAccountId && totalPaidAll > 0) {
-          const [[bankRow]] = await conn.query(
-            'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
-            [bankAccountId]
-          )
-          if (!bankRow) {
-            await conn.rollback(); conn.release()
-            return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+        if (totalPaidAll > 0) {
+          if (isCashAccount) {
+            const cashSummary = await calculateLiveCashSummary(conn)
+            if (cashSummary.balance < totalPaidAll) {
+              await conn.rollback(); conn.release()
+              return res.status(400).json({
+                error: `Insufficient cash balance. Available balance: ₹${cashSummary.balance.toLocaleString('en-IN')}, Requested: ₹${totalPaidAll.toLocaleString('en-IN')}.`,
+              })
+            }
+          } else if (finalBankAccountId) {
+            const [[bankRow]] = await conn.query(
+              'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+              [finalBankAccountId]
+            )
+            if (!bankRow) {
+              await conn.rollback(); conn.release()
+              return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+            }
+            const bankBalance = Number(bankRow.balance)
+            if (bankBalance <= 0) {
+              await conn.rollback(); conn.release()
+              return res.status(400).json({ error: 'This bank account has zero balance. Please select another bank account.' })
+            }
+            if (bankBalance < totalPaidAll) {
+              await conn.rollback(); conn.release()
+              return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
+            }
+            await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [totalPaidAll, finalBankAccountId])
           }
-          const bankBalance = Number(bankRow.balance)
-          if (bankBalance <= 0) {
-            await conn.rollback(); conn.release()
-            return res.status(400).json({ error: 'This bank account has zero balance. Please select another bank account.' })
-          }
-          if (bankBalance < totalPaidAll) {
-            await conn.rollback(); conn.release()
-            return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
-          }
-          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [totalPaidAll, bankAccountId])
         }
 
         const created = []
@@ -217,7 +232,7 @@ export const createMaterial = async (req, res, next) => {
             quantityUsed: Number(it.quantityUsed) || 0,
             paymentStatus: paymentStatus || 'Pending',
             notes: notes || it.notes || '',
-            bankAccountId: itPaid > 0 ? bankAccountId : null,
+            bankAccountId: itPaid > 0 ? finalBankAccountId : null,
           }, conn)
           created.push(row)
 
@@ -233,10 +248,10 @@ export const createMaterial = async (req, res, next) => {
             unitPrice: price,
             totalCost: itemCost,
             paidAmount: itPaid,
-            paymentMethod: req.body.paymentMethod || 'Bank Transfer',
+            paymentMethod: finalPaymentMethod,
             notes: notes || it.notes || '',
             paymentStatus: paymentStatus || 'Pending',
-            bankAccountId: itPaid > 0 ? bankAccountId : null,
+            bankAccountId: itPaid > 0 ? finalBankAccountId : null,
           }, conn)
         }
 
@@ -295,25 +310,35 @@ export const createMaterial = async (req, res, next) => {
     try {
       await conn.beginTransaction()
 
-      if (bankAccountId && numPaid > 0) {
-        const [[bankRow]] = await conn.query(
-          'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
-          [bankAccountId]
-        )
-        if (!bankRow) {
-          await conn.rollback(); conn.release()
-          return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+      if (numPaid > 0) {
+        if (isCashAccount) {
+          const cashSummary = await calculateLiveCashSummary(conn)
+          if (cashSummary.balance < numPaid) {
+            await conn.rollback(); conn.release()
+            return res.status(400).json({
+              error: `Insufficient cash balance. Available balance: ₹${cashSummary.balance.toLocaleString('en-IN')}, Requested: ₹${numPaid.toLocaleString('en-IN')}.`,
+            })
+          }
+        } else if (finalBankAccountId) {
+          const [[bankRow]] = await conn.query(
+            'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+            [finalBankAccountId]
+          )
+          if (!bankRow) {
+            await conn.rollback(); conn.release()
+            return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+          }
+          const bankBalance = Number(bankRow.balance)
+          if (bankBalance <= 0) {
+            await conn.rollback(); conn.release()
+            return res.status(400).json({ error: 'This bank account has zero balance. Please select another bank account.' })
+          }
+          if (bankBalance < numPaid) {
+            await conn.rollback(); conn.release()
+            return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
+          }
+          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [numPaid, finalBankAccountId])
         }
-        const bankBalance = Number(bankRow.balance)
-        if (bankBalance <= 0) {
-          await conn.rollback(); conn.release()
-          return res.status(400).json({ error: 'This bank account has zero balance. Please select another bank account.' })
-        }
-        if (bankBalance < numPaid) {
-          await conn.rollback(); conn.release()
-          return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
-        }
-        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [numPaid, bankAccountId])
       }
 
       const material = await Material.upsertPurchase({
@@ -330,9 +355,9 @@ export const createMaterial = async (req, res, next) => {
         paidAmount: numPaid,
         quantityUsed: Number(quantityUsed) || 0,
         paymentStatus: calculatedStatus,
-        paymentMethod: req.body.paymentMethod || req.body.payment_method || 'Bank Transfer',
+        paymentMethod: finalPaymentMethod,
         notes: (notes || req.body.remark || '').trim(),
-        bankAccountId: numPaid > 0 ? bankAccountId : null,
+        bankAccountId: numPaid > 0 ? finalBankAccountId : null,
       }, conn)
 
       // Mirror into expenses table
@@ -347,10 +372,10 @@ export const createMaterial = async (req, res, next) => {
         unitPrice: price,
         totalCost: calculatedCost,
         paidAmount: numPaid,
-        paymentMethod: req.body.paymentMethod || req.body.payment_method || 'Bank Transfer',
+        paymentMethod: finalPaymentMethod,
         notes: (notes || req.body.remark || '').trim(),
         paymentStatus: calculatedStatus,
-        bankAccountId: numPaid > 0 ? bankAccountId : null,
+        bankAccountId: numPaid > 0 ? finalBankAccountId : null,
       }, conn)
 
       await conn.commit()

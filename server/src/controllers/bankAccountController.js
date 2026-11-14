@@ -1,10 +1,30 @@
 import { BankAccount } from '../models/BankAccount.js'
 import { getPool } from '../config/db.js'
+import { calculateLiveCashSummary } from './cashController.js'
 
 export const getBankAccounts = async (_req, res, next) => {
   try {
     const accounts = await BankAccount.findActive()
-    res.json(accounts)
+    const cashSummary = await calculateLiveCashSummary(getPool())
+
+    const cashAccount = {
+      id: 'cash',
+      _id: 'cash',
+      bankName: 'Cash',
+      bank_name: 'Cash',
+      accountHolderName: 'Cash Account',
+      accountNumber: 'CASH',
+      accountNumberTag: 'CASH ACCOUNT',
+      accountCode: 'CASH',
+      balance: cashSummary.balance,
+      isCash: true,
+      accentColor: '#10B981',
+      credit: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    res.json([...accounts, cashAccount])
   } catch (error) {
     next(error)
   }
@@ -192,10 +212,10 @@ export const getBankTransactions = async (req, res, next) => {
         COALESCE(so.name, s.site_owner) AS client_name,
         so.phone AS client_phone
       FROM client_payments cp
-      INNER JOIN bank_accounts ba ON ba.id = cp.bank_account_id AND ba.is_active = 1
+      LEFT JOIN bank_accounts ba ON ba.id = cp.bank_account_id AND ba.is_active = 1
       LEFT JOIN sites s ON s.id = cp.site_id
       LEFT JOIN site_owners so ON so.id = cp.client_id
-      WHERE cp.amount > 0
+      WHERE cp.amount > 0 AND (ba.id IS NOT NULL OR LOWER(cp.payment_method) LIKE '%cash%' OR cp.bank_account_id IS NULL)
     `)
 
     // 3. Fetch outgoing / debit transactions (expense payments)
@@ -228,10 +248,10 @@ export const getBankTransactions = async (req, res, next) => {
         sup.company_name AS supplier_company
       FROM expense_payments ep
       INNER JOIN expenses e ON e.id = ep.expense_id
-      INNER JOIN bank_accounts ba ON ba.id = ep.bank_account_id AND ba.is_active = 1
+      LEFT JOIN bank_accounts ba ON ba.id = ep.bank_account_id AND ba.is_active = 1
       INNER JOIN sites s ON s.id = ep.site_id
       LEFT JOIN suppliers sup ON sup.id = ep.supplier_id
-      WHERE ep.amount > 0
+      WHERE ep.amount > 0 AND (ba.id IS NOT NULL OR LOWER(ep.payment_method) LIKE '%cash%' OR ep.bank_account_id IS NULL)
     `)
 
     // 3b. Fetch worker initial advance payments paid from bank accounts on joining
@@ -258,9 +278,9 @@ export const getBankTransactions = async (req, res, next) => {
         s.name AS site_name,
         s.location AS site_location
       FROM labours l
-      INNER JOIN bank_accounts ba ON ba.id = l.bank_account_id AND ba.is_active = 1
+      LEFT JOIN bank_accounts ba ON ba.id = l.bank_account_id AND ba.is_active = 1
       LEFT JOIN sites s ON s.id = l.site_id
-      WHERE l.advance_amount > 0
+      WHERE l.advance_amount > 0 AND (ba.id IS NOT NULL OR LOWER(l.remarks) LIKE '%cash%' OR l.bank_account_id IS NULL)
     `)
 
     // 3c. Fetch recorded worker payments (wage payments, additional advances, settlements)
@@ -290,9 +310,23 @@ export const getBankTransactions = async (req, res, next) => {
         ba.balance AS bank_current_balance
       FROM worker_payments wp
       INNER JOIN labours l ON l.id = wp.worker_id
-      INNER JOIN bank_accounts ba ON ba.id = wp.bank_account_id AND ba.is_active = 1
+      LEFT JOIN bank_accounts ba ON ba.id = wp.bank_account_id AND ba.is_active = 1
       LEFT JOIN sites s ON s.id = wp.site_id
-      WHERE wp.amount > 0
+      WHERE wp.amount > 0 AND (ba.id IS NOT NULL OR LOWER(wp.payment_method) LIKE '%cash%' OR wp.bank_account_id IS NULL)
+    `)
+
+    // 3d. Fetch direct cash entries from cash table
+    const [cashRows] = await pool.query(`
+      SELECT 
+        id,
+        amount,
+        CAST(created_at AS CHAR) AS created_at_str,
+        CAST(date AS CHAR) AS payment_date_str,
+        date AS payment_date,
+        created_at,
+        description
+      FROM cash
+      WHERE amount > 0
     `)
 
     // 4. Map client payments into standardized transaction objects
@@ -319,9 +353,13 @@ export const getBankTransactions = async (req, res, next) => {
         category = 'Other'
       }
 
-      const bankName = cp.bank_name || (cp.bank_account_id ? bankMap.get(String(cp.bank_account_id))?.bank_name : null) || 'Bank Account'
+      const isCash = !cp.bank_account_id || String(cp.bank_account_id) === 'cash' || String(cp.payment_method || '').toLowerCase() === 'cash'
+      const bankAccountId = isCash ? 'cash' : (cp.bank_account_id || null)
+      const bankName = isCash ? 'Cash' : (cp.bank_name || (cp.bank_account_id ? bankMap.get(String(cp.bank_account_id))?.bank_name : null) || 'Bank Account')
       const siteText = cp.site_name || 'Construction Site'
-      let subtitle = isRefund ? `${siteText} · Refund to ${bankName}` : `${siteText} · ${bankName}`
+      let subtitle = isCash
+        ? `${siteText} · Cash`
+        : (isRefund ? `${siteText} · Refund to ${bankName}` : `${siteText} · ${bankName}`)
       if (isOther) {
         subtitle = `${bankName} · Other Transaction`
       } else if (isConsulting) {
@@ -354,15 +392,15 @@ export const getBankTransactions = async (req, res, next) => {
         date: parsedTime.date,
         dateTime: parsedTime.dateTime,
         status: cp.status || 'Completed',
-        bankAccountId: cp.bank_account_id || null,
+        bankAccountId,
         bankName,
-        accountNumber: cp.account_number || '',
+        accountNumber: isCash ? 'CASH' : (cp.account_number || ''),
         siteId: cp.site_id || null,
         siteName: cp.site_name || '',
         siteLocation: cp.site_location || '',
         partyName,
         partyType,
-        paymentMethod: cp.payment_method || 'Bank Transfer',
+        paymentMethod: cp.payment_method || (isCash ? 'Cash' : 'Bank Transfer'),
         referenceId: cp.reference || `TXN-CP-${String(cp.id).padStart(4, '0')}`,
         remark: cp.reference || cp.title || '',
         balanceAfter: null,
@@ -377,7 +415,9 @@ export const getBankTransactions = async (req, res, next) => {
       const cat = (e.category || '').trim()
       const isLabour = cat.toLowerCase().includes('labour')
       const supplierParty = e.supplier_company || e.supplier_name || ''
-      const bankName = e.bank_name || (e.bank_account_id ? bankMap.get(String(e.bank_account_id))?.bank_name : null) || (e.payment_method || 'Direct Payment')
+      const isCash = !e.bank_account_id || String(e.bank_account_id) === 'cash' || String(e.payment_method || '').toLowerCase() === 'cash'
+      const bankAccountId = isCash ? 'cash' : (e.bank_account_id || null)
+      const bankName = isCash ? 'Cash' : (e.bank_name || (e.bank_account_id ? bankMap.get(String(e.bank_account_id))?.bank_name : null) || (e.payment_method || 'Direct Payment'))
 
       let title = 'Daily Site Expense'
       let category = cat || 'Daily Expense'
@@ -432,15 +472,15 @@ export const getBankTransactions = async (req, res, next) => {
         date: parsedTime.date,
         dateTime: parsedTime.dateTime,
         status: e.status === 'Paid' || e.status === 'Partial' ? 'Completed' : 'Pending',
-        bankAccountId: e.bank_account_id || null,
+        bankAccountId,
         bankName,
-        accountNumber: e.account_number || '',
+        accountNumber: isCash ? 'CASH' : (e.account_number || ''),
         siteId: e.site_id || null,
         siteName: e.site_name || '',
         siteLocation: e.site_location || '',
         partyName,
         partyType,
-        paymentMethod: e.payment_method || 'Bank Transfer',
+        paymentMethod: e.payment_method || (isCash ? 'Cash' : 'Bank Transfer'),
         referenceId: (e.remark && e.remark.trim()) || `TXN-EXP-${String(e.id).padStart(4, '0')}`,
         remark: e.remark || e.notes || '',
         balanceAfter: null,
@@ -454,7 +494,9 @@ export const getBankTransactions = async (req, res, next) => {
       const cTime = (wp.created_at_str || '').slice(11, 19) || '12:00:00'
       const parsedTime = formatActualDateTime(`${pDate} ${cTime}`, wp.payment_date_str)
       const title = 'Worker Advance Payment'
-      const bankName = wp.bank_name || (wp.bank_account_id ? bankMap.get(String(wp.bank_account_id))?.bank_name : null) || 'Bank Account'
+      const isCash = !wp.bank_account_id || String(wp.bank_account_id) === 'cash' || String(wp.remarks || '').toLowerCase().includes('cash')
+      const bankAccountId = isCash ? 'cash' : (wp.bank_account_id || null)
+      const bankName = isCash ? 'Cash' : (wp.bank_name || (wp.bank_account_id ? bankMap.get(String(wp.bank_account_id))?.bank_name : null) || 'Bank Account')
       const tradeText = wp.trade ? ` (${wp.trade})` : ''
       const subtitle = `${wp.worker_name}${tradeText} · ${bankName}`
       const defaultDesc = `Worker Advance Payment - ${wp.worker_name}`
@@ -473,16 +515,16 @@ export const getBankTransactions = async (req, res, next) => {
         date: parsedTime.date,
         dateTime: parsedTime.dateTime,
         status: 'Completed',
-        bankAccountId: wp.bank_account_id || null,
+        bankAccountId,
         bankName,
-        accountNumber: wp.account_number || '',
+        accountNumber: isCash ? 'CASH' : (wp.account_number || ''),
         siteId: wp.site_id || null,
         siteName: wp.site_name || '',
         siteLocation: wp.site_location || '',
         workerId: wp.id,
         partyName: wp.worker_name || 'Worker',
         partyType: 'Worker',
-        paymentMethod: 'Bank Transfer',
+        paymentMethod: isCash ? 'Cash' : 'Bank Transfer',
         referenceId: `TXN-WRK-INIT-${String(wp.id).padStart(4, '0')}`,
         remark: description,
         balanceAfter: null,
@@ -501,7 +543,9 @@ export const getBankTransactions = async (req, res, next) => {
         : pType === 'Final Settlement'
         ? 'Worker Final Settlement'
         : 'Worker Wage Payment'
-      const bankName = wp.bank_name || (wp.bank_account_id ? bankMap.get(String(wp.bank_account_id))?.bank_name : null) || 'Bank Account'
+      const isCash = !wp.bank_account_id || String(wp.bank_account_id) === 'cash' || String(wp.payment_method || '').toLowerCase() === 'cash'
+      const bankAccountId = isCash ? 'cash' : (wp.bank_account_id || null)
+      const bankName = isCash ? 'Cash' : (wp.bank_name || (wp.bank_account_id ? bankMap.get(String(wp.bank_account_id))?.bank_name : null) || 'Bank Account')
       const tradeText = wp.trade ? ` (${wp.trade})` : ''
       const subtitle = `${wp.worker_name}${tradeText} · ${bankName}`
       const defaultDesc = `${title} - ${wp.worker_name}`
@@ -520,9 +564,9 @@ export const getBankTransactions = async (req, res, next) => {
         date: parsedTime.date,
         dateTime: parsedTime.dateTime,
         status: 'Completed',
-        bankAccountId: wp.bank_account_id || null,
+        bankAccountId,
         bankName,
-        accountNumber: wp.account_number || '',
+        accountNumber: isCash ? 'CASH' : (wp.account_number || ''),
         siteId: wp.site_id || null,
         siteName: wp.site_name || '',
         siteLocation: wp.site_location || '',
@@ -530,15 +574,44 @@ export const getBankTransactions = async (req, res, next) => {
         paymentRecordId: wp.id,
         partyName: wp.worker_name || 'Worker',
         partyType: 'Worker',
-        paymentMethod: wp.payment_method || 'Bank Transfer',
+        paymentMethod: wp.payment_method || (isCash ? 'Cash' : 'Bank Transfer'),
         referenceId: wp.reference_id || `TXN-WRK-${String(wp.id).padStart(4, '0')}`,
         remark: description,
         balanceAfter: null,
       }
     })
 
+    // 5d. Map cash table entries into standardized credit transactions
+    const cashAddedTxns = cashRows.map((c) => {
+      const numAmount = Number(c.amount || 0)
+      const parsedTime = formatActualDateTime(c.created_at_str, c.payment_date_str)
+      return {
+        id: `cash-${c.id}`,
+        rawId: c.id,
+        type: 'credit',
+        title: 'Cash Added',
+        category: 'Cash Account',
+        subtitle: 'Cash in Hand · Cash Deposit',
+        amount: numAmount,
+        formattedAmount: `+₹${numAmount.toLocaleString('en-IN')}`,
+        rawTimestamp: parsedTime.rawTimestamp,
+        date: parsedTime.date,
+        dateTime: parsedTime.dateTime,
+        status: 'Completed',
+        bankAccountId: 'cash',
+        bankName: 'Cash',
+        accountNumber: 'CASH',
+        partyName: 'Cash in Hand',
+        partyType: 'Cash Account',
+        paymentMethod: 'Cash',
+        referenceId: `TXN-CSH-${String(c.id).padStart(4, '0')}`,
+        remark: c.description || 'Cash Added',
+        balanceAfter: null,
+      }
+    })
+
     // 6. Combine all transactions and calculate accurate running balance per bank account
-    const allCombined = [...creditTxns, ...debitTxns, ...workerAdvanceTxns, ...workerWageTxns]
+    const allCombined = [...creditTxns, ...debitTxns, ...workerAdvanceTxns, ...workerWageTxns, ...cashAddedTxns]
 
     // Calculate running balance separately for each bank account
     for (const b of bankRows) {
@@ -557,6 +630,22 @@ export const getBankTransactions = async (req, res, next) => {
         } else {
           running += bTxns[i].amount
         }
+      }
+    }
+
+    // Calculate running balance for Cash account
+    const cashSummary = await calculateLiveCashSummary(pool)
+    const cashTxns = allCombined
+      .filter((t) => String(t.bankAccountId) === 'cash')
+      .sort((a, b) => a.rawTimestamp - b.rawTimestamp || a.rawId - b.rawId)
+
+    let runningCash = cashSummary.balance
+    for (let i = cashTxns.length - 1; i >= 0; i--) {
+      cashTxns[i].balanceAfter = runningCash
+      if (cashTxns[i].type === 'credit') {
+        runningCash = Math.max(0, runningCash - cashTxns[i].amount)
+      } else {
+        runningCash += cashTxns[i].amount
       }
     }
 

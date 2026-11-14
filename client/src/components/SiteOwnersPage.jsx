@@ -279,85 +279,85 @@ export default function SiteOwnersPage({
         </div>
       </div>
 
-      {/* 3. Filter Row: Search on Left, 3 Dropdowns on Right */}
-      <div className="sites-filter-row" style={{ marginTop: '16px', marginBottom: '16px' }}>
-        {/* Left: Search input */}
-        <div className="sites-search-box" style={{ width: '320px' }}>
-          <Search size={16} className="sites-search-icon" />
-          <input
-            type="text"
-            className="sites-search-input"
-            placeholder="Search site owner's..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setCurrentPage(1)
-            }}
-          />
+      {/* 4. Site Owners Table Card with Search and Filters inside */}
+      <div className="sites-table-card">
+        {/* 3. Filter Row: Search on Left, 3 Dropdowns on Right */}
+        <div className="sites-filter-row">
+          {/* Left: Search input */}
+          <div className="sites-search-box" style={{ width: '320px' }}>
+            <Search size={16} className="sites-search-icon" />
+            <input
+              type="text"
+              className="sites-search-input"
+              placeholder="Search site owner's..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setCurrentPage(1)
+              }}
+            />
+          </div>
+
+          {/* Right: Dropdowns */}
+          <div className="sites-filters-right">
+            {/* Status Dropdown */}
+            <div className="site-select-wrapper">
+              <select
+                className="site-pill-select"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
+              >
+                <option value="All Status">All Status</option>
+                <option value="Active">Active</option>
+                <option value="On Hold">On Hold</option>
+                <option value="Completed">Completed</option>
+              </select>
+              <ChevronDown size={14} className="site-select-arrow" />
+            </div>
+
+            {/* Sites Dropdown */}
+            <div className="site-select-wrapper">
+              <select
+                className="site-pill-select"
+                value={siteFilter}
+                onChange={(e) => {
+                  setSiteFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
+              >
+                <option value="All Sites">All Sites</option>
+                {sites.map((s) => (
+                  <option key={s._id || s.id} value={s.name}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="site-select-arrow" />
+            </div>
+
+            {/* Sort Dropdown */}
+            <div className="site-select-wrapper">
+              <select
+                className="site-pill-select"
+                value={sortFilter}
+                onChange={(e) => {
+                  setSortFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
+              >
+                <option value="Newest First">Newest First</option>
+                <option value="Oldest First">Oldest First</option>
+                <option value="Project Value: High to Low">Project Value: High to Low</option>
+                <option value="Receivable: High to Low">Receivable: High to Low</option>
+              </select>
+              <ChevronDown size={14} className="site-select-arrow" />
+            </div>
+          </div>
         </div>
 
-        {/* Right: Dropdowns */}
-        <div className="sites-filters-right">
-          {/* Status Dropdown */}
-          <div className="site-select-wrapper">
-            <select
-              className="site-pill-select"
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="All Status">All Status</option>
-              <option value="Active">Active</option>
-              <option value="On Hold">On Hold</option>
-              <option value="Completed">Completed</option>
-            </select>
-            <ChevronDown size={14} className="site-select-arrow" />
-          </div>
-
-          {/* Sites Dropdown */}
-          <div className="site-select-wrapper">
-            <select
-              className="site-pill-select"
-              value={siteFilter}
-              onChange={(e) => {
-                setSiteFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="All Sites">All Sites</option>
-              {sites.map((s) => (
-                <option key={s._id || s.id} value={s.name}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={14} className="site-select-arrow" />
-          </div>
-
-          {/* Sort Dropdown */}
-          <div className="site-select-wrapper">
-            <select
-              className="site-pill-select"
-              value={sortFilter}
-              onChange={(e) => {
-                setSortFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="Newest First">Newest First</option>
-              <option value="Oldest First">Oldest First</option>
-              <option value="Project Value: High to Low">Project Value: High to Low</option>
-              <option value="Receivable: High to Low">Receivable: High to Low</option>
-            </select>
-            <ChevronDown size={14} className="site-select-arrow" />
-          </div>
-        </div>
-      </div>
-
-      {/* 4. Site Owners Table Card */}
-      <div className="sites-table-card" style={{ padding: '0 0 16px 0', border: '1px solid #E5EAF1' }}>
         <div className="sites-table-scroll">
           <table className="sites-table">
             <thead>

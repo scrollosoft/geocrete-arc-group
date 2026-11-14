@@ -1,4 +1,5 @@
 import { getPool } from '../config/db.js'
+import { calculateLiveCashSummary } from './cashController.js'
 
 /**
  * Format a database row into a standardized Other transaction object
@@ -74,18 +75,24 @@ export const createOtherTransaction = async (req, res, next) => {
     }
 
     if (!bankAccountId) {
-      return res.status(400).json({ error: 'Please select a Bank Account' })
+      return res.status(400).json({ error: 'Please select an Account' })
     }
 
-    const [bankRows] = await conn.query(
-      'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 LIMIT 1',
-      [bankAccountId]
-    )
-    if (bankRows.length === 0) {
-      return res.status(400).json({ error: 'Selected bank account was not found or is inactive' })
+    const isCashAccount = String(bankAccountId).toLowerCase() === 'cash'
+    let bank = null
+    let bankBalance = 0
+
+    if (!isCashAccount) {
+      const [bankRows] = await conn.query(
+        'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 LIMIT 1',
+        [bankAccountId]
+      )
+      if (bankRows.length === 0) {
+        return res.status(400).json({ error: 'Selected bank account was not found or is inactive' })
+      }
+      bank = bankRows[0]
+      bankBalance = Number(bank.balance || 0)
     }
-    const bank = bankRows[0]
-    const bankBalance = Number(bank.balance || 0)
 
     const isSend = (paymentType || '').toLowerCase() === 'send'
     const isReceive = (paymentType || '').toLowerCase() === 'receive'
@@ -95,15 +102,24 @@ export const createOtherTransaction = async (req, res, next) => {
     }
 
     // Check available balance for Send
-    if (isSend && bankBalance < numAmount) {
-      return res.status(400).json({
-        error: `Insufficient bank balance in ${bank.bank_name}. Available: ₹${Math.round(bankBalance).toLocaleString('en-IN')}, Requested: ₹${Math.round(numAmount).toLocaleString('en-IN')}`,
-      })
+    if (isSend) {
+      if (isCashAccount) {
+        const cashSummary = await calculateLiveCashSummary(conn)
+        if (cashSummary.balance < numAmount) {
+          return res.status(400).json({
+            error: `Insufficient cash balance. Available: ₹${cashSummary.balance.toLocaleString('en-IN')}, Requested: ₹${numAmount.toLocaleString('en-IN')}`,
+          })
+        }
+      } else if (bankBalance < numAmount) {
+        return res.status(400).json({
+          error: `Insufficient bank balance in ${bank.bank_name}. Available: ₹${Math.round(bankBalance).toLocaleString('en-IN')}, Requested: ₹${Math.round(numAmount).toLocaleString('en-IN')}`,
+        })
+      }
     }
 
-    const validPaymentMethod = ['UPI', 'Cheque', 'Cash'].includes(paymentMethod)
-      ? paymentMethod
-      : (paymentMethod || 'UPI')
+    const validPaymentMethod = isCashAccount
+      ? 'Cash'
+      : (['UPI', 'Cheque', 'Cash'].includes(paymentMethod) ? paymentMethod : (paymentMethod || 'UPI'))
     const cleanNote = (note || '').trim()
 
     const txnType = isSend ? 'debit' : 'credit'
@@ -117,7 +133,7 @@ export const createOtherTransaction = async (req, res, next) => {
         (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
       VALUES (NULL, NULL, ?, ?, ?, ?, ?, ?, 'Paid', ?)
     `, [
-      bankAccountId,
+      isCashAccount ? null : Number(bankAccountId),
       numAmount,
       cleanDate,
       txnTitle,
@@ -128,11 +144,13 @@ export const createOtherTransaction = async (req, res, next) => {
 
     const newId = result.insertId
 
-    // 2. Adjust bank balance
-    if (isSend) {
-      await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [numAmount, bankAccountId])
-    } else {
-      await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [numAmount, bankAccountId])
+    // 2. Adjust bank balance if bank used
+    if (!isCashAccount) {
+      if (isSend) {
+        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [numAmount, bankAccountId])
+      } else {
+        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [numAmount, bankAccountId])
+      }
     }
 
     await conn.commit()

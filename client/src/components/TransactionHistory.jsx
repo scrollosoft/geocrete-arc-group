@@ -268,19 +268,21 @@ export default function TransactionHistory({
             )}
           </div>
 
-          {/* Bank Account Dropdown */}
+          {/* Bank / Cash Account Dropdown */}
           <div className="gpay-select-wrap">
             <Landmark size={15} className="gpay-select-icon" />
             <select
               className="gpay-select"
               value={selectedBankId}
               onChange={(e) => setSelectedBankId(e.target.value)}
-              aria-label="Filter by bank account"
+              aria-label="Filter by account"
             >
-              <option value="all">All Bank Accounts</option>
+              <option value="all">All Accounts</option>
               {accounts.map((b) => (
                 <option key={b._id || b.id} value={b._id || b.id}>
-                  {b.bankName} (•••• {String(b.accountNumber || '').slice(-4)})
+                  {b.isCash || b.id === 'cash'
+                    ? 'Cash Account'
+                    : `${b.bankName} (•••• ${String(b.accountNumber || '').slice(-4)})`}
                 </option>
               ))}
             </select>

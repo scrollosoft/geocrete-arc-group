@@ -1,6 +1,7 @@
 import { Expense } from '../models/Expense.js'
 import { Material, isQualifyingMaterialPurchase } from '../models/Material.js'
 import { getPool } from '../config/db.js'
+import { calculateLiveCashSummary } from './cashController.js'
 
 export const getExpenses = async (req, res, next) => {
   try {
@@ -79,6 +80,10 @@ export const createExpense = async (req, res, next) => {
       return res.status(400).json({ error: 'Please select a bank account.' })
     }
 
+    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash' || String(paymentMethod || '').toLowerCase() === 'cash'
+    const finalBankAccountId = isCashAccount ? null : (bankAccountId ? Number(bankAccountId) : null)
+    const finalPaymentMethod = isCashAccount ? 'Cash' : (paymentMethod || 'Bank Transfer')
+
     const calculatedPending = Number((calculatedAmount - parsedPaid).toFixed(2))
 
     const expenseCategory = category || 'Material'
@@ -95,29 +100,40 @@ export const createExpense = async (req, res, next) => {
     try {
       await conn.beginTransaction()
 
-      // Validate and deduct bank balance
-      if (bankAccountId && parsedPaid > 0) {
-        const [[bankRow]] = await conn.query(
-          'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
-          [bankAccountId]
-        )
-        if (!bankRow) {
-          await conn.rollback()
-          conn.release()
-          return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+      // Validate and deduct balance (Cash or Bank)
+      if (parsedPaid > 0) {
+        if (isCashAccount) {
+          const cashSummary = await calculateLiveCashSummary(conn)
+          if (cashSummary.balance < parsedPaid) {
+            await conn.rollback()
+            conn.release()
+            return res.status(400).json({
+              error: `Insufficient cash balance. Available cash: ₹${cashSummary.balance.toLocaleString('en-IN')}, Requested: ₹${parsedPaid.toLocaleString('en-IN')}.`,
+            })
+          }
+        } else if (finalBankAccountId) {
+          const [[bankRow]] = await conn.query(
+            'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+            [finalBankAccountId]
+          )
+          if (!bankRow) {
+            await conn.rollback()
+            conn.release()
+            return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+          }
+          const bankBalance = Number(bankRow.balance)
+          if (bankBalance <= 0) {
+            await conn.rollback()
+            conn.release()
+            return res.status(400).json({ error: 'This bank account has zero balance. Please select another bank account.' })
+          }
+          if (bankBalance < parsedPaid) {
+            await conn.rollback()
+            conn.release()
+            return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
+          }
+          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [parsedPaid, finalBankAccountId])
         }
-        const bankBalance = Number(bankRow.balance)
-        if (bankBalance <= 0) {
-          await conn.rollback()
-          conn.release()
-          return res.status(400).json({ error: 'This bank account has zero balance. Please select another bank account.' })
-        }
-        if (bankBalance < parsedPaid) {
-          await conn.rollback()
-          conn.release()
-          return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
-        }
-        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [parsedPaid, bankAccountId])
       }
 
       const expenseDate = date ? new Date(date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
@@ -139,11 +155,11 @@ export const createExpense = async (req, res, next) => {
           calculatedAmount,
           parsedPaid,
           calculatedPending,
-          paymentMethod || 'Bank Transfer',
+          finalPaymentMethod,
           remark || '',
           expenseStatus,
           shouldApplyToMaterial ? 1 : 0,
-          bankAccountId || null,
+          finalBankAccountId,
         ],
       )
 
@@ -152,7 +168,7 @@ export const createExpense = async (req, res, next) => {
         [calculatedAmount, site],
       )
 
-      if (parsedPaid > 0 && bankAccountId) {
+      if (parsedPaid > 0) {
         await conn.query(
           `INSERT INTO expense_payments
             (expense_id, site_id, supplier_id, bank_account_id, amount, payment_date, payment_method, reference, notes)
@@ -161,10 +177,10 @@ export const createExpense = async (req, res, next) => {
             result.insertId,
             site,
             supplier || null,
-            bankAccountId,
+            finalBankAccountId,
             parsedPaid,
             expenseDate,
-            paymentMethod || 'Bank Transfer',
+            finalPaymentMethod,
             remark || '',
             'Initial Expense Payment',
           ],
@@ -489,31 +505,46 @@ export const recordExpensePayment = async (req, res, next) => {
       })
     }
 
-    // 2. Fetch and lock bank account
-    const [[bank]] = await conn.query(
-      'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
-      [bankAccountId],
-    )
-    if (!bank) {
-      await conn.rollback()
-      conn.release()
-      return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
-    }
+    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash' || String(paymentMethod || '').toLowerCase() === 'cash'
+    const finalBankAccountId = isCashAccount ? null : (bankAccountId ? Number(bankAccountId) : null)
+    const finalPaymentMethod = isCashAccount ? 'Cash' : (paymentMethod || 'Bank Transfer')
 
-    const currentBankBalance = Number(bank.balance) || 0
-    if (currentBankBalance < numAmount) {
-      await conn.rollback()
-      conn.release()
-      return res.status(400).json({
-        error: `Insufficient bank balance in ${bank.bank_name}. Available: ₹${currentBankBalance.toLocaleString('en-IN')}, Requested: ₹${numAmount.toLocaleString('en-IN')}.`,
-      })
-    }
+    // 2. Validate balance and deduct (Cash or Bank)
+    if (isCashAccount) {
+      const cashSummary = await calculateLiveCashSummary(conn)
+      if (cashSummary.balance < numAmount) {
+        await conn.rollback()
+        conn.release()
+        return res.status(400).json({
+          error: `Insufficient cash balance. Available: ₹${cashSummary.balance.toLocaleString('en-IN')}, Requested: ₹${numAmount.toLocaleString('en-IN')}.`,
+        })
+      }
+    } else {
+      const [[bank]] = await conn.query(
+        'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+        [finalBankAccountId],
+      )
+      if (!bank) {
+        await conn.rollback()
+        conn.release()
+        return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+      }
 
-    // 3. Deduct from bank account
-    await conn.query(
-      'UPDATE bank_accounts SET balance = balance - ? WHERE id = ?',
-      [numAmount, bankAccountId],
-    )
+      const currentBankBalance = Number(bank.balance) || 0
+      if (currentBankBalance < numAmount) {
+        await conn.rollback()
+        conn.release()
+        return res.status(400).json({
+          error: `Insufficient bank balance in ${bank.bank_name}. Available: ₹${currentBankBalance.toLocaleString('en-IN')}, Requested: ₹${numAmount.toLocaleString('en-IN')}.`,
+        })
+      }
+
+      // Deduct from bank account
+      await conn.query(
+        'UPDATE bank_accounts SET balance = balance - ? WHERE id = ?',
+        [numAmount, finalBankAccountId],
+      )
+    }
 
     // 4. Update expense paid_amount, pending_amount, status
     const newPaid = Number((currentPaid + numAmount).toFixed(2))
@@ -522,7 +553,7 @@ export const recordExpensePayment = async (req, res, next) => {
 
     await conn.query(
       'UPDATE expenses SET paid_amount = ?, pending_amount = ?, status = ?, bank_account_id = ? WHERE id = ?',
-      [newPaid, newPending, newStatus, bankAccountId, expenseId],
+      [newPaid, newPending, newStatus, finalBankAccountId, expenseId],
     )
 
     // 5. If linked to material, update material paid amount
@@ -545,10 +576,10 @@ export const recordExpensePayment = async (req, res, next) => {
         expenseId,
         expense.site_id,
         expense.supplier_id || null,
-        bankAccountId,
+        finalBankAccountId,
         numAmount,
         pDate,
-        paymentMethod || 'Bank Transfer',
+        finalPaymentMethod,
         reference || '',
         notes || 'Expense partial payment',
       ],

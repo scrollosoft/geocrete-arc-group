@@ -220,4 +220,34 @@ export async function ensureSchema() {
   } catch (err) {
     console.warn('expense_payments table init skipped:', err.message)
   }
+
+  // Ensure cash table exists
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cash (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        date DATE NOT NULL,
+        amount DECIMAL(15,2) NOT NULL,
+        description VARCHAR(255) NOT NULL DEFAULT 'Cash Added',
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_cash_date (date)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `)
+    console.log('Ensured cash table exists')
+  } catch (err) {
+    console.warn('cash table init skipped:', err.message)
+  }
+
+  // Ensure expense_payments.bank_account_id and worker_payments.bank_account_id can be NULL for Cash payments
+  try {
+    await pool.query('ALTER TABLE expense_payments MODIFY COLUMN bank_account_id INT UNSIGNED NULL DEFAULT NULL')
+  } catch (err) {
+    // ignore
+  }
+  try {
+    await pool.query('ALTER TABLE worker_payments MODIFY COLUMN bank_account_id INT UNSIGNED NULL DEFAULT NULL')
+  } catch (err) {
+    // ignore
+  }
 }

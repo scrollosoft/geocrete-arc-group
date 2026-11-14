@@ -112,11 +112,13 @@ export default function TransactionDetailModal({ isOpen, onClose, transaction })
           <div className="gpay-receipt-row">
             <span className="gpay-receipt-label">
               <Landmark size={14} className="gpay-row-icon" />
-              Bank Account
+              {transaction.bankAccountId === 'cash' ? 'Account' : 'Bank Account'}
             </span>
             <span className="gpay-receipt-val">
-              {transaction.bankName || 'Bank Account'}
-              {transaction.accountNumber ? ` (•••• ${String(transaction.accountNumber).slice(-4)})` : ''}
+              {transaction.bankName || (transaction.bankAccountId === 'cash' ? 'Cash' : 'Bank Account')}
+              {transaction.accountNumber && transaction.accountNumber !== 'CASH'
+                ? ` (•••• ${String(transaction.accountNumber).slice(-4)})`
+                : ''}
             </span>
           </div>
 
@@ -197,7 +199,11 @@ export default function TransactionDetailModal({ isOpen, onClose, transaction })
             <div className="gpay-receipt-balance-box">
               <div className="gpay-balance-box-left">
                 <Wallet size={16} />
-                <span>Bank Balance After Transaction</span>
+                <span>
+                  {transaction.bankAccountId === 'cash'
+                    ? 'Cash Balance After Transaction'
+                    : 'Bank Balance After Transaction'}
+                </span>
               </div>
               <div className="gpay-balance-box-val">
                 {formatRupee(transaction.balanceAfter)}
