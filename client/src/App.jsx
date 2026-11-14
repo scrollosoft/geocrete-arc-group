@@ -25,6 +25,10 @@ import SettingsPage from './components/SettingsPage.jsx'
 import SupplierDetailPage from './components/SupplierDetailPage.jsx'
 import PaymentsPage from './components/PaymentsPage.jsx'
 import SiteDetailPage from './components/SiteDetailPage.jsx'
+import ConsultingForm from './components/ConsultingForm.jsx'
+import ConsultingTable from './components/ConsultingTable.jsx'
+import OtherForm from './components/OtherForm.jsx'
+import OtherTable from './components/OtherTable.jsx'
 
 import { bankAccountService } from './services/bankAccountService.js'
 import { siteService } from './services/siteService.js'
@@ -33,6 +37,8 @@ import { expenseService } from './services/expenseService.js'
 import { dashboardService } from './services/dashboardService.js'
 import { labourService } from './services/labourService.js'
 import { settingService } from './services/settingService.js'
+import { consultingService } from './services/consultingService.js'
+import { otherTransactionService } from './services/otherTransactionService.js'
 
 const getInitialTab = () => {
   try {
@@ -90,6 +96,10 @@ export default function App() {
   const [loadingSites, setLoadingSites] = useState(true)
   const [loadingExpenses, setLoadingExpenses] = useState(true)
   const [loadingLabour, setLoadingLabour] = useState(true)
+  const [consultingList, setConsultingList] = useState([])
+  const [loadingConsulting, setLoadingConsulting] = useState(true)
+  const [otherTransactions, setOtherTransactions] = useState([])
+  const [loadingOther, setLoadingOther] = useState(true)
 
   const [isAddSiteOpen, setIsAddSiteOpen] = useState(false)
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false)
@@ -111,6 +121,50 @@ export default function App() {
   const [settingsKey, setSettingsKey] = useState(0)
   const [ownerProfile, setOwnerProfile] = useState(null)
   const [dashboardTab, setDashboardTab] = useState('expenses')
+
+  // Global modal background scroll lock: locks document.body and restores scroll position
+  useEffect(() => {
+    let scrollY = 0
+    let isLocked = false
+
+    const checkModals = () => {
+      const activeModal = document.querySelector(
+        '.modal-overlay, .lmodal-overlay, .mep-modal-overlay, .txn-modal-overlay'
+      )
+      if (activeModal && !isLocked) {
+        scrollY = window.scrollY || window.pageYOffset || 0
+        document.body.style.position = 'fixed'
+        document.body.style.top = `-${scrollY}px`
+        document.body.style.width = '100%'
+        document.body.style.overflow = 'hidden'
+        isLocked = true
+      } else if (!activeModal && isLocked) {
+        document.body.style.position = ''
+        document.body.style.top = ''
+        document.body.style.width = ''
+        document.body.style.overflow = ''
+        window.scrollTo(0, scrollY)
+        isLocked = false
+      }
+    }
+
+    const observer = new MutationObserver(() => {
+      checkModals()
+    })
+
+    observer.observe(document.body, { childList: true, subtree: true })
+
+    return () => {
+      observer.disconnect()
+      if (isLocked) {
+        document.body.style.position = ''
+        document.body.style.top = ''
+        document.body.style.width = ''
+        document.body.style.overflow = ''
+        window.scrollTo(0, scrollY)
+      }
+    }
+  }, [])
 
   // 1. Fetch Bank Accounts
   const loadBankAccounts = useCallback(async () => {
@@ -187,18 +241,51 @@ export default function App() {
     }
   }, [selectedSiteFilter, dateFilter, searchQuery])
 
+  // 6. Fetch Consulting
+  const loadConsulting = useCallback(async () => {
+    try {
+      setLoadingConsulting(true)
+      const data = await consultingService.getAll()
+      setConsultingList(data || [])
+    } catch (err) {
+      console.error('Failed to load consulting records:', err)
+    } finally {
+      setLoadingConsulting(false)
+    }
+  }, [])
+
+  // 7. Fetch Other Transactions
+  const loadOtherTransactions = useCallback(async () => {
+    try {
+      setLoadingOther(true)
+      const data = await otherTransactionService.getAll()
+      setOtherTransactions(data || [])
+    } catch (err) {
+      console.error('Failed to load other transactions:', err)
+    } finally {
+      setLoadingOther(false)
+    }
+  }, [])
+
+  const constructionSites = React.useMemo(
+    () => sites.filter((s) => !s.description?.includes('[CONSULTING]')),
+    [sites]
+  )
+
   // Initial Data Load
   useEffect(() => {
     let active = true
     const init = async () => {
       try {
-        const [accData, allSites, overview, supData, labourData, settingsData] = await Promise.all([
+        const [accData, allSites, overview, supData, labourData, settingsData, consultData, otherData] = await Promise.all([
           bankAccountService.getAll(),
           siteService.getAll(),
           dashboardService.getSiteOverview(),
           supplierService.getAll(),
           labourService.getAll(),
           settingService.getSettings().catch(() => null),
+          consultingService.getAll().catch(() => []),
+          otherTransactionService.getAll().catch(() => []),
         ])
         if (!active) return
         setAccounts(accData || [])
@@ -207,6 +294,8 @@ export default function App() {
         setSuppliers(supData || [])
         setWorkers(labourData?.workers || [])
         setLabourSummary(labourData?.summary || {})
+        setConsultingList(consultData || [])
+        setOtherTransactions(otherData || [])
         if (settingsData?.ownerProfile) {
           setOwnerProfile(settingsData.ownerProfile)
         }
@@ -217,6 +306,8 @@ export default function App() {
           setLoadingAccounts(false)
           setLoadingSites(false)
           setLoadingLabour(false)
+          setLoadingConsulting(false)
+          setLoadingOther(false)
         }
       }
     }
@@ -402,7 +493,7 @@ export default function App() {
             />
           ) : activeTab === 'sites' || activeTab === 'site-detail' ? (
             <SitesPage
-              sites={sites}
+              sites={constructionSites}
               expenses={expenses}
               onOpenAddSite={() => setIsAddSiteOpen(true)}
               onOpenAddExpense={handleScrollToAddExpense}
@@ -447,6 +538,7 @@ export default function App() {
                   handleTabChange('dashboard')
                 }
               }}
+              showNotification={setNotification}
             />
           ) : activeTab === 'materials' ? (
             <MaterialsPage
@@ -516,19 +608,21 @@ export default function App() {
 
               {/* Financial Summary (4 stat cards in a single horizontal row) */}
               <DashboardFinancialSummary
-                sites={sites}
+                sites={constructionSites}
                 expenses={expenses}
                 loading={loadingSites || loadingExpenses}
               />
 
-              {/* ── Dashboard Tabs: Expenses | Site | Labour ── */}
+              {/* ── Dashboard Tabs: Expenses | Labour | Consulting | Other | Site ── */}
               <div className="dashboard-tabs-section">
                 {/* Tab Navigation */}
                 <div className="dashboard-tab-nav">
                   {[
                     { key: 'expenses', label: 'Expenses' },
-                    { key: 'site', label: 'Site' },
                     { key: 'labour', label: 'Labour' },
+                    { key: 'consulting', label: 'Consulting' },
+                    { key: 'other', label: 'Other' },
+                    { key: 'site', label: 'Site' },
                   ].map((tab) => (
                     <button
                       key={tab.key}
@@ -547,10 +641,44 @@ export default function App() {
                     <div className="dashboard-form-col">
                       {dashboardTab === 'expenses' && (
                         <DailyExpenseForm
-                          sites={sites}
+                          sites={constructionSites}
                           suppliers={suppliers}
                           bankAccounts={accounts}
                           onExpenseCreated={handleExpenseCreated}
+                          showNotification={setNotification}
+                        />
+                      )}
+                      {dashboardTab === 'labour' && (
+                        <AddWorkerModal
+                          isOpen={false}
+                          embeddedMode={true}
+                          onClose={() => {}}
+                          sites={constructionSites}
+                          bankAccounts={accounts}
+                          onWorkerCreated={() => {
+                            loadLabour()
+                            loadBankAccounts()
+                          }}
+                          showNotification={setNotification}
+                        />
+                      )}
+                      {dashboardTab === 'consulting' && (
+                        <ConsultingForm
+                          bankAccounts={accounts}
+                          onConsultingCreated={() => {
+                            loadConsulting()
+                            loadBankAccounts()
+                          }}
+                          showNotification={setNotification}
+                        />
+                      )}
+                      {dashboardTab === 'other' && (
+                        <OtherForm
+                          bankAccounts={accounts}
+                          onTransactionCreated={() => {
+                            loadOtherTransactions()
+                            loadBankAccounts()
+                          }}
                           showNotification={setNotification}
                         />
                       )}
@@ -564,20 +692,6 @@ export default function App() {
                             loadSites()
                             loadBankAccounts()
                             setClientRefreshTrigger((prev) => prev + 1)
-                          }}
-                          showNotification={setNotification}
-                        />
-                      )}
-                      {dashboardTab === 'labour' && (
-                        <AddWorkerModal
-                          isOpen={false}
-                          embeddedMode={true}
-                          onClose={() => {}}
-                          sites={sites}
-                          bankAccounts={accounts}
-                          onWorkerCreated={() => {
-                            loadLabour()
-                            loadBankAccounts()
                           }}
                           showNotification={setNotification}
                         />
@@ -597,7 +711,7 @@ export default function App() {
                     {dashboardTab === 'expenses' && (
                       <ExpensesPage
                         expenses={expenses}
-                        sites={sites}
+                        sites={constructionSites}
                         suppliers={suppliers}
                         bankAccounts={accounts}
                         onOpenAddExpense={handleScrollToAddExpense}
@@ -608,9 +722,48 @@ export default function App() {
                         onViewExpense={handleViewExpense}
                       />
                     )}
+                    {dashboardTab === 'labour' && (
+                      <LabourPage
+                        workers={workers}
+                        summary={labourSummary}
+                        sites={constructionSites}
+                        bankAccounts={accounts}
+                        onOpenAddWorker={() => setIsAddWorkerOpen(true)}
+                        loading={loadingLabour}
+                        onLabourChanged={loadLabour}
+                        onRefreshAccounts={loadBankAccounts}
+                        hideHeader={true}
+                        onViewWorker={handleViewWorker}
+                        showNotification={setNotification}
+                      />
+                    )}
+                    {dashboardTab === 'consulting' && (
+                      <ConsultingTable
+                        consultingList={consultingList}
+                        loading={loadingConsulting}
+                        bankAccounts={accounts}
+                        onConsultingChanged={() => {
+                          loadConsulting()
+                          loadBankAccounts()
+                        }}
+                        showNotification={setNotification}
+                      />
+                    )}
+                    {dashboardTab === 'other' && (
+                      <OtherTable
+                        transactions={otherTransactions}
+                        loading={loadingOther}
+                        bankAccounts={accounts}
+                        onTransactionChanged={() => {
+                          loadOtherTransactions()
+                          loadBankAccounts()
+                        }}
+                        showNotification={setNotification}
+                      />
+                    )}
                     {dashboardTab === 'site' && (
                       <SitesPage
-                        sites={sites}
+                        sites={constructionSites}
                         expenses={expenses}
                         onOpenAddSite={() => setIsAddSiteOpen(true)}
                         onOpenAddExpense={handleScrollToAddExpense}
@@ -622,27 +775,13 @@ export default function App() {
                         onViewSite={handleViewSite}
                       />
                     )}
-                    {dashboardTab === 'labour' && (
-                      <LabourPage
-                        workers={workers}
-                        summary={labourSummary}
-                        sites={sites}
-                        bankAccounts={accounts}
-                        onOpenAddWorker={() => setIsAddWorkerOpen(true)}
-                        loading={loadingLabour}
-                        onLabourChanged={loadLabour}
-                        onRefreshAccounts={loadBankAccounts}
-                        hideHeader={true}
-                        onViewWorker={handleViewWorker}
-                      />
-                    )}
                   </div>
                 </div>
               </div>
 
               {/* Sites Overview (3 cards in a row) — always visible */}
               <SitesOverview
-                sites={siteOverview.length > 0 ? siteOverview : sites}
+                sites={siteOverview.length > 0 ? siteOverview : constructionSites}
                 loading={loadingSites}
                 onNavigateSites={() => handleTabChange('sites')}
                 onViewSite={handleViewSite}

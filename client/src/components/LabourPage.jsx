@@ -31,6 +31,7 @@ export default function LabourPage({
   onViewWorker,
   initialWorker = null,
   onBackFromDetail,
+  showNotification,
 }) {
   const [activeTab, setActiveTab] = useState('Payments')
   const [search, setSearch] = useState('')
@@ -98,6 +99,10 @@ export default function LabourPage({
   // Delete Payment confirmation
   const [deletePaymentItem, setDeletePaymentItem] = useState(null)
   const [deletingPayment, setDeletingPayment] = useState(false)
+
+  // Delete Worker confirmation
+  const [deleteWorkerItem, setDeleteWorkerItem] = useState(null)
+  const [deleteWorkerError, setDeleteWorkerError] = useState('')
 
   // Load real data when viewing a worker's detail
   useEffect(() => {
@@ -509,18 +514,34 @@ export default function LabourPage({
   }
 
   // ── DELETE WORKER ─────────────────────────────────────────────────────────
-  const handleDelete = async (item) => {
-    if (!window.confirm(`Delete worker "${item.name}"? This cannot be undone.`)) return
+  const handleDelete = (item) => {
+    setDeleteWorkerError('')
+    setDeleteWorkerItem(item)
+  }
+
+  const handleConfirmDeleteWorker = async () => {
+    if (!deleteWorkerItem || deletingId) return
+    const item = deleteWorkerItem
     setDeletingId(item._id)
+    setDeleteWorkerError('')
     try {
       await labourService.delete(item._id)
       setLocalWorkers((prev) => {
         const base = prev !== null ? prev : workers
         return base.filter((w) => w._id !== item._id)
       })
+      setDeleteWorkerItem(null)
       if (onLabourChanged) onLabourChanged()
+      if (showNotification) {
+        showNotification({ type: 'success', message: `Worker "${item.name}" deleted successfully` })
+      }
     } catch (err) {
-      window.alert('Delete failed: ' + (err.message || 'Unknown error'))
+      console.error('Failed to delete worker:', err)
+      const msg = err.response?.data?.message || err.message || 'Failed to delete worker. Please try again.'
+      setDeleteWorkerError(msg)
+      if (showNotification) {
+        showNotification({ type: 'error', message: msg })
+      }
     } finally {
       setDeletingId(null)
     }
@@ -1498,6 +1519,45 @@ export default function LabourPage({
                 onClick={handleConfirmDeletePayment}
               >
                 {deletingPayment ? 'Deleting…' : 'Yes, Delete Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE WORKER CONFIRMATION MODAL ──────────────────────────────── */}
+      {deleteWorkerItem && (
+        <div className="lmodal-overlay" onClick={() => !deletingId && setDeleteWorkerItem(null)}>
+          <div className="lmodal-box" style={{ maxWidth: '420px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="lmodal-header">
+              <h2 className="lmodal-title">Delete Worker</h2>
+              <button className="lmodal-close" onClick={() => !deletingId && setDeleteWorkerItem(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="lmodal-body">
+              {deleteWorkerError && (
+                <div style={{ marginBottom: '12px', padding: '10px 14px', background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: '8px', color: '#B91C1C', fontSize: '13px' }}>
+                  {deleteWorkerError}
+                </div>
+              )}
+              <p style={{ color: '#475569', fontSize: '14px', lineHeight: '1.6', margin: 0 }}>
+                Are you sure you want to delete worker <strong>{deleteWorkerItem.name}</strong>?
+                <br />
+                This action cannot be undone and will remove all associated worker records.
+              </p>
+            </div>
+            <div className="lmodal-footer">
+              <button className="ledit-cancel" disabled={!!deletingId} onClick={() => setDeleteWorkerItem(null)}>
+                Cancel
+              </button>
+              <button
+                className="ledit-save"
+                style={{ background: '#DC2626', borderColor: '#DC2626' }}
+                disabled={!!deletingId}
+                onClick={handleConfirmDeleteWorker}
+              >
+                {deletingId ? 'Deleting…' : 'Yes, Delete Worker'}
               </button>
             </div>
           </div>

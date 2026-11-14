@@ -1163,7 +1163,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 9999;
   padding: 16px;
 }
 
@@ -2081,10 +2081,35 @@
   .sites-filters-right {
     flex-wrap: wrap;
   }
+
+  /* ── Pagination: single nowrap row on all screen widths ── */
   .sites-pagination-row {
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    padding: 10px 12px !important;
+    overflow: hidden;
+  }
+
+  .pagination-left {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+
+  .pagination-right {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+    width: auto !important;
   }
 }
 
@@ -2527,7 +2552,7 @@
 
 @media (max-width: 768px) {
   .site-detail-stat-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -3612,7 +3637,11 @@
 
 @media (max-width: 640px) {
   .suppliers-cards-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .suppliers-cards-grid > :last-child:nth-child(odd) {
+    grid-column: span 2;
   }
 }
 
@@ -3848,7 +3877,11 @@
 
 @media (max-width: 640px) {
   .sod-stat-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .sod-stat-grid > :last-child:nth-child(odd) {
+    grid-column: span 2;
   }
 }
 
@@ -4064,7 +4097,8 @@
 
 @media (max-width: 640px) {
   .payments-cards-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 }
 
@@ -5309,13 +5343,28 @@
   }
 
   .suppliers-cards-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
   }
-
-  /* ---- Form grids ---- */
+  .suppliers-cards-grid > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
+  }
   .form-grid,
   .modal-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .modal-form-grid > * {
+    grid-column: 1 / -1 !important;
+  }
+
+  .aem-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .aem-form-grid > * {
+    grid-column: 1 / -1 !important;
   }
 
   .form-remark-group,
@@ -5371,62 +5420,109 @@
     padding: 14px 14px 14px 14px;
   }
 
-  /* ---- Labour Modals (lmodal) ---- */
-  .lmodal-overlay {
-    padding: 10px;
-    align-items: flex-end;
+  /* ---- Modals: Center all popup windows horizontally & vertically ---- */
+  .lmodal-overlay,
+  .modal-overlay,
+  .mep-modal-overlay,
+  .txn-modal-overlay {
+    padding: 12px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9999 !important;
   }
 
-  .lmodal-box {
-    width: 100%;
-    max-width: 100%;
-    max-height: 92vh;
-    border-radius: 16px 16px 0 0;
+  .lmodal-box,
+  .modal-container,
+  .modal-box,
+  .mep-modal-box,
+  .txn-modal-box {
+    width: 100% !important;
+    max-width: 520px !important;
+    max-height: min(88vh, calc(100dvh - 24px)) !important;
+    max-height: min(88vh, calc(100vh - 24px)) !important;
+    border-radius: 14px !important;
+    margin: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+    background: #FFFFFF !important;
+  }
+
+  .modal-header,
+  .lmodal-header {
+    flex-shrink: 0 !important;
+    padding: 14px 16px !important;
+  }
+
+  .modal-form {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .modal-body,
+  .lmodal-body {
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    min-height: 0 !important;
+    padding: 14px 16px !important;
+  }
+
+  .modal-footer,
+  .lmodal-footer {
+    flex-shrink: 0 !important;
+    padding: 12px 16px !important;
+    gap: 10px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    border-top: 1px solid #E5EAF1 !important;
+    background: #FFFFFF !important;
+  }
+
+  .modal-footer button,
+  .modal-footer .btn,
+  .lmodal-footer button,
+  .lmodal-footer .btn {
+    flex: 1 !important;
+    min-width: 0 !important;
+    min-height: 42px !important;
+    height: 42px !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 12px !important;
+    box-sizing: border-box !important;
   }
 
   /* Edit Worker grid — single column */
   .ledit-grid {
-    grid-template-columns: 1fr;
-  }
-
-  /* lmodal footer buttons */
-  .lmodal-footer {
-    gap: 8px;
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
   }
 
   .ledit-cancel,
   .ledit-save {
-    flex: 1;
+    flex: 1 !important;
+    min-height: 42px !important;
+    height: 42px !important;
     text-align: center;
   }
 
   /* Worker detail view grid */
   .lview-grid {
-    grid-template-columns: 1fr;
-  }
-
-  /* ---- Generic Modal Container ---- */
-  .modal-overlay {
-    padding: 10px;
-    align-items: flex-end;
-  }
-
-  .modal-container {
-    width: 100%;
-    max-width: 100%;
-    max-height: 92vh;
-    border-radius: 16px 16px 0 0;
-  }
-
-  .modal-footer {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .modal-footer button {
-    flex: 1;
-    min-width: 100px;
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
   }
 
   /* ---- Tables: smooth touch scroll ---- */
@@ -5437,17 +5533,73 @@
     overflow-x: auto;
   }
 
-  /* ---- Site detail header ---- */
-  .site-detail-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
+  /* ---- Site detail page responsive ---- */
+  .site-detail-header-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
   }
 
-  .site-detail-header-actions {
-    width: 100%;
-    flex-wrap: wrap;
-    gap: 8px;
+  .site-detail-actions-col {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .site-detail-actions-col > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
+  }
+
+  .site-detail-action-btn {
+    width: 100% !important;
+    height: 38px !important;
+    justify-content: center !important;
+    padding: 0 10px !important;
+    font-size: 13px !important;
+  }
+
+  .site-detail-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .site-detail-stat-grid > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
+  }
+
+  .site-detail-card {
+    padding: 12px 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .site-card-label {
+    font-size: 11px !important;
+  }
+
+  .site-card-val {
+    font-size: 17px !important;
+    line-height: 1.25 !important;
+  }
+
+  .site-card-desc {
+    font-size: 10.5px !important;
+  }
+
+  .site-detail-tabs-bar {
+    gap: 18px !important;
+    padding-bottom: 2px !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .site-detail-overview-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .site-detail-box {
+    padding: 14px 12px !important;
+    border-radius: 10px !important;
   }
 
   /* ---- Expenses page filter row ---- */
@@ -5529,10 +5681,11 @@
 
   /* ---- Add Site / Add Expense form modal ---- */
   .modal-box {
-    width: 100%;
-    max-width: 100%;
-    max-height: 92vh;
-    border-radius: 16px 16px 0 0;
+    width: 100% !important;
+    max-width: 520px !important;
+    max-height: calc(100dvh - 24px) !important;
+    border-radius: 14px !important;
+    margin: auto !important;
   }
 
   /* Page-level action buttons row */
@@ -5560,17 +5713,41 @@
    ------------------------------------------------------------------ */
 @media (max-width: 480px) {
 
-  /* ---- Stat-card grids: 1-col on small phones ---- */
+  /* ---- Stat-card grids: 2-col on small phones ---- */
   .stat-cards-grid,
-  .site-detail-stat-grid,
   .payments-cards-grid,
   .sod-stat-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .sod-stat-grid > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
   }
 
   /* sites-stat-grid: 2-col on small phones */
   .sites-stat-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Site Detail Stat Cards — 2 cards per line on small phones */
+  .site-detail-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .site-detail-stat-grid > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
+  }
+  .site-detail-card {
+    padding: 10px 10px !important;
+  }
+  .site-card-label {
+    font-size: 10.5px !important;
+  }
+  .site-card-val {
+    font-size: 16px !important;
+  }
+  .site-card-desc {
+    font-size: 10px !important;
   }
 
   /* ---- Content body ---- */
@@ -5596,23 +5773,14 @@
     padding: 0 10px;
   }
 
-  /* ---- Modal footer ---- */
-  .modal-footer {
-    flex-direction: column;
-  }
-
-  .modal-footer button {
-    width: 100%;
-  }
-
-  /* ---- lmodal footer ---- */
-  .lmodal-footer {
-    flex-direction: column-reverse;
-  }
-
-  .ledit-cancel,
-  .ledit-save {
-    width: 100%;
+  /* ---- Modal footer on <= 480px ---- */
+  .modal-footer button,
+  .modal-footer .btn,
+  .lmodal-footer button,
+  .lmodal-footer .btn {
+    min-height: 42px !important;
+    height: 42px !important;
+    font-size: 13.5px !important;
   }
 
   /* ---- Site cards ---- */
@@ -5622,7 +5790,11 @@
 
   /* ---- Suppliers cards ---- */
   .suppliers-cards-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .suppliers-cards-grid > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
   }
 
   /* ---- Bank accounts grid ---- */
@@ -6126,19 +6298,24 @@
   }
 
   .sites-filters-right {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    width: 100%;
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    width: 100% !important;
   }
 
   .site-select-wrapper {
-    flex: 1 1 calc(50% - 4px);
-    min-width: 130px;
+    width: 100% !important;
+    min-width: 0 !important;
   }
 
-  .site-select {
-    width: 100%;
+  .sites-filters-right > .site-select-wrapper:last-child:nth-child(odd) {
+    grid-column: span 2 !important;
+  }
+
+  .site-pill-select {
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .sites-table-scroll {
@@ -6154,14 +6331,36 @@
   }
 
   .sites-pagination-row {
-    flex-direction: column;
-    gap: 10px;
-    align-items: center;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    padding: 10px 12px !important;
     width: 100%;
   }
 
+  .pagination-left {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+
+  .pagination-right {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+    width: auto !important;
+  }
+
   .pagination-controls {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: center;
   }
 }
@@ -6590,5 +6789,1440 @@
     flex-direction: column !important;
     align-items: flex-start !important;
     gap: 6px !important;
+  }
+}
+
+/* ==========================================================================
+   Transaction Popups (Details, Edit, Delete) Responsive Layout
+   ========================================================================== */
+
+.txn-modal-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 9999 !important;
+  padding: 16px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.txn-modal-container {
+  width: 100%;
+  max-width: 460px;
+  max-height: calc(100dvh - 32px);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  background-color: #FFFFFF;
+  border-radius: 14px !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  box-sizing: border-box;
+  margin: auto !important;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+.txn-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #E5EAF1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 12px;
+  background-color: #FFFFFF;
+}
+
+.txn-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.txn-modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #E5EAF1;
+  background-color: #FFFFFF;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-end;
+  gap: 10px !important;
+  flex-shrink: 0;
+}
+
+.txn-modal-footer .txn-modal-btn {
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 18px !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+  cursor: pointer;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.txn-modal-btn-cancel {
+  background-color: #FFFFFF !important;
+  color: #475569 !important;
+  border: 1px solid #CBD5E1 !important;
+}
+
+.txn-modal-btn-cancel:hover {
+  background-color: #F8FAFC !important;
+  border-color: #94A3B8 !important;
+  color: #1E293B !important;
+}
+
+.txn-modal-btn-primary {
+  background-color: #0284C7 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #0284C7 !important;
+}
+
+.txn-modal-btn-primary:hover {
+  background-color: #0369A1 !important;
+}
+
+.txn-modal-btn-delete {
+  background-color: #DC2626 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #DC2626 !important;
+}
+
+.txn-modal-btn-delete:hover {
+  background-color: #B91C1C !important;
+}
+
+.txn-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.txn-span-2 {
+  grid-column: span 2;
+}
+
+/* Mobile responsive rules */
+@media (max-width: 600px) {
+  .txn-modal-overlay {
+    padding: 12px !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .txn-modal-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - 24px) !important;
+    max-height: calc(100vh - 24px) !important;
+    border-radius: 14px !important;
+    margin: 0 auto !important;
+  }
+
+  .txn-modal-header {
+    padding: 14px 16px !important;
+  }
+
+  .txn-modal-body {
+    padding: 14px 16px !important;
+    gap: 12px !important;
+  }
+
+  .txn-modal-footer {
+    padding: 12px 16px !important;
+    gap: 10px !important;
+    display: flex !important;
+    flex-direction: row !important;
+  }
+
+  .txn-modal-footer .txn-modal-btn {
+    flex: 1 !important;
+    min-width: 0 !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    font-size: 13.5px !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .txn-edit-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .txn-span-2 {
+    grid-column: span 1 !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .txn-modal-overlay {
+    padding: 8px !important;
+  }
+
+  .txn-modal-footer {
+    flex-direction: column-reverse !important;
+    gap: 8px !important;
+  }
+
+  .txn-modal-footer .txn-modal-btn {
+    width: 100% !important;
+    flex: none !important;
+  }
+}
+
+/* ==========================================================================
+   Comprehensive Mobile Responsiveness Overhaul (All 15 Areas)
+   ========================================================================== */
+
+/* 1. Consulting Financial Details & Edit Grids */
+.consulting-view-financial-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  background: #F8FAFC;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+}
+
+.consulting-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+/* 2. Add / Edit Expense Form Grid */
+.aem-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* 3. Expense Detail View Stat Grid & Particulars */
+.expense-detail-stat-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.expense-detail-card {
+  padding: 24px;
+}
+
+.expense-particulars-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  background-color: #F8FAFC;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+}
+
+@media (max-width: 1024px) {
+  .expense-particulars-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    padding: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Stat Grids (Labour & Sites) — 2 cards per line on mobile */
+  .sites-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .sites-stat-grid .site-stat-card {
+    padding: 12px 10px !important;
+    border-radius: 10px !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .sites-stat-grid .stat-value {
+    font-size: 15.5px !important;
+    line-height: 1.25 !important;
+    white-space: nowrap !important;
+  }
+
+  .sites-stat-grid .stat-label {
+    font-size: 11px !important;
+    white-space: nowrap !important;
+  }
+
+  .sites-stat-grid .stat-desc {
+    font-size: 10.5px !important;
+    line-height: 1.2 !important;
+  }
+
+  .sites-stat-grid .stat-icon-wrap {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  /* Expense Stat Grids — 2 cards per line on mobile */
+  .sites-stat-grid.expenses-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  .sites-stat-grid.expenses-stat-grid > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
+  }
+  .sites-stat-grid.expenses-stat-grid .site-stat-card {
+    padding: 14px 12px !important;
+    border-radius: 10px !important;
+  }
+  .sites-stat-grid.expenses-stat-grid .stat-value {
+    font-size: 17px !important;
+  }
+
+  .expense-detail-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  .expense-detail-card {
+    padding: 16px 14px !important;
+  }
+
+  .expense-particulars-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 14px 12px !important;
+    padding: 14px 12px !important;
+  }
+
+  .expense-particulars-grid p {
+    font-size: 13.5px !important;
+    word-break: break-word;
+  }
+
+  .expense-particulars-grid span {
+    font-size: 11px !important;
+  }
+
+  /* Labour filter and action row on mobile */
+  .labour-filter-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .labour-filter-left {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+  .labour-search-box,
+  .labour-select {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .labour-actions-right {
+    width: 100% !important;
+  }
+  .btn-record-payments {
+    width: 100% !important;
+    height: 40px !important;
+    justify-content: center !important;
+  }
+
+  /* Pagination footer row — single nowrap horizontal row on all mobile */
+  .sites-pagination-row,
+  .labour-pagination-row {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    padding: 10px 12px !important;
+    text-align: left !important;
+  }
+  .pagination-left {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+  .pagination-right {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+    width: auto !important;
+  }
+  .sites-pagination-btns,
+  .pagination-btns {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .consulting-view-financial-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    padding: 12px !important;
+  }
+
+  .consulting-edit-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+  .consulting-edit-grid > * {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Stat Grids (Labour & Sites) — 2 cards per line on phones */
+  .sites-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .sites-stat-grid .site-stat-card {
+    padding: 10px 8px !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .sites-stat-grid .stat-value {
+    font-size: 14.5px !important;
+    letter-spacing: -0.2px !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+  }
+
+  .sites-stat-grid .stat-label {
+    font-size: 10.5px !important;
+    white-space: nowrap !important;
+  }
+
+  .sites-stat-grid .stat-desc {
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+  }
+
+  .sites-stat-grid .stat-icon-wrap {
+    width: 26px !important;
+    height: 26px !important;
+  }
+
+  /* Expenses Stat Cards: 2 cards per line on phones */
+  .sites-stat-grid.expenses-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+  .sites-stat-grid.expenses-stat-grid > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
+  }
+
+  .sites-stat-grid.expenses-stat-grid .site-stat-card {
+    padding: 12px 10px !important;
+    gap: 4px !important;
+  }
+
+  .sites-stat-grid.expenses-stat-grid .stat-value {
+    font-size: 15.5px !important;
+    line-height: 1.2 !important;
+  }
+
+  .sites-stat-grid.expenses-stat-grid .stat-label {
+    font-size: 11px !important;
+  }
+
+  .sites-stat-grid.expenses-stat-grid .stat-desc {
+    font-size: 10.5px !important;
+  }
+
+  .sites-stat-grid.expenses-stat-grid .stat-icon-wrap {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  /* Expense Detail: 2 cards per line on phones */
+  .expense-detail-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .expense-detail-stat-grid .site-stat-card {
+    padding: 12px 10px !important;
+    gap: 4px !important;
+  }
+
+  .expense-detail-stat-grid .stat-value {
+    font-size: 15px !important;
+    line-height: 1.2 !important;
+  }
+
+  .expense-detail-stat-grid .stat-label {
+    font-size: 11px !important;
+  }
+
+  .expense-detail-stat-grid .stat-desc {
+    font-size: 10.5px !important;
+  }
+
+  .expense-detail-stat-grid .stat-icon-wrap {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  /* Expense Particulars: 2 columns on phones */
+  .expense-particulars-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px 10px !important;
+    padding: 12px 10px !important;
+  }
+
+  .expense-particulars-grid p {
+    font-size: 13px !important;
+  }
+
+  .expense-particulars-grid span {
+    font-size: 10.5px !important;
+  }
+
+  /* Pagination nav buttons — compact sizing so all fit in one row */
+  .pagination-nav-btn {
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 0 10px !important;
+    font-size: 12px !important;
+    gap: 3px !important;
+    white-space: nowrap !important;
+  }
+
+  .pagination-num-btn {
+    min-width: 30px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 0 6px !important;
+    font-size: 12px !important;
+  }
+
+  .pagination-page-size-select {
+    height: 30px !important;
+    font-size: 12px !important;
+    padding: 2px 22px 2px 8px !important;
+  }
+
+  .pagination-show-label {
+    font-size: 12px !important;
+  }
+
+  .pagination-range-text {
+    font-size: 12px !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* Very small phones (≤ 360px) — tightest pagination sizing */
+@media (max-width: 360px) {
+  .pagination-nav-btn {
+    height: 28px !important;
+    padding: 0 8px !important;
+    font-size: 11px !important;
+    gap: 2px !important;
+  }
+  .pagination-num-btn {
+    min-width: 26px !important;
+    height: 28px !important;
+    padding: 0 4px !important;
+    font-size: 11px !important;
+  }
+  .pagination-page-size-select {
+    height: 28px !important;
+    font-size: 11px !important;
+    padding: 2px 18px 2px 6px !important;
+  }
+  .pagination-show-label,
+  .pagination-range-text {
+    font-size: 11px !important;
+  }
+  .sites-pagination-row,
+  .labour-pagination-row {
+    gap: 4px !important;
+    padding: 8px 10px !important;
+  }
+  .pagination-left {
+    gap: 4px !important;
+  }
+  .pagination-right {
+    gap: 3px !important;
+  }
+
+  .expense-detail-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .expense-detail-stat-grid .site-stat-card {
+    padding: 10px 8px !important;
+  }
+  .expense-detail-stat-grid .stat-value {
+    font-size: 14px !important;
+  }
+  .expense-particulars-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px 8px !important;
+    padding: 10px 8px !important;
+  }
+
+  .site-detail-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+  }
+  .site-detail-card {
+    padding: 8px 8px !important;
+  }
+  .site-card-val {
+    font-size: 14.5px !important;
+  }
+
+  .sites-stat-grid.expenses-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .sites-stat-grid.expenses-stat-grid .site-stat-card {
+    padding: 10px 8px !important;
+  }
+  .sites-stat-grid.expenses-stat-grid .stat-value {
+    font-size: 14px !important;
+  }
+
+  .sites-stat-grid {
+    gap: 6px !important;
+  }
+  .sites-stat-grid .site-stat-card {
+    padding: 8px 6px !important;
+  }
+  .sites-stat-grid .stat-value {
+    font-size: 13.5px !important;
+    letter-spacing: -0.3px !important;
+  }
+}
+
+
+/* ==========================================================================
+   SUPPLIERS PAGE & SUPPLIER DETAIL — Mobile Responsive
+   ========================================================================== */
+
+/* ---- Suppliers Page: compact KPI cards on mobile ---- */
+@media (max-width: 768px) {
+
+  /* Header: stack breadcrumb/title above Add button */
+  .suppliers-header-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+  .btn-add-supplier-primary {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* 2 KPI cards per row */
+  .suppliers-cards-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+  .suppliers-cards-grid > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
+  }
+  .suppliers-kpi-card {
+    padding: 12px 10px !important;
+    min-height: auto !important;
+  }
+  .suppliers-card-val {
+    font-size: 20px !important;
+    margin: 6px 0 2px !important;
+  }
+  .suppliers-card-label {
+    font-size: 11.5px !important;
+  }
+  .suppliers-card-subtext {
+    font-size: 11px !important;
+  }
+  .suppliers-card-icon {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  /* Filter bar: ALL filters in one single horizontal row */
+  .suppliers-filter-bar {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 6px !important;
+    width: 100% !important;
+    overflow: hidden !important;
+  }
+  .suppliers-search-wrap {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+  .suppliers-search-input {
+    height: 34px !important;
+    font-size: 11.5px !important;
+    padding: 4px 8px 4px 28px !important;
+  }
+  .suppliers-search-icon {
+    left: 8px !important;
+  }
+  .suppliers-filters-group {
+    flex-wrap: nowrap !important;
+    flex-shrink: 0 !important;
+    gap: 4px !important;
+    align-items: center !important;
+  }
+  .suppliers-select-pill {
+    height: 34px !important;
+    font-size: 11px !important;
+    padding: 4px 22px 4px 8px !important;
+    min-width: 0 !important;
+    max-width: 90px !important;
+  }
+
+  /* Supplier Detail Page: header */
+  .sd-header-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+  .sd-record-payment-btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Supplier Detail: 2 stat cards per row (3 cards → row of 2 + 1 centered) */
+  .sd-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+  .sd-stat-grid > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
+  }
+  .sd-stat-card {
+    padding: 14px 12px !important;
+  }
+  .sd-stat-value {
+    font-size: 20px !important;
+  }
+  .sd-stat-label {
+    font-size: 11.5px !important;
+  }
+  .sd-stat-sub {
+    font-size: 11px !important;
+  }
+
+  /* Purchase History table: horizontal scroll */
+  .sd-table-card .sites-table-scroll {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  .sd-table-card .sites-table-scroll table {
+    min-width: 580px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Even more compact on small phones */
+  .suppliers-cards-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .suppliers-kpi-card {
+    padding: 10px 8px !important;
+  }
+  .suppliers-card-val {
+    font-size: 17px !important;
+  }
+  .suppliers-card-label {
+    font-size: 11px !important;
+  }
+  .suppliers-card-icon {
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  /* Supplier Detail stat cards: compact */
+  .sd-stat-grid {
+    gap: 8px !important;
+  }
+  .sd-stat-card {
+    padding: 10px 8px !important;
+  }
+  .sd-stat-value {
+    font-size: 17px !important;
+  }
+
+  /* Edit supplier modal form grid: single column */
+  .suppliers-edit-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .suppliers-edit-grid > * {
+    grid-column: 1 / -1 !important;
+  }
+
+  /* Filter bar: keep ONE ROW on small phones too */
+  .suppliers-filter-bar {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+  }
+  .suppliers-search-input {
+    height: 32px !important;
+    font-size: 11px !important;
+    padding: 4px 6px 4px 24px !important;
+  }
+  .suppliers-search-icon {
+    left: 6px !important;
+  }
+  .suppliers-select-pill {
+    height: 32px !important;
+    font-size: 10.5px !important;
+    padding: 4px 18px 4px 6px !important;
+    max-width: 80px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .suppliers-card-val {
+    font-size: 15px !important;
+    letter-spacing: -0.2px !important;
+  }
+  .sd-stat-value {
+    font-size: 15px !important;
+    letter-spacing: -0.2px !important;
+  }
+  /* Filter bar: one row on tiny phones */
+  .suppliers-filter-bar {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 3px !important;
+  }
+  .suppliers-select-pill {
+    height: 30px !important;
+    font-size: 10px !important;
+    padding: 3px 14px 3px 5px !important;
+    max-width: 70px !important;
+  }
+  .suppliers-search-input {
+    height: 30px !important;
+    font-size: 10.5px !important;
+  }
+}
+
+/* ==========================================================================
+   SITE OWNER DETAIL PAGE — Mobile Responsive
+   ========================================================================== */
+
+@media (max-width: 768px) {
+
+  /* ---- Header: stack title above Record Payment button ---- */
+  .sod-header-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    margin-bottom: 16px !important;
+  }
+  .sod-record-payment-btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* ---- 4 Stat cards: 2 per row ---- */
+  .sod-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+  .sod-stat-grid > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
+  }
+  .sod-stat-card {
+    padding: 12px 10px !important;
+    min-height: auto !important;
+  }
+  .sod-stat-val {
+    font-size: 20px !important;
+    margin: 6px 0 2px !important;
+  }
+  .sod-stat-label {
+    font-size: 11.5px !important;
+  }
+  .sod-stat-sub {
+    font-size: 11px !important;
+  }
+  .sod-stat-icon-wrap {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  /* ---- Timeline card: compact padding ---- */
+  .sod-timeline-card {
+    padding: 16px 14px !important;
+    border-radius: 10px !important;
+  }
+  .sod-timeline-title {
+    font-size: 15px !important;
+  }
+  .sod-timeline-subtitle {
+    font-size: 12px !important;
+  }
+
+  /* ---- Timeline rows: stack date on top of info on mobile ---- */
+  .sod-timeline-row {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    padding: 12px 0 !important;
+    align-items: flex-start !important;
+  }
+  .sod-timeline-date-col {
+    width: 100% !important;
+    font-size: 11.5px !important;
+  }
+  .sod-timeline-info-col {
+    flex: 1 1 55% !important;
+    min-width: 0 !important;
+  }
+  .sod-payment-title {
+    font-size: 13px !important;
+  }
+  .sod-payment-meta {
+    font-size: 11px !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+  }
+  .sod-timeline-amount-col {
+    font-size: 13px !important;
+    padding: 0 8px !important;
+    min-width: 0 !important;
+    text-align: right !important;
+    flex-shrink: 0 !important;
+  }
+  .sod-timeline-status-col {
+    width: auto !important;
+    flex-shrink: 0 !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Extra compact on small phones */
+  .sod-stat-grid {
+    gap: 8px !important;
+  }
+  .sod-stat-card {
+    padding: 10px 8px !important;
+  }
+  .sod-stat-val {
+    font-size: 17px !important;
+  }
+  .sod-stat-icon-wrap {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  .sod-timeline-card {
+    padding: 12px 10px !important;
+  }
+  .sod-timeline-row {
+    padding: 10px 0 !important;
+  }
+
+  /* Record Payment modal form grid: 1 column */
+  .sod-modal-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .sod-modal-grid > * {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .sod-stat-val {
+    font-size: 15px !important;
+    letter-spacing: -0.2px !important;
+  }
+  .sod-timeline-card {
+    padding: 10px 8px !important;
+  }
+}
+
+
+/* ==========================================================================
+   PAYMENTS PAGE BANK CARDS — Mobile Responsive (2 Cards per row, no cutoff)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .payments-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .payment-bank-card {
+    padding: 12px 10px 10px !important;
+    min-height: 128px !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    border-radius: 10px !important;
+  }
+
+  .payment-bank-card-top {
+    margin-bottom: 4px !important;
+  }
+
+  .payment-bank-tag {
+    font-size: 10px !important;
+    white-space: nowrap !important;
+  }
+
+  .payment-bank-badge {
+    font-size: 9.5px !important;
+    padding: 1px 5px !important;
+  }
+
+  .payment-bank-name {
+    font-size: 13.5px !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .payment-bank-meta {
+    margin-bottom: 8px !important;
+    gap: 1px !important;
+  }
+
+  .payment-bank-accnum {
+    font-size: 11px !important;
+    letter-spacing: 0.02em !important;
+    white-space: nowrap !important;
+  }
+
+  .payment-bank-ifsc {
+    font-size: 9.5px !important;
+    white-space: nowrap !important;
+  }
+
+  .payment-bank-balance-wrap {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 1px !important;
+    padding-top: 6px !important;
+    margin-top: auto !important;
+  }
+
+  .payment-bank-balance-label {
+    font-size: 9px !important;
+    line-height: 1 !important;
+    color: #70829F !important;
+  }
+
+  .payment-bank-balance-value {
+    font-size: 13.5px !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+    color: #172033 !important;
+    letter-spacing: -0.2px !important;
+    width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .payment-bank-card-empty {
+    padding: 12px 8px !important;
+    min-height: 128px !important;
+    gap: 4px !important;
+  }
+
+  .payment-empty-icon-wrap {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .payment-empty-title {
+    font-size: 12.5px !important;
+  }
+
+  .payment-empty-desc {
+    font-size: 10.5px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .payments-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .payment-bank-card {
+    padding: 10px 8px 8px !important;
+    min-height: 122px !important;
+  }
+
+  .payment-bank-name {
+    font-size: 13px !important;
+  }
+
+  .payment-bank-balance-value {
+    font-size: 13px !important;
+  }
+
+  .payment-bank-card-empty {
+    padding: 10px 6px !important;
+    min-height: 122px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .payments-cards-grid {
+    gap: 6px !important;
+  }
+
+  .payment-bank-card {
+    padding: 8px 6px 6px !important;
+    min-height: 118px !important;
+  }
+
+  .payment-bank-tag {
+    font-size: 9px !important;
+  }
+
+  .payment-bank-name {
+    font-size: 12px !important;
+  }
+
+  .payment-bank-accnum {
+    font-size: 10px !important;
+  }
+
+  .payment-bank-ifsc {
+    font-size: 8.5px !important;
+  }
+
+  .payment-bank-balance-value {
+    font-size: 12px !important;
+    letter-spacing: -0.3px !important;
+  }
+
+  .payment-bank-card-empty {
+    min-height: 118px !important;
+  }
+
+  .payment-empty-icon-wrap {
+    width: 26px !important;
+    height: 26px !important;
+  }
+
+  .payment-empty-title {
+    font-size: 11.5px !important;
+  }
+
+  .payment-empty-desc {
+    font-size: 9.5px !important;
+  }
+}
+
+
+/* ==========================================================================
+   SETTINGS PAGE & ALL FORMS — Mobile Responsive Layout
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  /* Page wrapper */
+  .settings-page {
+    padding: 0 0 32px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .page-title {
+    font-size: 22px !important;
+    line-height: 1.2 !important;
+    margin-bottom: 2px !important;
+  }
+
+  .page-subtitle {
+    font-size: 12.5px !important;
+    line-height: 1.35 !important;
+  }
+
+  /* Two-column layout stacks to single-column */
+  .settings-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 14px !important;
+    margin-top: 14px !important;
+    width: 100% !important;
+  }
+
+  /* Navigation panel on top */
+  .settings-nav-panel {
+    position: static !important;
+    padding: 8px !important;
+    border-radius: 12px !important;
+    gap: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    background: #FFFFFF !important;
+  }
+
+  .settings-nav-section-title {
+    display: none !important;
+  }
+
+  /* 2x2 grid for settings tab buttons */
+  .settings-nav {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+
+  .settings-nav-item {
+    padding: 8px 10px !important;
+    font-size: 11.5px !important;
+    border-radius: 8px !important;
+    justify-content: flex-start !important;
+    gap: 6px !important;
+    border: 1px solid #E5EAF1 !important;
+    background: #FAFCFE !important;
+    color: #475569 !important;
+    min-height: 38px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  .settings-nav-item.active {
+    background: #E0F2FE !important;
+    color: #0293DE !important;
+    border-color: #0293DE !important;
+    font-weight: 700 !important;
+  }
+
+  .settings-nav-item .settings-nav-icon-svg {
+    width: 15px !important;
+    height: 15px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .settings-nav-arrow {
+    display: none !important;
+  }
+
+  .settings-nav-label {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  /* Hide large promo card on mobile to focus on form */
+  .settings-promo-card {
+    display: none !important;
+  }
+
+  /* Content panel */
+  .settings-content-panel {
+    width: 100% !important;
+    border-radius: 12px !important;
+    box-sizing: border-box !important;
+  }
+
+  .settings-section {
+    padding: 16px 14px 14px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .settings-section-header {
+    margin-bottom: 16px !important;
+  }
+
+  .settings-section-title {
+    font-size: 16px !important;
+  }
+
+  .settings-section-subtitle {
+    font-size: 12px !important;
+  }
+
+  .settings-avatar-row {
+    padding: 10px 12px !important;
+    gap: 10px !important;
+    margin-top: 12px !important;
+    border-radius: 8px !important;
+  }
+
+  .settings-avatar {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 13px !important;
+  }
+
+  .settings-avatar-name {
+    font-size: 13px !important;
+  }
+
+  .settings-avatar-role {
+    font-size: 11px !important;
+  }
+
+  /* All form grids: 1 column on mobile */
+  .settings-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+
+  .settings-form-grid > * {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+
+  .settings-field {
+    gap: 4px !important;
+    width: 100% !important;
+  }
+
+  .settings-field-label {
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+  }
+
+  .settings-input,
+  .settings-select {
+    height: 38px !important;
+    font-size: 13px !important;
+    padding: 0 10px !important;
+    border-radius: 8px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Notification toggles */
+  .settings-toggle-row {
+    padding: 12px 0 !important;
+    gap: 12px !important;
+  }
+
+  .settings-toggle-label {
+    font-size: 13px !important;
+  }
+
+  .settings-toggle-desc {
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+  }
+
+  .settings-toggle {
+    width: 38px !important;
+    height: 22px !important;
+    border-radius: 11px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .settings-toggle-thumb {
+    width: 16px !important;
+    height: 16px !important;
+    top: 3px !important;
+    left: 3px !important;
+  }
+
+  .settings-toggle.on .settings-toggle-thumb {
+    transform: translateX(16px) !important;
+  }
+
+  /* Footer */
+  .settings-footer {
+    padding: 14px 14px 16px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+
+  .settings-save-status {
+    font-size: 11px !important;
+    text-align: center !important;
+    justify-content: center !important;
+  }
+
+  .save-status-hint {
+    font-size: 10.5px !important;
+    line-height: 1.35 !important;
+    text-align: center !important;
+  }
+
+  .settings-footer-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .btn-settings-discard,
+  .btn-settings-save {
+    width: 100% !important;
+    justify-content: center !important;
+    height: 40px !important;
+    padding: 0 10px !important;
+    font-size: 12.5px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .settings-nav-item {
+    padding: 7px 6px !important;
+    font-size: 10.5px !important;
+  }
+
+  .settings-section {
+    padding: 12px 10px !important;
+  }
+
+  .settings-input,
+  .settings-select {
+    height: 36px !important;
+    font-size: 12.5px !important;
+  }
+
+  .btn-settings-discard,
+  .btn-settings-save {
+    font-size: 11.5px !important;
+    height: 38px !important;
   }
 }

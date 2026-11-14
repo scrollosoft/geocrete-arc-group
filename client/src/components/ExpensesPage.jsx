@@ -41,7 +41,7 @@ export default function ExpensesPage({
   const [siteFilter, setSiteFilter] = useState('All Sites')
   const [sortFilter, setSortFilter] = useState('Newest First')
   const [currentPage, setCurrentPage] = useState(1)
-  const pageSize = 10
+  const [pageSize, setPageSize] = useState(10)
 
   const [expensePayments, setExpensePayments] = useState([])
   const [loadingPayments, setLoadingPayments] = useState(false)
@@ -372,7 +372,7 @@ export default function ExpensesPage({
         </div>
 
         {/* 2. Top Summary Stat Cards */}
-        <div className="sites-stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="sites-stat-grid expense-detail-stat-grid">
           <div className="site-stat-card">
             <div className="stat-icon-wrap stat-icon-blue">
               <CreditCard size={18} />
@@ -417,13 +417,13 @@ export default function ExpensesPage({
         </div>
 
         {/* 3. Detailed Info Card */}
-        <div className="sites-table-card" style={{ padding: '24px' }}>
+        <div className="sites-table-card expense-detail-card">
           <div className="sites-table-card-header" style={{ marginBottom: '18px' }}>
             <h2 className="sites-table-title">Expense Particulars</h2>
             <p className="sites-table-subtitle">Complete breakdown and reference information for this transaction.</p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', backgroundColor: '#F8FAFC', padding: '20px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+          <div className="expense-particulars-grid">
             <div>
               <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date</span>
               <p style={{ margin: '4px 0 0 0', fontSize: '14.5px', fontWeight: 600, color: '#1E293B' }}>{formatDate(viewExpense.date) || '-'}</p>
@@ -835,8 +835,27 @@ export default function ExpensesPage({
         {/* 5. Pagination Footer */}
         <div className="sites-pagination-row">
           <div className="pagination-left">
+            <span className="pagination-show-label">Show</span>
+            <div className="pagination-page-size-select-wrap">
+              <select
+                className="pagination-page-size-select"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value))
+                  setCurrentPage(1)
+                }}
+              >
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+              <ChevronDown size={12} className="pagination-select-arrow" />
+            </div>
             <span className="pagination-range-text">
-              Showing {totalRecords === 0 ? '0-0 of 0' : `${startIndex + 1}-${endIndex} of ${totalRecords}`} records
+              {totalRecords === 0
+                ? '0—0 of 0'
+                : `${startIndex + 1}—${endIndex} of ${totalRecords.toLocaleString('en-IN')}`}
             </span>
           </div>
 

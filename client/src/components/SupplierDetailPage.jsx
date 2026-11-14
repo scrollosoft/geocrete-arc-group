@@ -346,14 +346,16 @@ export default function SupplierDetailPage({
       {/* Record Payment Modal */}
       {payModal && (
         <div
+          className="modal-overlay sd-pay-modal-overlay"
           style={{
             position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, padding: '20px',
+            zIndex: 9999, padding: '20px',
           }}
           onClick={() => !payLoading && setPayModal(false)}
         >
           <div
+            className="modal-container sd-pay-modal-container"
             style={{
               background: '#FFFFFF', borderRadius: '16px', boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
               width: '100%', maxWidth: '440px',

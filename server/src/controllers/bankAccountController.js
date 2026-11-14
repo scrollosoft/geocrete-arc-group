@@ -300,6 +300,8 @@ export const getBankTransactions = async (req, res, next) => {
       const isAdvance = cp.title && (cp.title.toLowerCase().includes('initial') || cp.title.toLowerCase().includes('advance'))
       const isRefund = cp.title && (cp.title.toLowerCase().includes('refund') || cp.title.toLowerCase().includes('credit'))
       const isDebit = cp.txn_type === 'debit' || cp.type === 'debit'
+      const isConsulting = cp.title && cp.title.toLowerCase().includes('consulting')
+      const isOther = cp.title && cp.title.toLowerCase().includes('other')
 
       let title = isAdvance ? 'Site Advance Received' : (cp.title || 'Client Payment Received')
       let category = isRefund ? 'Credit / Refund' : (isAdvance ? 'Site Advance' : (isDebit ? 'Debit / Expense' : 'Credit / Incoming'))
@@ -309,11 +311,35 @@ export const getBankTransactions = async (req, res, next) => {
         title = cp.title || 'Site Owner Payment'
       }
 
+      if (isConsulting) {
+        title = cp.title || 'Consulting Payment Received'
+        category = 'Consulting'
+      } else if (isOther) {
+        title = cp.title || (isDebit ? 'Other - Send' : 'Other - Receive')
+        category = 'Other'
+      }
+
       const bankName = cp.bank_name || (cp.bank_account_id ? bankMap.get(String(cp.bank_account_id))?.bank_name : null) || 'Bank Account'
       const siteText = cp.site_name || 'Construction Site'
-      const subtitle = isRefund ? `${siteText} · Refund to ${bankName}` : `${siteText} · ${bankName}`
+      let subtitle = isRefund ? `${siteText} · Refund to ${bankName}` : `${siteText} · ${bankName}`
+      if (isOther) {
+        subtitle = `${bankName} · Other Transaction`
+      } else if (isConsulting) {
+        subtitle = `${cp.site_name || 'Consulting'} · ${bankName}`
+      }
+
       const numAmount = Number(cp.amount || 0)
       const parsedTime = formatActualDateTime(cp.created_at_str, cp.payment_date_str)
+
+      let partyName = isRefund ? 'Material Purchase Refund' : (cp.client_name || 'Site Owner')
+      let partyType = isRefund ? 'Supplier' : (isDebit ? 'Site Owner' : 'Client')
+      if (isConsulting) {
+        partyName = cp.client_name || cp.site_name || 'Consulting Client'
+        partyType = 'Consulting'
+      } else if (isOther) {
+        partyName = cp.reference || (isDebit ? 'Other Payment' : 'Other Receipt')
+        partyType = 'Other'
+      }
 
       return {
         id: `cp-${cp.id}`,
@@ -334,8 +360,8 @@ export const getBankTransactions = async (req, res, next) => {
         siteId: cp.site_id || null,
         siteName: cp.site_name || '',
         siteLocation: cp.site_location || '',
-        partyName: isRefund ? 'Material Purchase Refund' : (cp.client_name || 'Site Owner'),
-        partyType: isRefund ? 'Supplier' : (isDebit ? 'Site Owner' : 'Client'),
+        partyName,
+        partyType,
         paymentMethod: cp.payment_method || 'Bank Transfer',
         referenceId: cp.reference || `TXN-CP-${String(cp.id).padStart(4, '0')}`,
         remark: cp.reference || cp.title || '',

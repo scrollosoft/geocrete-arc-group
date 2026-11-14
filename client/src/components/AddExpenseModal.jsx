@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { X, Receipt } from 'lucide-react'
 import { expenseService } from '../services/expenseService.js'
 import { materialService } from '../services/materialService.js'
@@ -418,7 +418,7 @@ export default function AddExpenseModal({
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="modal-form">
           <div className="modal-body">
-          <div className="modal-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="modal-form-grid aem-form-grid">
             {/* 1. Date */}
             <div className="form-group">
               <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#172033', marginBottom: '6px' }}>

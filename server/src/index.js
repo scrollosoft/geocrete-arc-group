@@ -18,6 +18,8 @@ import materialRoutes from './routes/materialRoutes.js'
 import siteOwnerRoutes from './routes/siteOwnerRoutes.js'
 import settingRoutes from './routes/settingRoutes.js'
 import workerPaymentRoutes from './routes/workerPaymentRoutes.js'
+import consultingRoutes from './routes/consultingRoutes.js'
+import otherTransactionRoutes from './routes/otherTransactionRoutes.js'
 
 dotenv.config()
 
@@ -53,6 +55,8 @@ app.use('/api/materials', materialRoutes)
 app.use('/api/site-owners', siteOwnerRoutes)
 app.use('/api/settings', settingRoutes)
 app.use('/api/worker-payments', workerPaymentRoutes)
+app.use('/api/consulting', consultingRoutes)
+app.use('/api/other-transactions', otherTransactionRoutes)
 
 if (isProduction) {
   app.use(express.static(clientDist))
