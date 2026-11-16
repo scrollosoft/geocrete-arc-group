@@ -59,6 +59,29 @@ CREATE TABLE IF NOT EXISTS sites (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------
+-- site_owners
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS site_owners (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name            VARCHAR(255) NOT NULL,
+  phone           VARCHAR(50)  NOT NULL DEFAULT '',
+  email           VARCHAR(255) NOT NULL DEFAULT '',
+  address         TEXT         NOT NULL DEFAULT '',
+  site_id         INT UNSIGNED NULL DEFAULT NULL,
+  project_value   DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  advance_amount  DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  total_received  DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  status          VARCHAR(50)  NOT NULL DEFAULT 'On schedule',
+  notes           TEXT         NOT NULL DEFAULT '',
+  is_active       TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_site_id (site_id),
+  INDEX idx_name (name),
+  INDEX idx_is_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
 -- suppliers
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS suppliers (
