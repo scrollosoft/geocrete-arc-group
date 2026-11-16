@@ -3,7 +3,8 @@ import mysql from 'mysql2/promise'
 let pool = null
 
 export const connectDB = async () => {
-  const host = process.env.DB_HOST || 'localhost'
+  const configuredHost = process.env.DB_HOST || '127.0.0.1'
+  const host = configuredHost === 'localhost' ? '127.0.0.1' : configuredHost
   const port = Number(process.env.DB_PORT) || 3306
   const database = process.env.DB_NAME || 'geocrete_arc'
   const user = process.env.DB_USER || 'root'
@@ -33,9 +34,7 @@ export const connectDB = async () => {
     conn.release()
   } catch (error) {
     if (error.code === 'ECONNREFUSED') {
-      throw new Error(
-        `Cannot connect to MySQL at ${host}:${port}. Is XAMPP MySQL running?`,
-      )
+      throw new Error(`Cannot connect to MySQL at ${host}:${port}.`)
     }
     throw error
   }

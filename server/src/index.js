@@ -1,9 +1,11 @@
 import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { connectDB } from './config/db.js'
+import { applyBaseSchema } from './config/applySchema.js'
+import { connectDB, getPool } from './config/db.js'
 import { ensureSchema } from './ensureSchema.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { seedDatabase } from './seed.js'
@@ -27,22 +29,45 @@ dotenv.config()
 const app = express()
 const port = Number(process.env.PORT) || 5000
 const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173'
-const isProduction = process.env.NODE_ENV === 'production'
 const clientDist = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../client/dist',
 )
+const allowedOrigins = new Set([
+  clientOrigin,
+  'http://localhost:5173',
+  'https://geocretearchgroup.in',
+  'https://www.geocretearchgroup.in',
+])
 
-app.use(cors({ origin: clientOrigin }))
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true)
+        return
+      }
+      callback(null, false)
+    },
+  }),
+)
 app.use(express.json())
 
-// Health check endpoint
-app.get('/api/health', (_req, res) => {
-  res.json({
-    ok: true,
-    service: 'geocrete-arc-group-api',
-    database: 'mysql',
-  })
+app.get('/api/health', async (_req, res) => {
+  try {
+    await getPool().query('SELECT 1')
+    res.json({
+      ok: true,
+      service: 'geocrete-arc-group-api',
+      database: 'connected',
+    })
+  } catch {
+    res.status(503).json({
+      ok: false,
+      service: 'geocrete-arc-group-api',
+      database: 'disconnected',
+    })
+  }
 })
 
 // Application API routes
@@ -60,15 +85,16 @@ app.use('/api/consulting', consultingRoutes)
 app.use('/api/other-transactions', otherTransactionRoutes)
 app.use('/api/cash', cashRoutes)
 
-if (isProduction) {
+const clientIndex = path.join(clientDist, 'index.html')
+if (fs.existsSync(clientIndex)) {
   app.use(express.static(clientDist))
   app.use((req, res, next) => {
-    if (req.method !== 'GET') {
+    if (req.method !== 'GET' || req.path.startsWith('/api')) {
       next()
       return
     }
 
-    res.sendFile(path.join(clientDist, 'index.html'), (error) => {
+    res.sendFile(clientIndex, (error) => {
       if (error) next(error)
     })
   })
@@ -86,16 +112,19 @@ app.use(errorHandler)
 const startServer = async () => {
   try {
     await connectDB()
+    await applyBaseSchema()
     await ensureSchema()
-    // Safe auto-seed if empty
-    await seedDatabase(false)
+    // Sample records are for a local empty database only.
+    if (process.env.SEED_DATABASE === 'true' || !process.env.DB_HOST) {
+      await seedDatabase(false)
+    }
     // Legacy startup tasks commented out to preserve individual purchase transactions and stock
     // await Material.backfillUnappliedMaterialExpenses()
     // await Material.consolidateAllDuplicates()
     // await Material.syncUsedQuantityFromExpenses()
 
-    app.listen(port, () => {
-      console.log(`API listening on http://localhost:${port}`)
+    app.listen(port, '0.0.0.0', () => {
+      console.log(`API listening on http://0.0.0.0:${port}`)
     })
   } catch (error) {
     console.error('Failed to start server due to database error:', error.message)
