@@ -278,12 +278,6 @@ export default function SitesPage({
       showNotification && showNotification({ type: 'error', message: 'Expected completion date cannot be earlier than start date' })
       return
     }
-    const addlReceived = Number(editFormData.additionalReceived || 0)
-    if (addlReceived > 0 && !editFormData.bankAccountId) {
-      showNotification && showNotification({ type: 'error', message: 'Please select a bank account to record this payment' })
-      return
-    }
-
     try {
       setUpdating(true)
       if (editingSite && editingSite._id) {
@@ -297,7 +291,6 @@ export default function SitesPage({
           projectValue: Number(editFormData.projectValue),
           advanceAmount: Number(editFormData.advanceAmount || 0),
           bankAccountId: editFormData.bankAccountId || null,
-          additionalReceived: addlReceived,
           startDate: editFormData.startDate || null,
           expectedCompletionDate: editFormData.expectedCompletionDate || null,
           status: editFormData.status,
@@ -973,18 +966,6 @@ export default function SitesPage({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Additional Amount Received Now (₹)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={editFormData.additionalReceived}
-                    onChange={(e) => setEditFormData({ ...editFormData, additionalReceived: e.target.value })}
-                    min="0"
-                    placeholder="0"
-                  />
-                </div>
-
-                <div className="form-group">
                   <label className="form-label">Pending (₹)</label>
                   <input
                     type="number"
@@ -993,8 +974,7 @@ export default function SitesPage({
                       Math.max(
                         0,
                         Number(editFormData.projectValue || 0) -
-                          Number(editFormData.totalReceived || 0) -
-                          Number(editFormData.additionalReceived || 0)
+                          Number(editFormData.totalReceived || 0)
                       )
                     }
                     readOnly

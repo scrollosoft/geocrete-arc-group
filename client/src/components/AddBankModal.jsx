@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react'
+﻿import React, { useState, useEffect } from 'react'
 import { X, Building2 } from 'lucide-react'
 import { bankAccountService } from '../services/bankAccountService.js'
 
@@ -18,6 +18,21 @@ export default function AddBankModal({
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  // Reset form and error every time the modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({
+        bankName: '',
+        ifscCode: '',
+        accountHolderName: '',
+        accountNumber: '',
+        balance: '',
+      })
+      setError('')
+      setSubmitting(false)
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 
