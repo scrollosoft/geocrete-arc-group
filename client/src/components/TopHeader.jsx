@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Search, Plus, ChevronDown, User } from 'lucide-react'
+import { Search, Plus, ChevronDown, User, LogOut } from 'lucide-react'
 import { settingService } from '../services/settingService.js'
 
 /**
@@ -24,6 +24,7 @@ export default function TopHeader({
   onNavigateOwnerProfile,
   setActiveTab,
   ownerProfile,
+  onLogout,
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [profile, setProfile] = useState(ownerProfile || null)
@@ -157,6 +158,16 @@ export default function TopHeader({
                 <User size={15} />
                 <span>Owner Profile</span>
               </button>
+              {onLogout && (
+                <button
+                  type="button"
+                  className="profile-dropdown-item profile-dropdown-item--logout"
+                  onClick={() => { setIsOpen(false); onLogout() }}
+                >
+                  <LogOut size={15} />
+                  <span>Logout</span>
+                </button>
+              )}
             </div>
           )}
         </div>

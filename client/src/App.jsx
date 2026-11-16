@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import './App.css'
+import LoginPage from './components/LoginPage.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import TopHeader from './components/TopHeader.jsx'
 import WelcomeSection from './components/WelcomeSection.jsx'
@@ -39,6 +40,8 @@ import { labourService } from './services/labourService.js'
 import { settingService } from './services/settingService.js'
 import { consultingService } from './services/consultingService.js'
 import { otherTransactionService } from './services/otherTransactionService.js'
+import { authService } from './services/authService.js'
+import { authStorage } from './services/api.js'
 
 const getInitialTab = () => {
   try {
@@ -70,6 +73,43 @@ const getInitialTab = () => {
 }
 
 export default function App() {
+  // ── Authentication ──────────────────────────────────────────────────────────
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authChecking, setAuthChecking] = useState(true)
+
+  // On mount: verify stored token with backend
+  useEffect(() => {
+    const token = authStorage.getToken()
+    if (!token) {
+      setAuthChecking(false)
+      return
+    }
+    authService
+      .verify()
+      .then(() => setIsAuthenticated(true))
+      .catch(() => {
+        authStorage.removeToken()
+        setIsAuthenticated(false)
+      })
+      .finally(() => setAuthChecking(false))
+  }, [])
+
+  // Listen for automatic 401 logout from api.js
+  useEffect(() => {
+    const handleAutoLogout = () => {
+      setIsAuthenticated(false)
+    }
+    window.addEventListener('auth:logout', handleAutoLogout)
+    return () => window.removeEventListener('auth:logout', handleAutoLogout)
+  }, [])
+
+  const handleLogout = useCallback(() => {
+    authService.logout()
+    setIsAuthenticated(false)
+  }, [])
+
+  // ── End Authentication ──────────────────────────────────────────────────────
+
   const [activeTab, setActiveTab] = useState(getInitialTab)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedSiteFilter, setSelectedSiteFilter] = useState('all')
@@ -274,6 +314,7 @@ export default function App() {
 
   // Initial Data Load
   useEffect(() => {
+    if (!isAuthenticated) return
     let active = true
     const init = async () => {
       try {
@@ -315,10 +356,11 @@ export default function App() {
     return () => {
       active = false
     }
-  }, [])
+  }, [isAuthenticated])
 
   // Reload expenses when filter or search changes
   useEffect(() => {
+    if (!isAuthenticated) return
     let active = true
     const fetchFilteredExpenses = async () => {
       try {
@@ -351,7 +393,7 @@ export default function App() {
     return () => {
       active = false
     }
-  }, [selectedSiteFilter, dateFilter, searchQuery])
+  }, [isAuthenticated, selectedSiteFilter, dateFilter, searchQuery])
 
   const handleTabChange = useCallback((newTab) => {
     if (newTab === 'sites') {
@@ -459,6 +501,22 @@ export default function App() {
     setIsAddExpenseOpen(true)
   }
 
+  // Show checking screen while validating token on initial load
+  if (authChecking) {
+    return (
+      <div className="login-page">
+        <div className="login-card login-card--checking">
+          <span className="login-spinner login-spinner--lg" />
+        </div>
+      </div>
+    )
+  }
+
+  // Show login page if unauthenticated
+  if (!isAuthenticated) {
+    return <LoginPage onLoginSuccess={() => setIsAuthenticated(true)} />
+  }
+
   return (
     <div className="app-container">
       {/* 1. Left Sidebar */}
@@ -474,6 +532,7 @@ export default function App() {
           onOpenAddSite={() => setIsAddSiteOpen(true)}
           onNavigateOwnerProfile={handleNavigateOwnerProfile}
           ownerProfile={ownerProfile}
+          onLogout={handleLogout}
         />
 
         {/* Dashboard, Sites or Expenses Page Body */}
