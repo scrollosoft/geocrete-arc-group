@@ -10,6 +10,8 @@ import { ensureSchema } from './ensureSchema.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { seedDatabase } from './seed.js'
 
+import authRoutes from './routes/authRoutes.js'
+import { requireAuth } from './middleware/requireAuth.js'
 import bankAccountRoutes from './routes/bankAccountRoutes.js'
 import siteRoutes from './routes/siteRoutes.js'
 import supplierRoutes from './routes/supplierRoutes.js'
@@ -70,20 +72,23 @@ app.get('/api/health', async (_req, res) => {
   }
 })
 
-// Application API routes
-app.use('/api/bank-accounts', bankAccountRoutes)
-app.use('/api/sites', siteRoutes)
-app.use('/api/suppliers', supplierRoutes)
-app.use('/api/expenses', expenseRoutes)
-app.use('/api/dashboard', dashboardRoutes)
-app.use('/api/labour', labourRoutes)
-app.use('/api/materials', materialRoutes)
-app.use('/api/site-owners', siteOwnerRoutes)
-app.use('/api/settings', settingRoutes)
-app.use('/api/worker-payments', workerPaymentRoutes)
-app.use('/api/consulting', consultingRoutes)
-app.use('/api/other-transactions', otherTransactionRoutes)
-app.use('/api/cash', cashRoutes)
+// Auth routes — public (no token needed)
+app.use('/api/auth', authRoutes)
+
+// All remaining API routes — protected by JWT
+app.use('/api/bank-accounts', requireAuth, bankAccountRoutes)
+app.use('/api/sites', requireAuth, siteRoutes)
+app.use('/api/suppliers', requireAuth, supplierRoutes)
+app.use('/api/expenses', requireAuth, expenseRoutes)
+app.use('/api/dashboard', requireAuth, dashboardRoutes)
+app.use('/api/labour', requireAuth, labourRoutes)
+app.use('/api/materials', requireAuth, materialRoutes)
+app.use('/api/site-owners', requireAuth, siteOwnerRoutes)
+app.use('/api/settings', requireAuth, settingRoutes)
+app.use('/api/worker-payments', requireAuth, workerPaymentRoutes)
+app.use('/api/consulting', requireAuth, consultingRoutes)
+app.use('/api/other-transactions', requireAuth, otherTransactionRoutes)
+app.use('/api/cash', requireAuth, cashRoutes)
 
 const clientIndex = path.join(clientDist, 'index.html')
 if (fs.existsSync(clientIndex)) {

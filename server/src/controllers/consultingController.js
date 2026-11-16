@@ -458,6 +458,130 @@ export const updateConsulting = async (req, res, next) => {
 }
 
 /**
+ * POST /api/consulting/:id/payments
+ * Record a payment for a consulting project + credit bank or cash balance atomically
+ */
+export const recordConsultingPayment = async (req, res, next) => {
+  const pool = getPool()
+  const conn = await pool.getConnection()
+  try {
+    const id = req.params.id
+    const { amount, bankAccountId, paymentDate, paymentMethod, remarks } = req.body
+
+    // 1. Validate amount
+    const numAmount = Number(amount)
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ error: 'Payment amount must be greater than zero' })
+    }
+
+    // 2. Validate account
+    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash'
+    let validBankId = null
+
+    if (!isCashAccount) {
+      if (!bankAccountId) {
+        return res.status(400).json({ error: 'Please select a Bank Account or Cash' })
+      }
+      const [bankRows] = await conn.query(
+        'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 LIMIT 1',
+        [bankAccountId]
+      )
+      if (bankRows.length === 0) {
+        return res.status(400).json({ error: 'Selected bank account was not found or is inactive' })
+      }
+      validBankId = Number(bankAccountId)
+    }
+
+    // 3. Begin Transaction
+    await conn.beginTransaction()
+
+    // 4. Fetch site with FOR UPDATE
+    const [siteRows] = await conn.query(
+      'SELECT * FROM sites WHERE id = ? AND description LIKE "%[CONSULTING]%" FOR UPDATE',
+      [id]
+    )
+    if (siteRows.length === 0) {
+      await conn.rollback()
+      return res.status(404).json({ error: 'Consulting record not found' })
+    }
+    const site = siteRows[0]
+
+    const totalBudget = Number(site.total_budget || 0)
+    const totalReceived = Number(site.total_received || 0)
+    const pendingAmount = Math.max(0, totalBudget - totalReceived)
+
+    if (numAmount > pendingAmount) {
+      await conn.rollback()
+      return res.status(400).json({
+        error: `Payment amount (₹${numAmount.toLocaleString('en-IN')}) cannot exceed pending amount of ₹${pendingAmount.toLocaleString('en-IN')}`,
+      })
+    }
+
+    const validPaymentMethod = isCashAccount
+      ? 'Cash'
+      : (paymentMethod || 'UPI')
+
+    const pDate = paymentDate && String(paymentDate).trim()
+      ? String(paymentDate).trim().slice(0, 10)
+      : new Date().toISOString().slice(0, 10)
+
+    const cleanRemarks = (remarks || '').trim() || 'Consulting payment received'
+
+    // 5. Update site total_received
+    await conn.query(
+      'UPDATE sites SET total_received = total_received + ? WHERE id = ?',
+      [numAmount, id]
+    )
+
+    // 6. Credit bank account if bank is selected
+    if (validBankId) {
+      await conn.query(
+        'UPDATE bank_accounts SET balance = balance + ? WHERE id = ?',
+        [numAmount, validBankId]
+      )
+    }
+
+    // 7. Insert client_payments transaction record
+    await conn.query(`
+      INSERT INTO client_payments
+        (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
+      VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'Paid', 'credit')
+    `, [
+      id,
+      validBankId,
+      numAmount,
+      pDate,
+      `Consulting - ${site.name}`,
+      validPaymentMethod,
+      cleanRemarks,
+    ])
+
+    await conn.commit()
+
+    // 8. Return updated consulting record
+    const [updatedRows] = await pool.query(`
+      SELECT 
+        s.*,
+        CAST(s.start_date AS CHAR) AS start_date_str,
+        CAST(s.created_at AS CHAR) AS created_at_str,
+        ba.bank_name,
+        ba.account_number
+      FROM sites s
+      LEFT JOIN bank_accounts ba ON ba.id = s.bank_account_id
+      WHERE s.id = ?
+      LIMIT 1
+    `, [id])
+
+    res.status(200).json(formatConsultingRow(updatedRows[0]))
+  } catch (error) {
+    await conn.rollback()
+    next(error)
+  } finally {
+    conn.release()
+  }
+}
+
+/**
  * DELETE /api/consulting/:id
  * Delete a consulting record + reverse bank balance effect atomically
  */
@@ -478,12 +602,29 @@ export const deleteConsulting = async (req, res, next) => {
 
     await conn.beginTransaction()
 
-    // Reverse bank credit if money was received
-    const bankId = existing.bank_account_id ? Number(existing.bank_account_id) : null
-    const received = Number(existing.total_received || 0)
+    // Fetch all client_payments for this consulting site
+    const [payments] = await conn.query(
+      'SELECT id, bank_account_id, amount FROM client_payments WHERE site_id = ?',
+      [id]
+    )
 
-    if (bankId && received > 0) {
-      await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [received, bankId])
+    if (payments.length > 0) {
+      // Deduct each bank payment from its respective bank account
+      for (const p of payments) {
+        if (p.bank_account_id && Number(p.amount) > 0) {
+          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [
+            Number(p.amount),
+            p.bank_account_id,
+          ])
+        }
+      }
+    } else {
+      // Fallback for legacy rows where no client_payments row was logged
+      const bankId = existing.bank_account_id ? Number(existing.bank_account_id) : null
+      const received = Number(existing.total_received || 0)
+      if (bankId && received > 0) {
+        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [received, bankId])
+      }
     }
 
     // Delete linked client_payments

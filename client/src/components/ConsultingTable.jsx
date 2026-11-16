@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Eye, Pencil, Trash2, Search, X, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Eye, Pencil, Trash2, Search, X, Loader2, AlertCircle, CheckCircle2, CreditCard } from 'lucide-react'
 import { consultingService } from '../services/consultingService.js'
 
 const formatCurrency = (amt) => {
@@ -25,6 +25,18 @@ export default function ConsultingTable({
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
+  // Make Payment modal state
+  const [payingRecord, setPayingRecord] = useState(null)
+  const [payForm, setPayForm] = useState({
+    amount: '',
+    bankAccountId: '',
+    paymentDate: new Date().toISOString().slice(0, 10),
+    paymentMethod: 'UPI',
+    remarks: '',
+  })
+  const [isPaying, setIsPaying] = useState(false)
+  const [payError, setPayError] = useState('')
+
   // Edit form state
   const [editForm, setEditForm] = useState({
     siteName: '',
@@ -39,6 +51,77 @@ export default function ConsultingTable({
   })
   const [isUpdating, setIsUpdating] = useState(false)
   const [editError, setEditError] = useState('')
+
+  const handleOpenMakePayment = (record) => {
+    setPayError('')
+    const defaultBank = record.bankAccountId
+      ? String(record.bankAccountId)
+      : (bankAccounts.length > 0 ? String(bankAccounts[0].id || bankAccounts[0]._id) : '')
+
+    setPayForm({
+      amount: '',
+      bankAccountId: defaultBank,
+      paymentDate: new Date().toISOString().slice(0, 10),
+      paymentMethod: record.paymentMethod || 'UPI',
+      remarks: '',
+    })
+    setPayingRecord(record)
+  }
+
+  const handleSavePayment = async (e) => {
+    e.preventDefault()
+    setPayError('')
+
+    if (!payingRecord) return
+
+    const totalBudget = Number(payingRecord.totalBudget || 0)
+    const receivedAmount = Number(payingRecord.receivedAmount || 0)
+    const pendingAmount = payingRecord.pendingAmount !== undefined
+      ? payingRecord.pendingAmount
+      : Math.max(0, totalBudget - receivedAmount)
+
+    const numAmount = Number(payForm.amount)
+    if (isNaN(numAmount) || numAmount <= 0) {
+      setPayError('Payment amount must be greater than zero.')
+      return
+    }
+
+    if (numAmount > pendingAmount) {
+      setPayError(`Payment amount cannot exceed pending amount of ${formatCurrency(pendingAmount)}.`)
+      return
+    }
+
+    if (!payForm.bankAccountId) {
+      setPayError('Please select a Bank Account or Cash.')
+      return
+    }
+
+    setIsPaying(true)
+    try {
+      await consultingService.recordPayment(payingRecord.id, {
+        amount: numAmount,
+        bankAccountId: payForm.bankAccountId,
+        paymentDate: payForm.paymentDate,
+        paymentMethod: payForm.paymentMethod,
+        remarks: payForm.remarks.trim(),
+      })
+
+      if (showNotification) {
+        showNotification({
+          type: 'success',
+          message: `Payment of ${formatCurrency(numAmount)} recorded successfully for "${payingRecord.siteName}"!`,
+        })
+      }
+
+      setPayingRecord(null)
+      if (onConsultingChanged) onConsultingChanged()
+    } catch (err) {
+      console.error('Failed to record consulting payment:', err)
+      setPayError(err.message || 'Failed to record payment.')
+    } finally {
+      setIsPaying(false)
+    }
+  }
 
   const handleOpenEdit = (record) => {
     setEditError('')
@@ -222,9 +305,8 @@ export default function ConsultingTable({
               <th
                 style={{
                   textAlign: 'center',
-                  width: '110px',
-                  minWidth: '110px',
-                  maxWidth: '120px',
+                  width: '230px',
+                  minWidth: '230px',
                   padding: '14px 16px',
                   whiteSpace: 'nowrap',
                 }}
@@ -247,113 +329,144 @@ export default function ConsultingTable({
                 </td>
               </tr>
             ) : (
-              paginatedList.map((item) => (
-                <tr key={item.id} className="expense-row">
-                  <td className="td-date">{item.date || '-'}</td>
-                  <td className="td-description" style={{ fontWeight: 600, color: '#0F172A' }}>
-                    {item.siteName}
-                  </td>
-                  <td className="td-description">{item.siteOwner}</td>
-                  <td className="td-description">{item.location}</td>
-                  <td className="td-amount" style={{ fontWeight: 600 }}>
-                    {formatCurrency(item.totalBudget)}
-                  </td>
-                  <td className="td-amount" style={{ color: '#059669' }}>
-                    {formatCurrency(item.advanceAmount)}
-                  </td>
-                  <td className="td-amount" style={{ fontWeight: 700, color: item.receivedAmount > 0 ? '#0284C7' : '#64748B' }}>
-                    {formatCurrency(item.receivedAmount)}
-                  </td>
-                  <td className="td-amount" style={{ fontWeight: 700, color: (item.pendingAmount !== undefined ? item.pendingAmount : Math.max(0, (Number(item.totalBudget) || 0) - (Number(item.receivedAmount) || 0))) > 0 ? '#EF4444' : '#64748B' }}>
-                    {formatCurrency(item.pendingAmount !== undefined ? item.pendingAmount : Math.max(0, (Number(item.totalBudget) || 0) - (Number(item.receivedAmount) || 0)))}
-                  </td>
-                  <td className="td-description">{item.bankName}</td>
-                  <td className="td-description">
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      background: '#F1F5F9',
-                      color: '#334155',
-                    }}>
-                      {item.paymentMethod || 'UPI'}
-                    </span>
-                  </td>
-                  <td
-                    style={{
-                      textAlign: 'center',
-                      width: '110px',
-                      minWidth: '110px',
-                      maxWidth: '120px',
-                      padding: '16px 16px',
-                      whiteSpace: 'nowrap',
-                      verticalAlign: 'middle',
-                    }}
-                  >
-                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                      <button
-                        type="button"
-                        className="action-icon-btn action-view-btn"
-                        title="View Details"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: '2px',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#1E293B',
-                        }}
-                        onClick={() => setViewingRecord(item)}
-                      >
-                        <Eye size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        className="action-icon-btn action-edit-btn"
-                        title="Edit Record"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: '2px',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#1E293B',
-                        }}
-                        onClick={() => handleOpenEdit(item)}
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        className="action-icon-btn action-delete-btn"
-                        title="Delete Record"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: '2px',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#1E293B',
-                        }}
-                        onClick={() => {
-                          setDeleteError('')
-                          setDeletingRecord(item)
-                        }}
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              paginatedList.map((item) => {
+                const pendingAmt = item.pendingAmount !== undefined
+                  ? item.pendingAmount
+                  : Math.max(0, (Number(item.totalBudget) || 0) - (Number(item.receivedAmount) || 0))
+
+                return (
+                  <tr key={item.id} className="expense-row">
+                    <td className="td-date">{item.date || '-'}</td>
+                    <td className="td-description" style={{ fontWeight: 600, color: '#0F172A' }}>
+                      {item.siteName}
+                    </td>
+                    <td className="td-description">{item.siteOwner}</td>
+                    <td className="td-description">{item.location}</td>
+                    <td className="td-amount" style={{ fontWeight: 600 }}>
+                      {formatCurrency(item.totalBudget)}
+                    </td>
+                    <td className="td-amount" style={{ color: '#059669' }}>
+                      {formatCurrency(item.advanceAmount)}
+                    </td>
+                    <td className="td-amount" style={{ fontWeight: 700, color: item.receivedAmount > 0 ? '#0284C7' : '#64748B' }}>
+                      {formatCurrency(item.receivedAmount)}
+                    </td>
+                    <td className="td-amount" style={{ fontWeight: 700, color: pendingAmt > 0 ? '#EF4444' : '#64748B' }}>
+                      {formatCurrency(pendingAmt)}
+                    </td>
+                    <td className="td-description">{item.bankName}</td>
+                    <td className="td-description">
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        background: '#F1F5F9',
+                        color: '#334155',
+                      }}>
+                        {item.paymentMethod || 'UPI'}
+                      </span>
+                    </td>
+                    <td
+                      style={{
+                        textAlign: 'center',
+                        width: '230px',
+                        minWidth: '230px',
+                        padding: '14px 16px',
+                        whiteSpace: 'nowrap',
+                        verticalAlign: 'middle',
+                      }}
+                    >
+                      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                        {pendingAmt > 0 && (
+                          <button
+                            type="button"
+                            className="btn-make-payment"
+                            title="Make Payment"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              backgroundColor: '#16A34A',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              fontSize: '11.5px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                            }}
+                            onClick={() => handleOpenMakePayment(item)}
+                          >
+                            <CreditCard size={13} />
+                            <span>Make Payment</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="action-icon-btn action-view-btn"
+                          title="View Details"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: '2px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#1E293B',
+                          }}
+                          onClick={() => setViewingRecord(item)}
+                        >
+                          <Eye size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="action-icon-btn action-edit-btn"
+                          title="Edit Record"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: '2px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#1E293B',
+                          }}
+                          onClick={() => handleOpenEdit(item)}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="action-icon-btn action-delete-btn"
+                          title="Delete Record"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: '2px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#1E293B',
+                          }}
+                          onClick={() => {
+                            setDeleteError('')
+                            setDeletingRecord(item)
+                          }}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
@@ -692,6 +805,256 @@ export default function ConsultingTable({
           </div>
         </div>
       )}
+
+      {/* ── Make Payment Modal ── */}
+      {payingRecord && (() => {
+        const currentPending = payingRecord.pendingAmount !== undefined
+          ? payingRecord.pendingAmount
+          : Math.max(0, (Number(payingRecord.totalBudget) || 0) - (Number(payingRecord.receivedAmount) || 0))
+
+        return (
+          <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => !isPaying && setPayingRecord(null)}>
+            <div className="modal-container" style={{ maxWidth: '520px', width: '92%' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E5EAF1' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '8px',
+                    backgroundColor: '#DCFCE7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#16A34A',
+                  }}>
+                    <CreditCard size={18} />
+                  </div>
+                  <div>
+                    <h3 className="modal-title" style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>
+                      Make Payment
+                    </h3>
+                    <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>
+                      Payment from {payingRecord.siteOwner || payingRecord.siteName}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="modal-close-btn"
+                  onClick={() => !isPaying && setPayingRecord(null)}
+                  disabled={isPaying}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSavePayment}>
+                <div className="modal-body" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '72vh', overflowY: 'auto' }}>
+                  {payError && (
+                    <div className="form-alert form-alert-error" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px' }}>
+                      <AlertCircle size={16} />
+                      <span>{payError}</span>
+                    </div>
+                  )}
+
+                  {/* Read-only Site & Owner Info */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, 1fr)',
+                    gap: '10px',
+                    background: '#F8FAFC',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #E2E8F0',
+                  }}>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Site Name</span>
+                      <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13px' }}>{payingRecord.siteName}</span>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Site Owner / Client</span>
+                      <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13px' }}>{payingRecord.siteOwner}</span>
+                    </div>
+                  </div>
+
+                  {/* Read-only Financial Summary */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '8px',
+                    background: '#F1F5F9',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #E2E8F0',
+                  }}>
+                    <div>
+                      <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Total Budget</span>
+                      <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '13.5px' }}>{formatCurrency(payingRecord.totalBudget)}</span>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Previously Received</span>
+                      <span style={{ fontWeight: 700, color: '#0284C7', fontSize: '13.5px' }}>{formatCurrency(payingRecord.receivedAmount)}</span>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Pending Amount</span>
+                      <span style={{ fontWeight: 700, color: '#EF4444', fontSize: '13.5px' }}>{formatCurrency(currentPending)}</span>
+                    </div>
+                  </div>
+
+                  {/* Payment Amount */}
+                  <div className="form-group" style={{ marginTop: '4px' }}>
+                    <label className="form-label">Payment Amount (₹) *</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      min="1"
+                      max={currentPending}
+                      step="any"
+                      placeholder="e.g. 50000"
+                      value={payForm.amount}
+                      onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
+                      required
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                      <span style={{ fontSize: '11.5px', color: '#64748B' }}>
+                        Outstanding: {formatCurrency(currentPending)}
+                      </span>
+                      <button
+                        type="button"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#2563EB',
+                          fontSize: '11.5px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          padding: 0,
+                          textDecoration: 'underline',
+                        }}
+                        onClick={() => setPayForm((prev) => ({ ...prev, amount: String(currentPending) }))}
+                      >
+                        Pay full pending
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Bank Account / Cash selection */}
+                  <div className="form-group">
+                    <label className="form-label">Bank Account / Cash *</label>
+                    <select
+                      className="form-select"
+                      value={payForm.bankAccountId}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        const isCash = val === 'cash'
+                        setPayForm((prev) => ({
+                          ...prev,
+                          bankAccountId: val,
+                          paymentMethod: isCash ? 'Cash' : (prev.paymentMethod === 'Cash' ? 'UPI' : prev.paymentMethod),
+                        }))
+                      }}
+                      required
+                    >
+                      <option value="">Select bank account or cash...</option>
+                      {bankAccounts.map((b) => {
+                        const accId = String(b.id || b._id)
+                        const isCash = b.isCash || accId === 'cash'
+                        const displayName = isCash
+                          ? `Cash in Hand — ₹${Number(b.balance || 0).toLocaleString('en-IN')} available`
+                          : `${b.bankName || b.bank_name} — ₹${Number(b.balance || 0).toLocaleString('en-IN')} available`
+                        return (
+                          <option key={accId} value={accId}>
+                            {displayName}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+
+                  {/* Payment Date & Payment Method */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                    <div className="form-group">
+                      <label className="form-label">Payment Date *</label>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={payForm.paymentDate}
+                        onChange={(e) => setPayForm({ ...payForm, paymentDate: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Payment Method *</label>
+                      <select
+                        className="form-select"
+                        value={payForm.paymentMethod}
+                        onChange={(e) => setPayForm({ ...payForm, paymentMethod: e.target.value })}
+                        required
+                      >
+                        <option value="UPI">UPI</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Cheque">Cheque</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                        <option value="NEFT/RTGS">NEFT / RTGS</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Remarks */}
+                  <div className="form-group">
+                    <label className="form-label">Remarks (Optional)</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Part payment, Consulting fee installment..."
+                      value={payForm.remarks}
+                      onChange={(e) => setPayForm({ ...payForm, remarks: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="modal-footer" style={{ padding: '12px 20px', borderTop: '1px solid #E5EAF1', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary-action"
+                    onClick={() => setPayingRecord(null)}
+                    disabled={isPaying}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn"
+                    disabled={isPaying}
+                    style={{
+                      background: '#16A34A',
+                      color: '#FFFFFF',
+                      borderColor: '#16A34A',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {isPaying ? (
+                      <>
+                        <Loader2 size={15} className="spin-animate" />
+                        <span>Recording...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard size={15} />
+                        <span>Record Payment</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

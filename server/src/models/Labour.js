@@ -11,15 +11,19 @@ const toApi = (row) => {
   const wagesEarned = recordWagesEarned
 
   const initialAdvance = Number(row.advance_amount || 0)
+  const initialInPayments = Number(row.initial_advance_in_payments || 0)
   const extraAdvances = Number(row.extra_advances || 0)
-  const advancePaid = initialAdvance + extraAdvances
   const otherPayments = Number(row.other_payments || 0)
 
-  // Total Paid = Existing Advance Payments + Additional Worker Payments + Other Wage Payments
-  const totalPaid = Math.max(
-    advancePaid + otherPayments,
-    Number(row.total_paid || 0)
-  )
+  // Avoid double-counting: if initial advance is already recorded in worker_payments, don't count it twice
+  const effectiveInitial = initialInPayments > 0 ? 0 : initialAdvance
+  const advancePaid = effectiveInitial + initialInPayments + extraAdvances
+
+  // Actual total paid from all valid recorded payments and advances counted only once
+  const actualPaid = effectiveInitial + Number(row.total_recorded_payments || 0)
+  const totalPaid = (Number(row.total_recorded_payments || 0) > 0 || initialAdvance > 0)
+    ? actualPaid
+    : Number(row.total_paid || 0)
 
   // Outstanding Amount = max(0, Total Earned Wages - Total Paid)
   const outstanding = Math.max(0, wagesEarned - totalPaid)
@@ -85,7 +89,9 @@ const POPULATE_SELECT = `
   s.location AS site_location,
   b.bank_name AS bank_name,
   COALESCE(pay.extra_advances, 0) AS extra_advances,
-  COALESCE(pay.other_payments, 0) AS other_payments
+  COALESCE(pay.initial_advance_in_payments, 0) AS initial_advance_in_payments,
+  COALESCE(pay.other_payments, 0) AS other_payments,
+  COALESCE(pay.total_recorded_payments, 0) AS total_recorded_payments
 `
 
 const POPULATE_JOIN = `
@@ -95,8 +101,10 @@ const POPULATE_JOIN = `
   LEFT JOIN (
     SELECT
       worker_id,
-      SUM(CASE WHEN payment_type = 'Advance Payment' THEN amount ELSE 0 END) AS extra_advances,
-      SUM(CASE WHEN payment_type != 'Advance Payment' THEN amount ELSE 0 END) AS other_payments
+      SUM(CASE WHEN payment_type = 'Advance Payment' AND (reference_id = CONCAT('TXN-WRK-', LPAD(worker_id, 4, '0')) OR reference_id = CONCAT('TXN-WRK-', worker_id)) THEN amount ELSE 0 END) AS initial_advance_in_payments,
+      SUM(CASE WHEN payment_type = 'Advance Payment' AND reference_id != CONCAT('TXN-WRK-', LPAD(worker_id, 4, '0')) AND reference_id != CONCAT('TXN-WRK-', worker_id) THEN amount ELSE 0 END) AS extra_advances,
+      SUM(CASE WHEN payment_type != 'Advance Payment' THEN amount ELSE 0 END) AS other_payments,
+      SUM(amount) AS total_recorded_payments
     FROM worker_payments
     GROUP BY worker_id
   ) pay ON pay.worker_id = l.id

@@ -32,25 +32,30 @@ export const WorkerPayment = {
     try {
       await conn.beginTransaction()
 
+      let bank = null
+      let currentBalance = 0
+
       // 1. Verify and lock the balance (Cash or Bank)
       if (isCashAccount) {
         const cashSummary = await calculateLiveCashSummary(conn)
-        if (cashSummary.balance < numAmount) {
+        currentBalance = Number(cashSummary.balance || 0)
+        if (currentBalance < numAmount) {
           throw new Error(
-            `Insufficient cash balance. Available: ₹${cashSummary.balance.toLocaleString('en-IN')}, Requested: ₹${numAmount.toLocaleString('en-IN')}. Please add cash or select a bank account.`,
+            `Insufficient cash balance. Available: ₹${currentBalance.toLocaleString('en-IN')}, Requested: ₹${numAmount.toLocaleString('en-IN')}. Please add cash or select a bank account.`,
           )
         }
       } else {
-        const [[bank]] = await conn.query(
+        const [[foundBank]] = await conn.query(
           'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
           [finalBankAccountId],
         )
+        bank = foundBank
 
         if (!bank) {
           throw new Error('Selected bank account not found or inactive.')
         }
 
-        const currentBalance = Number(bank.balance || 0)
+        currentBalance = Number(bank.balance || 0)
         if (currentBalance <= 0) {
           throw new Error(`Bank account (${bank.bank_name}) has zero balance. Payment cannot proceed.`)
         }
@@ -93,12 +98,18 @@ export const WorkerPayment = {
       )
 
       // 5. Recalculate worker's total_paid in labours table
-      // Total Paid = (initial advance) + (sum of worker_payments)
+      // Total Paid = (initial advance if not in worker_payments) + (sum of worker_payments)
       const [[paySum]] = await conn.query(
-        'SELECT COALESCE(SUM(amount), 0) AS total_extra FROM worker_payments WHERE worker_id = ?',
+        `SELECT
+          COALESCE(SUM(amount), 0) AS total_extra,
+          COALESCE(SUM(CASE WHEN payment_type = 'Advance Payment' AND (reference_id = CONCAT('TXN-WRK-', LPAD(worker_id, 4, '0')) OR reference_id = CONCAT('TXN-WRK-', worker_id)) THEN amount ELSE 0 END), 0) AS initial_in_payments
+         FROM worker_payments WHERE worker_id = ?`,
         [workerId],
       )
-      const newTotalPaid = Number(worker.advance_amount || 0) + Number(paySum.total_extra || 0)
+      const initialAdvance = Number(worker.advance_amount || 0)
+      const initialInPayments = Number(paySum.initial_in_payments || 0)
+      const effectiveInitial = initialInPayments > 0 ? 0 : initialAdvance
+      const newTotalPaid = effectiveInitial + Number(paySum.total_extra || 0)
 
       await conn.query(
         'UPDATE labours SET total_paid = ? WHERE id = ?',
@@ -113,7 +124,7 @@ export const WorkerPayment = {
         workerName: worker.name,
         siteId: finalSiteId,
         bankAccountId,
-        bankName: bank.bank_name,
+        bankName: isCashAccount ? 'Cash' : (bank?.bank_name || 'Bank Account'),
         amount: numAmount,
         paymentDate: formattedDate,
         paymentType,
@@ -542,10 +553,16 @@ export const WorkerPayment = {
       // Recalculate worker's total_paid in labours table
       const [[worker]] = await conn.query('SELECT id, advance_amount FROM labours WHERE id = ?', [existing.worker_id])
       const [[paySum]] = await conn.query(
-        'SELECT COALESCE(SUM(amount), 0) AS total_extra FROM worker_payments WHERE worker_id = ?',
+        `SELECT
+          COALESCE(SUM(amount), 0) AS total_extra,
+          COALESCE(SUM(CASE WHEN payment_type = 'Advance Payment' AND (reference_id = CONCAT('TXN-WRK-', LPAD(worker_id, 4, '0')) OR reference_id = CONCAT('TXN-WRK-', worker_id)) THEN amount ELSE 0 END), 0) AS initial_in_payments
+         FROM worker_payments WHERE worker_id = ?`,
         [existing.worker_id],
       )
-      const newTotalPaid = Number(worker?.advance_amount || 0) + Number(paySum?.total_extra || 0)
+      const initialAdvance = Number(worker?.advance_amount || 0)
+      const initialInPayments = Number(paySum?.initial_in_payments || 0)
+      const effectiveInitial = initialInPayments > 0 ? 0 : initialAdvance
+      const newTotalPaid = effectiveInitial + Number(paySum?.total_extra || 0)
       await conn.query('UPDATE labours SET total_paid = ? WHERE id = ?', [newTotalPaid, existing.worker_id])
 
       await conn.commit()
@@ -616,10 +633,16 @@ export const WorkerPayment = {
         [payment.worker_id],
       )
       const [[paySum]] = await conn.query(
-        'SELECT COALESCE(SUM(amount), 0) AS total_extra FROM worker_payments WHERE worker_id = ?',
+        `SELECT
+          COALESCE(SUM(amount), 0) AS total_extra,
+          COALESCE(SUM(CASE WHEN payment_type = 'Advance Payment' AND (reference_id = CONCAT('TXN-WRK-', LPAD(worker_id, 4, '0')) OR reference_id = CONCAT('TXN-WRK-', worker_id)) THEN amount ELSE 0 END), 0) AS initial_in_payments
+         FROM worker_payments WHERE worker_id = ?`,
         [payment.worker_id],
       )
-      const newTotalPaid = Number(worker?.advance_amount || 0) + Number(paySum?.total_extra || 0)
+      const initialAdvance = Number(worker?.advance_amount || 0)
+      const initialInPayments = Number(paySum?.initial_in_payments || 0)
+      const effectiveInitial = initialInPayments > 0 ? 0 : initialAdvance
+      const newTotalPaid = effectiveInitial + Number(paySum?.total_extra || 0)
 
       await conn.query(
         'UPDATE labours SET total_paid = ? WHERE id = ?',
