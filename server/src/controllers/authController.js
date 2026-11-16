@@ -8,11 +8,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'geocrete_arc_jwt_secret_key_2026'
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'
 
 // Credentials are stored securely via env vars; fallback to hashed defaults
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'GeoCrete-Arch'
-// Pre-hashed password for GeoCrete-Arch@2026 (bcrypt, cost 12)
-const ADMIN_PASSWORD_HASH =
-  process.env.ADMIN_PASSWORD_HASH ||
-  '$2b$12$Bpvu7Cl/1Cw2vZGBNEUl2u0yzQ67QwsNylbt3hp2jRLJk8n.eIMN6'
+const DEFAULT_ADMIN_USERNAME = 'geocrete'
+// Pre-hashed password for Geocrete@2026 (bcrypt, cost 12)
+const DEFAULT_ADMIN_PASSWORD_HASH =
+  '$2b$12$p9440QhgInqrzXXrHZOyrOU/4wacK6NSwH4a1SkqPjW5pGSSmTup6'
 
 /**
  * POST /api/auth/login
@@ -26,13 +25,17 @@ export async function login(req, res) {
       return res.status(400).json({ error: 'Username and password are required.' })
     }
 
+    const expectedUsername = process.env.ADMIN_USERNAME || DEFAULT_ADMIN_USERNAME
+    const expectedPasswordHash =
+      process.env.ADMIN_PASSWORD_HASH || DEFAULT_ADMIN_PASSWORD_HASH
+
     // Case-sensitive username check
-    if (username !== ADMIN_USERNAME) {
+    if (username !== expectedUsername) {
       return res.status(401).json({ error: 'Invalid username or password.' })
     }
 
     // Secure bcrypt comparison — never expose hash
-    const isMatch = await bcrypt.compare(password, ADMIN_PASSWORD_HASH)
+    const isMatch = await bcrypt.compare(password, expectedPasswordHash)
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid username or password.' })
     }
