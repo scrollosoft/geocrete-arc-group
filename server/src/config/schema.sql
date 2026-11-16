@@ -122,6 +122,8 @@ CREATE TABLE IF NOT EXISTS labours (
   daily_rate    DECIMAL(10,2) NOT NULL DEFAULT 1000.00,
   wages_earned  DECIMAL(15,2) NOT NULL DEFAULT 0.00,
   total_paid    DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  advance_amount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  bank_account_id INT UNSIGNED NULL DEFAULT NULL,
   joining_date  DATE          NOT NULL DEFAULT (CURDATE()),
   payment_type  ENUM('Daily','Weekly','Monthly') NOT NULL DEFAULT 'Daily',
   address       TEXT          NOT NULL DEFAULT '',

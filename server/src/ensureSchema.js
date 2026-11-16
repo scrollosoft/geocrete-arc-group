@@ -93,6 +93,16 @@ export async function ensureSchema() {
     console.log('Added sites.bank_account_id column')
   }
 
+  if (!(await columnExists(pool, 'labours', 'advance_amount'))) {
+    await pool.query(`ALTER TABLE labours ADD COLUMN advance_amount DECIMAL(15,2) NOT NULL DEFAULT 0.00 AFTER total_paid`)
+    console.log('Added labours.advance_amount column')
+  }
+
+  if (!(await columnExists(pool, 'labours', 'bank_account_id'))) {
+    await pool.query(`ALTER TABLE labours ADD COLUMN bank_account_id INT UNSIGNED NULL DEFAULT NULL AFTER advance_amount`)
+    console.log('Added labours.bank_account_id column')
+  }
+
   // Ensure bank_account_id column on client_payments table
   if (!(await columnExists(pool, 'client_payments', 'bank_account_id'))) {
     await pool.query(`ALTER TABLE client_payments ADD COLUMN bank_account_id INT UNSIGNED NULL DEFAULT NULL AFTER site_id`)
