@@ -31,9 +31,10 @@ export default function AddWorkerModal({
     phone: '',
     trade: 'Mason',
     otherTrade: '',
-    site: sites[0]?._id || '',
+    site: sites[0]?._id || sites[0]?.id || '',
     joiningDate: getTodayString(),
     dailyRate: '',
+    totalAmount: '',
     advanceAmount: '',
     bankAccountId: '',
     address: '',
@@ -45,9 +46,15 @@ export default function AddWorkerModal({
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState('')
 
+  useEffect(() => {
+    if (!formData.site && sites && sites.length > 0) {
+      setFormData((prev) => ({ ...prev, site: prev.site || sites[0]?._id || sites[0]?.id || '' }))
+    }
+  }, [sites])
+
   // Load bank accounts if not supplied or empty
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen || embeddedMode) {
       if (initialBankAccounts && initialBankAccounts.length > 0) {
         setBankAccounts(initialBankAccounts)
       } else {
@@ -64,15 +71,21 @@ export default function AddWorkerModal({
           .finally(() => setLoadingBanks(false))
       }
     }
-  }, [isOpen, initialBankAccounts])
+  }, [isOpen, embeddedMode, initialBankAccounts])
 
   if (!isOpen && !embeddedMode) return null
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    if (name === 'totalAmount') {
+      setFormData((prev) => ({ ...prev, totalAmount: value, dailyRate: value }))
+    } else if (name === 'dailyRate') {
+      setFormData((prev) => ({ ...prev, dailyRate: value, totalAmount: value }))
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }))
+    }
     if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: '' }))
+      setErrors((prev) => ({ ...prev, [name]: '', totalAmount: '', dailyRate: '' }))
     }
     if (serverError) setServerError('')
   }
@@ -112,8 +125,13 @@ export default function AddWorkerModal({
       }
     }
 
-    if (!formData.dailyRate || Number(formData.dailyRate) <= 0) {
-      newErrors.dailyRate = 'Daily Wage must be greater than zero.'
+    const amountVal = formData.totalAmount !== undefined && formData.totalAmount !== ''
+      ? formData.totalAmount
+      : formData.dailyRate
+
+    if (!amountVal || Number(amountVal) <= 0) {
+      newErrors.totalAmount = 'Total Amount must be greater than zero.'
+      newErrors.dailyRate = 'Total Amount must be greater than zero.'
     }
 
     // Validate Advance Payment and Bank Selection
@@ -153,14 +171,19 @@ export default function AddWorkerModal({
 
     try {
       setSubmitting(true)
+      const amountVal = formData.totalAmount !== undefined && formData.totalAmount !== ''
+        ? formData.totalAmount
+        : formData.dailyRate
+
       const payload = {
         name: formData.name.trim(),
-        phone: formData.phone.trim(),
+        phone: formData.phone ? formData.phone.trim() : (embeddedMode ? '9876543210' : ''),
         trade: formData.trade,
         otherTrade: formData.trade === 'Other' ? formData.otherTrade.trim() : undefined,
         site: formData.site,
-        joiningDate: formData.joiningDate,
-        dailyRate: Number(formData.dailyRate),
+        joiningDate: formData.joiningDate || getTodayString(),
+        dailyRate: Number(amountVal),
+        totalAmount: Number(amountVal),
         advanceAmount: formData.advanceAmount !== '' ? Number(formData.advanceAmount) : 0,
         bankAccountId: formData.bankAccountId ? Number(formData.bankAccountId) : null,
         address: formData.address ? formData.address.trim() : '',
@@ -181,9 +204,10 @@ export default function AddWorkerModal({
         phone: '',
         trade: 'Mason',
         otherTrade: '',
-        site: sites[0]?._id || '',
+        site: sites[0]?._id || sites[0]?.id || '',
         joiningDate: getTodayString(),
         dailyRate: '',
+        totalAmount: '',
         advanceAmount: '',
         bankAccountId: '',
         address: '',

@@ -331,7 +331,11 @@ export default function SiteDetailPage({
   const workersWithMetrics = useMemo(() => {
     return siteWorkers.map((w) => {
       const dailyRate = Number(w.dailyRate || 0)
-      const totalWagesEarned = Number(w.wagesEarned || 0)
+      const totalWagesEarned = Number(
+        w.wagesEarned !== undefined && w.wagesEarned !== '' && Number(w.wagesEarned) > 0
+          ? w.wagesEarned
+          : (w.totalAmount || dailyRate || 0)
+      )
       const totalPaid = Number(w.totalPaid !== undefined ? w.totalPaid : (w.advanceAmount || 0))
       const outstanding = Math.max(0, totalWagesEarned - totalPaid)
 
@@ -730,42 +734,24 @@ export default function SiteDetailPage({
       {/* Labour Tab */}
       {activeSubTab === 'Labour' && (
         <div className="site-detail-box" style={{ padding: '0', overflow: 'hidden' }}>
-          {/* Sub-navigation bar inside Labour section */}
+          {/* Labour summary header */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '16px 24px 0 24px',
+              padding: '16px 24px',
               borderBottom: '1px solid #E5EAF1',
               flexWrap: 'wrap',
               gap: '12px',
             }}
           >
-            <div style={{ display: 'flex', gap: '28px' }}>
-              {[
-                { id: 'Worker List', label: `Worker List (${totalLabourWorkers})` },
-                { id: 'Labour Expenses', label: `Labour Expenses (${allLabourExpenses.length})` },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={`site-detail-tab-btn ${activeLabourTab === tab.id ? 'active' : ''}`}
-                  onClick={() => setActiveLabourTab(tab.id)}
-                  style={{ paddingBottom: '12px', fontSize: '13.5px' }}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
             {/* Quick workforce financial summary */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '16px',
-                paddingBottom: '12px',
                 fontSize: '12.5px',
                 color: '#64748B',
               }}
@@ -786,130 +772,80 @@ export default function SiteDetailPage({
             </div>
           </div>
 
-          {/* Subtab 1: Worker List */}
-          {activeLabourTab === 'Worker List' && (
-            <div className="sites-table-scroll">
-              <table className="expenses-table">
-                <thead>
+          {/* Combined Labour Table */}
+          <div className="sites-table-scroll">
+            <table className="expenses-table">
+              <thead>
+                <tr>
+                  <th className="th-date" style={{ padding: '14px 20px' }}>DATE</th>
+                  <th className="th-desc" style={{ padding: '14px 20px', width: '22%' }}>WORKER</th>
+                  <th className="th-cat" style={{ padding: '14px 20px', width: '15%' }}>TRADE</th>
+                  <th className="th-amount" style={{ padding: '14px 20px', textAlign: 'right' }}>TOTAL AMOUNT</th>
+                  <th className="th-paid" style={{ padding: '14px 20px', textAlign: 'right' }}>PAID AMOUNT</th>
+                  <th className="th-pending" style={{ padding: '14px 20px', textAlign: 'right' }}>PENDING</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingLabour ? (
                   <tr>
-                    <th className="th-desc" style={{ padding: '14px 20px', width: '28%' }}>WORKER</th>
-                    <th className="th-cat" style={{ padding: '14px 20px', width: '18%' }}>TRADE</th>
-                    <th className="th-amount" style={{ padding: '14px 20px', width: '18%', textAlign: 'right' }}>DAILY RATE</th>
-                    <th className="th-paid" style={{ padding: '14px 20px', width: '18%', textAlign: 'right' }}>TOTAL PAID</th>
-                    <th className="th-pending" style={{ padding: '14px 20px', width: '18%', textAlign: 'right' }}>PENDING</th>
+                    <td colSpan={6} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
+                      Loading labour records for {siteName}...
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {loadingLabour ? (
-                    <tr>
-                      <td colSpan={5} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
-                        Loading labour records for {siteName}...
+                ) : workersWithMetrics.length > 0 ? (
+                  workersWithMetrics.map((w) => (
+                    <tr key={w._id || w.id} className="expense-row">
+                      <td className="td-date" style={{ padding: '14px 20px' }}>
+                        {w.joiningDate || w.createdAt
+                          ? new Date(w.joiningDate || w.createdAt).toLocaleDateString('en-GB')
+                          : '-'}
+                      </td>
+                      <td className="td-description" style={{ padding: '14px 20px' }}>
+                        <div style={{ fontWeight: 600, color: '#172033', fontSize: '13.5px' }}>{w.name}</div>
+                        {w.phone && (
+                          <div style={{ fontSize: '12px', color: '#70829F', marginTop: '2px' }}>
+                            {w.phone}
+                          </div>
+                        )}
+                      </td>
+                      <td className="td-category" style={{ padding: '14px 20px' }}>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '3px 10px',
+                            borderRadius: '4px',
+                            backgroundColor: '#F1F5F9',
+                            color: '#334155',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                          }}
+                        >
+                          {w.trade || 'Worker'}
+                        </span>
+                      </td>
+                      <td className="td-amount" style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 500, color: '#172033' }}>
+                        {formatExactCurrency(w.wagesEarned)}
+                      </td>
+                      <td className="td-paid" style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: '#16A34A' }}>
+                        {formatExactCurrency(w.totalPaid)}
+                      </td>
+                      <td className="td-pending" style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600 }}>
+                        <span style={{ color: w.outstanding > 0 ? '#E11D48' : '#172033' }}>
+                          {formatExactCurrency(w.outstanding)}
+                        </span>
                       </td>
                     </tr>
-                  ) : workersWithMetrics.length > 0 ? (
-                    workersWithMetrics.map((w) => (
-                      <tr key={w._id || w.id} className="expense-row">
-                        <td className="td-description" style={{ padding: '14px 20px' }}>
-                          <div style={{ fontWeight: 600, color: '#172033', fontSize: '13.5px' }}>{w.name}</div>
-                          {w.phone && (
-                            <div style={{ fontSize: '12px', color: '#70829F', marginTop: '2px' }}>
-                              {w.phone}
-                            </div>
-                          )}
-                        </td>
-                        <td className="td-category" style={{ padding: '14px 20px' }}>
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              padding: '3px 10px',
-                              borderRadius: '4px',
-                              backgroundColor: '#F1F5F9',
-                              color: '#334155',
-                              fontSize: '12px',
-                              fontWeight: 500,
-                            }}
-                          >
-                            {w.trade || 'Worker'}
-                          </span>
-                        </td>
-                        <td className="td-amount" style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 500, color: '#172033' }}>
-                          {formatExactCurrency(w.dailyRate)}
-                        </td>
-                        <td className="td-paid" style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: '#16A34A' }}>
-                          {formatExactCurrency(w.totalPaid)}
-                        </td>
-                        <td className="td-pending" style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600 }}>
-                          <span style={{ color: w.outstanding > 0 ? '#E11D48' : '#172033' }}>
-                            {formatExactCurrency(w.outstanding)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
-                        No labour records currently registered for {siteName}.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-
-          {/* Subtab 3: Labour Expenses */}
-          {activeLabourTab === 'Labour Expenses' && (
-            <div className="sites-table-scroll">
-              <table className="expenses-table">
-                <thead>
+                  ))
+                ) : (
                   <tr>
-                    <th className="th-date">DATE</th>
-                    <th className="th-desc">LABOUR DESCRIPTION</th>
-                    <th className="th-amount">AMOUNT</th>
-                    <th className="th-paid">PAID</th>
-                    <th className="th-pending">PENDING</th>
+                    <td colSpan={6} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
+                      No labour records currently registered for {siteName}.
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {allLabourExpenses.length > 0 ? (
-                    allLabourExpenses.map((item) => (
-                      <tr key={item._id} className="expense-row">
-                        <td className="td-date">
-                          {item.date ? new Date(item.date).toLocaleDateString('en-GB') : '-'}
-                        </td>
-                        <td className="td-description">
-                          {item.remark || item.category || 'Labour Charges'}
-                          {item.workerName && (
-                            <span style={{ fontSize: '12px', color: '#64748B', marginLeft: '6px' }}>
-                              ({item.trade || 'Worker'})
-                            </span>
-                          )}
-                        </td>
-                        <td className="td-amount">{formatExactCurrency(item.amount)}</td>
-                        <td className="td-paid">{item.paidAmount ? formatExactCurrency(item.paidAmount) : '-'}</td>
-                        <td className="td-pending">
-                          {item.pendingAmount ? (
-                            <span style={{ color: '#E11D48', fontWeight: 600 }}>
-                              {formatExactCurrency(item.pendingAmount)}
-                            </span>
-                          ) : (
-                            '-'
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="td-empty" style={{ padding: '36px', textAlign: 'center', color: '#70829F' }}>
-                        No labour expenses currently recorded for {siteName}.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

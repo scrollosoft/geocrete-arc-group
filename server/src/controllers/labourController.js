@@ -37,9 +37,7 @@ export const createLabour = async (req, res, next) => {
       return res.status(400).json({ error: 'Worker Full Name is required.' })
     }
 
-    if (!phone || !phone.trim()) {
-      return res.status(400).json({ error: 'Phone Number is required.' })
-    }
+    const finalPhone = (phone && String(phone).trim()) ? String(phone).trim() : 'N/A'
 
     const finalTrade = trade === 'Other' ? (otherTrade || '').trim() : (trade || '').trim()
     if (!finalTrade) {
@@ -125,7 +123,7 @@ export const createLabour = async (req, res, next) => {
     const worker = await Labour.create(
       {
         name: name.trim(),
-        phone: phone.trim(),
+        phone: finalPhone,
         trade: finalTrade,
         site: siteDoc._id,
         joiningDate: joiningDate ? new Date(joiningDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -257,15 +255,21 @@ export const updateLabour = async (req, res, next) => {
     }
 
     // 2. Recalculate worker's total_paid in labours table
-    // Total Paid = (initial advance) + (sum of worker_payments)
+    // Total Paid = (initial advance if not in worker_payments) + (sum of worker_payments)
     const [[paySum]] = await conn.query(
-      'SELECT COALESCE(SUM(amount), 0) AS total_extra FROM worker_payments WHERE worker_id = ?',
+      `SELECT
+        COALESCE(SUM(amount), 0) AS total_extra,
+        COALESCE(SUM(CASE WHEN payment_type = 'Advance Payment' AND (reference_id = CONCAT('TXN-WRK-', LPAD(worker_id, 4, '0')) OR reference_id = CONCAT('TXN-WRK-', worker_id)) THEN amount ELSE 0 END), 0) AS initial_in_payments
+       FROM worker_payments WHERE worker_id = ?`,
       [id],
     )
-    const calculatedPaid = Number(existingWorker.advanceAmount || 0) + Number(paySum.total_extra || 0)
+    const initialAdvance = Number(existingWorker.advanceAmount || 0)
+    const initialInPayments = Number(paySum.initial_in_payments || 0)
+    const effectiveInitial = initialInPayments > 0 ? 0 : initialAdvance
+    const calculatedPaid = effectiveInitial + Number(paySum.total_extra || 0)
     const newTotalPaid = numAdditionalAdvance > 0
-      ? Math.max(calculatedPaid, Number(existingWorker.totalPaid || 0) + numAdditionalAdvance)
-      : (totalPaid !== undefined ? Number(totalPaid) : Number(existingWorker.totalPaid || 0))
+      ? calculatedPaid
+      : (totalPaid !== undefined ? Number(totalPaid) : calculatedPaid)
 
     // 3. Update worker details in labours table
     const updateData = {

@@ -2739,7 +2739,8 @@
   color: #172033;
 }
 
-.td-labour-earned {
+.td-labour-earned,
+.td-labour-total {
   font-weight: 500;
   color: #172033;
 }
@@ -2767,6 +2768,47 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.labour-record-pay-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background-color: #075985;
+  color: #FFFFFF;
+  border: 1px solid #075985;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.labour-record-pay-btn:hover:not(:disabled) {
+  background-color: #0c4a6e;
+  border-color: #0c4a6e;
+  transform: translateY(-1px);
+}
+
+.labour-record-pay-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background-color: #F1F5F9;
+  color: #94A3B8;
+  border-color: #CBD5E1;
+  transform: none;
+  box-shadow: none;
+}
+
+.th-labour-actions,
+.td-labour-actions {
+  white-space: nowrap;
+  min-width: 220px;
+  text-align: center;
 }
 
 .labour-action-btn {
@@ -5250,24 +5292,37 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
+    flex-wrap: nowrap;
   }
 
   .top-header .btn {
-    padding: 0;
-    font-size: 12px;
-    height: 34px;
-    width: 34px;
-    min-width: 34px;
+    height: 32px;
+    width: auto;
+    min-width: 0;
+    padding: 0 9px;
+    font-size: 11.5px;
+    font-weight: 600;
+    gap: 4px;
+    border-radius: 6px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .top-header .btn svg {
+    width: 13px;
+    height: 13px;
     flex-shrink: 0;
   }
 
   .top-header .btn span {
-    display: none; /* hide text labels inside header buttons on mobile */
+    display: inline !important; /* show complete text labels: Add Expense, Add Site on mobile */
+    font-size: 11.5px;
+    line-height: 1;
+    white-space: nowrap;
   }
 
   .header-divider {
@@ -5279,29 +5334,31 @@
     gap: 6px;
     min-width: 0;
     flex-shrink: 1;
+    padding: 2px 4px;
   }
 
   .profile-avatar {
-    width: 32px;
-    height: 32px;
-    font-size: 12px;
+    width: 30px;
+    height: 30px;
+    font-size: 11.5px;
     flex-shrink: 0;
   }
 
   .profile-info {
-    max-width: 130px;
+    max-width: 115px;
     min-width: 0;
+    flex-shrink: 1;
   }
 
   .profile-name {
-    font-size: 12.5px;
+    font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .profile-role {
-    font-size: 10.5px;
+    font-size: 10px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -5317,7 +5374,7 @@
 
   /* ---- Content Body ---- */
   .content-body {
-    padding: 12px 12px 84px 12px;
+    padding: 12px 14px 84px 14px;
     gap: 14px;
     overflow-x: hidden;
     width: 100%;
@@ -5752,8 +5809,10 @@
 
   /* ---- Content body ---- */
   .content-body {
-    padding: 12px 10px 80px 10px;
+    padding: 12px 12px 80px 12px;
     gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   /* ---- Header ---- */
@@ -6144,7 +6203,9 @@
   /* ── 3. Dashboard tabs single horizontal row ── */
   .dashboard-tabs-section {
     margin-top: 0;
-    width: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .dashboard-tab-nav {
@@ -6158,7 +6219,9 @@
     -webkit-overflow-scrolling: touch;
     white-space: nowrap;
     scrollbar-width: none;
-    width: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .dashboard-tab-nav::-webkit-scrollbar {
@@ -6177,14 +6240,38 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    width: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
-  .daily-expense-section {
-    padding: 16px 14px 18px 14px;
-    width: 100%;
-    box-sizing: border-box;
+  .dashboard-form-chart-row {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    align-items: stretch !important;
+  }
+
+  .dashboard-form-col {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+  }
+
+  .daily-expense-section,
+  #daily-expense-form,
+  #add-worker-form {
+    padding: 16px 14px 18px 14px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
     border-radius: var(--radius-md);
+    margin: 0 !important;
   }
 
   .section-header-compact {
@@ -6205,8 +6292,20 @@
   .form-bottom-row.form-bottom-row-5col,
   .dashboard-site-form-grid,
   .dashboard-worker-form-grid {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr) !important;
     gap: 12px;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .form-grid > *,
+  .form-bottom-row > *,
+  .dashboard-worker-form-grid > *,
+  .form-group {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .dashboard-site-form-grid .form-label,
@@ -6217,16 +6316,21 @@
 
   .form-input,
   .form-select {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
     font-size: 14px;
     height: 40px;
   }
 
   .input-with-prefix,
-  .input-with-icon {
-    width: 100%;
+  .input-with-icon,
+  .input-with-currency-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
   }
 
   .form-submit-group .btn,

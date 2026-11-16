@@ -76,6 +76,12 @@ export default function LabourPage({
 
   // Record Payment modal
   const [showRecordPayment, setShowRecordPayment] = useState(false)
+  const [recordPaymentWorker, setRecordPaymentWorker] = useState(null)
+
+  const handleRecordPayment = (worker) => {
+    setRecordPaymentWorker(worker)
+    setShowRecordPayment(true)
+  }
 
   // Real payment history for worker detail view
   const [workerPaymentHistory, setWorkerPaymentHistory] = useState([])
@@ -857,14 +863,14 @@ export default function LabourPage({
                 <span className="stat-desc">Across active construction sites</span>
               </div>
 
-              {/* Card 2: Wages Earned */}
+              {/* Card 2: Total Amount */}
               <div className="site-stat-card">
                 <div className="stat-icon-wrap stat-icon-green">
                   <CreditCard size={18} />
                 </div>
-                <span className="stat-label">Wages Earned</span>
+                <span className="stat-label">Total Amount</span>
                 <div className="stat-value">{formatExactCurrency(totalWagesEarned)}</div>
-                <span className="stat-desc">Total wages earned</span>
+                <span className="stat-desc">Total workforce amount</span>
               </div>
 
               {/* Card 3: Total Paid */}
@@ -947,16 +953,21 @@ export default function LabourPage({
                 </div>
               </div>
 
-              <div className="labour-actions-right">
-                <button
-                  type="button"
-                  className="btn-record-payments"
-                  onClick={() => setShowRecordPayment(true)}
-                >
-                  <Receipt size={16} />
-                  <span>Record Payment's</span>
-                </button>
-              </div>
+              {activeTab === 'Payments' && (
+                <div className="labour-actions-right">
+                  <button
+                    type="button"
+                    className="btn-record-payments"
+                    onClick={() => {
+                      setRecordPaymentWorker(null)
+                      setShowRecordPayment(true)
+                    }}
+                  >
+                    <Receipt size={16} />
+                    <span>Record Payment's</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Table: If activeTab === 'Payments', render Payments Table. Otherwise render Workers Table */}
@@ -1073,8 +1084,7 @@ export default function LabourPage({
                     <tr>
                       <th className="th-labour-worker">WORKER</th>
                       <th className="th-labour-trade">TRADE OR SITE</th>
-                      <th className="th-labour-rate">DAILY RATE</th>
-                      <th className="th-labour-earned">EARNED</th>
+                      <th className="th-labour-total">TOTAL AMOUNT</th>
                       <th className="th-labour-paid">PAID</th>
                       <th className="th-labour-out">PENDING</th>
                       <th className="th-labour-actions">ACTIONS</th>
@@ -1084,7 +1094,7 @@ export default function LabourPage({
                     {loading ? (
                       [1, 2, 3, 4].map((i) => (
                         <tr key={i} className="skeleton-row">
-                          <td colSpan={7}>
+                          <td colSpan={6}>
                             <div className="skeleton-line" style={{ height: '24px', margin: '8px 0' }} />
                           </td>
                         </tr>
@@ -1108,11 +1118,8 @@ export default function LabourPage({
                             </div>
                           </td>
 
-                          {/* Daily Rate */}
-                          <td className="td-labour-rate">{formatExactCurrency(item.dailyRate)}</td>
-
-                          {/* Earned */}
-                          <td className="td-labour-earned">{formatExactCurrency(item.wagesEarned)}</td>
+                          {/* Total Amount */}
+                          <td className="td-labour-total">{formatExactCurrency(item.wagesEarned || item.totalAmount || item.dailyRate)}</td>
 
                           {/* Paid */}
                           <td className="td-labour-paid">{formatExactCurrency(item.totalPaid)}</td>
@@ -1127,6 +1134,16 @@ export default function LabourPage({
                           {/* Actions: View / Edit / Delete */}
                           <td className="td-labour-actions">
                             <div className="labour-action-btns">
+                              <button
+                                type="button"
+                                className="labour-record-pay-btn"
+                                disabled={Number(item.outstanding || 0) <= 0}
+                                onClick={() => handleRecordPayment(item)}
+                                title={Number(item.outstanding || 0) <= 0 ? `All payments completed for ${item.name}` : `Record Payment for ${item.name}`}
+                              >
+                                <Receipt size={13} />
+                                <span>Record Payment</span>
+                              </button>
                               <button type="button" title="View Details" className="labour-action-btn labour-action-view" onClick={() => handleView(item)}>
                                 <Eye size={15} />
                               </button>
@@ -1142,7 +1159,7 @@ export default function LabourPage({
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={7} className="td-empty" style={{ padding: '36px', textAlign: 'center' }}>
+                        <td colSpan={6} className="td-empty" style={{ padding: '36px', textAlign: 'center' }}>
                           No labour records match the selected filter.
                         </td>
                       </tr>
@@ -1567,11 +1584,24 @@ export default function LabourPage({
       {/* ── RECORD PAYMENT MODAL ──────────────────────────────────────────── */}
       {showRecordPayment && (
         <RecordWorkerPaymentModal
-          worker={viewWorker || null}
+          worker={recordPaymentWorker || viewWorker || null}
           workers={displayWorkers}
           sites={sites}
-          onClose={() => setShowRecordPayment(false)}
-          onSuccess={() => {
+          onClose={() => {
+            setShowRecordPayment(false)
+            setRecordPaymentWorker(null)
+          }}
+          onSuccess={async () => {
+            // Immediate refresh of workers table with recalculated paid & pending amounts
+            try {
+              const res = await labourService.getAll()
+              const updatedList = res?.workers || (Array.isArray(res) ? res : [])
+              if (updatedList.length > 0) {
+                setLocalWorkers(updatedList)
+              }
+            } catch (err) {
+              console.error('Failed to reload workers:', err)
+            }
             // Refresh payment history if a worker is currently viewed
             if (viewWorker) {
               const id = viewWorker._id || viewWorker.id

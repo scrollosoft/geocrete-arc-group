@@ -17,7 +17,7 @@ export default function RecordWorkerPaymentModal({ onClose, worker, workers = []
 
   const [form, setForm] = useState({
     workerId: worker?._id || worker?.id || '',
-    siteId: worker?.siteId || worker?.site_id || '',
+    siteId: worker?.siteId || worker?.site_id || worker?.site?._id || worker?.site?.id || (typeof worker?.site === 'string' ? worker?.site : '') || '',
     bankAccountId: '',
     amount: '',
     paymentDate: today,
@@ -59,6 +59,10 @@ export default function RecordWorkerPaymentModal({ onClose, worker, workers = []
     if (!form.workerId) { setSaveError('Worker is required.'); return }
     if (!form.bankAccountId) { setSaveError('Please select a bank account.'); return }
     if (!amount || amount <= 0) { setSaveError('Please enter a valid amount greater than zero.'); return }
+    if (outstanding > 0 && amount > outstanding) {
+      setSaveError(`Payment amount (₹${amount.toLocaleString('en-IN')}) cannot exceed the outstanding balance of ₹${outstanding.toLocaleString('en-IN')}.`)
+      return
+    }
 
     // Client-side bank balance check
     if (selectedBank) {
