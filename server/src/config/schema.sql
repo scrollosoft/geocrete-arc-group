@@ -169,6 +169,27 @@ CREATE TABLE IF NOT EXISTS materials (
 
 
 -- ----------------------------------------------------------------
+-- client_payments
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS client_payments (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  client_id       INT UNSIGNED NULL DEFAULT NULL,
+  site_id         INT UNSIGNED NULL,
+  bank_account_id INT UNSIGNED NULL DEFAULT NULL,
+  amount          DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  payment_date    DATE NOT NULL,
+  title           VARCHAR(255) NOT NULL DEFAULT 'Project milestone payment',
+  payment_method  VARCHAR(100) NOT NULL DEFAULT 'Bank transfer',
+  reference       VARCHAR(255) NOT NULL DEFAULT 'Reference verified',
+  status          VARCHAR(50) NOT NULL DEFAULT 'Paid',
+  type            VARCHAR(20) NOT NULL DEFAULT 'credit',
+  created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_client_id (client_id),
+  INDEX idx_site_id (site_id),
+  INDEX idx_payment_date (payment_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------
 -- settings
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS settings (
