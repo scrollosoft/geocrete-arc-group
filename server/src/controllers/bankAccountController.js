@@ -143,11 +143,12 @@ export const deleteBankAccount = async (req, res, next) => {
   }
 }
 
-// IST offset in ms (UTC+05:30). DB strings arrive already converted to IST
-// by mysql2 (timezone: '+05:30'), so we treat parsed values as IST when
-// building a UTC-based rawTimestamp for consistent cross-environment sorting.
-const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
-
+// All created_at columns are DATETIME type in MySQL.
+// DATETIME stores the literal value of CURRENT_TIMESTAMP from the MySQL server.
+// On production (Hostinger, UTC MySQL): stores UTC time.
+// On local (XAMPP, IST): stores IST time.
+// Fix: use CONVERT_TZ in SQL to convert from MySQL server's global timezone to IST (+05:30).
+// This function receives an IST string and formats it for display.
 function formatActualDateTime(rawDbStr, fallbackDate) {
   const str = String(rawDbStr || fallbackDate || '').trim()
   const match = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/)
@@ -163,7 +164,8 @@ function formatActualDateTime(rawDbStr, fallbackDate) {
     const period = hour24 >= 12 ? 'pm' : 'am'
     const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12
     const minutePad = String(minute).padStart(2, '0')
-    // Build rawTimestamp as UTC ms: treat parsed values as IST, subtract offset
+    // rawTimestamp: treat as IST, convert to UTC ms for consistent cross-env sorting
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
     const rawTimestamp = Date.UTC(year, month, day, hour24, minute) - IST_OFFSET_MS
     return {
       date: `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
@@ -200,7 +202,7 @@ export const getBankTransactions = async (req, res, next) => {
         COALESCE(cp.type, 'credit') AS txn_type,
         cp.type,
         cp.amount,
-        CAST(cp.created_at AS CHAR) AS created_at_str,
+        DATE_FORMAT(CONVERT_TZ(cp.created_at, @@global.time_zone, '+05:30'), '%Y-%m-%d %H:%i:%s') AS created_at_str,
         CAST(cp.payment_date AS CHAR) AS payment_date_str,
         cp.payment_date,
         cp.created_at,
@@ -233,7 +235,7 @@ export const getBankTransactions = async (req, res, next) => {
         ep.amount,
         e.amount AS total_bill_amount,
         e.id AS expense_id,
-        CAST(ep.created_at AS CHAR) AS created_at_str,
+        DATE_FORMAT(CONVERT_TZ(ep.created_at, @@global.time_zone, '+05:30'), '%Y-%m-%d %H:%i:%s') AS created_at_str,
         CAST(ep.payment_date AS CHAR) AS payment_date_str,
         ep.payment_date,
         ep.created_at,
@@ -267,7 +269,7 @@ export const getBankTransactions = async (req, res, next) => {
         l.id,
         'debit' AS txn_type,
         l.advance_amount AS amount,
-        CAST(l.created_at AS CHAR) AS created_at_str,
+        DATE_FORMAT(CONVERT_TZ(l.created_at, @@global.time_zone, '+05:30'), '%Y-%m-%d %H:%i:%s') AS created_at_str,
         CAST(l.joining_date AS CHAR) AS payment_date_str,
         l.joining_date AS payment_date,
         l.created_at,
@@ -311,7 +313,7 @@ export const getBankTransactions = async (req, res, next) => {
         wp.remarks,
         wp.created_by,
         wp.created_at,
-        CAST(wp.created_at AS CHAR) AS created_at_str,
+        DATE_FORMAT(CONVERT_TZ(wp.created_at, @@global.time_zone, '+05:30'), '%Y-%m-%d %H:%i:%s') AS created_at_str,
         CAST(wp.payment_date AS CHAR) AS payment_date_str,
         l.name AS worker_name,
         l.phone AS worker_phone,
@@ -333,7 +335,7 @@ export const getBankTransactions = async (req, res, next) => {
       SELECT 
         id,
         amount,
-        CAST(created_at AS CHAR) AS created_at_str,
+        DATE_FORMAT(CONVERT_TZ(created_at, @@global.time_zone, '+05:30'), '%Y-%m-%d %H:%i:%s') AS created_at_str,
         CAST(date AS CHAR) AS payment_date_str,
         date AS payment_date,
         created_at,
