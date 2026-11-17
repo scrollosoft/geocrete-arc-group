@@ -23,7 +23,7 @@ export const connectDB = async () => {
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    timezone: '+00:00',
+    timezone: '+05:30',
     dateStrings: false,
   })
 
