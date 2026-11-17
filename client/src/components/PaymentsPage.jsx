@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
 import { Plus, Wallet } from 'lucide-react'
 import AddBankModal from './AddBankModal.jsx'
+import EditBankModal from './EditBankModal.jsx'
 import AddCashModal from './AddCashModal.jsx'
+import EditCashModal from './EditCashModal.jsx'
 import ManageCashModal from './ManageCashModal.jsx'
 import TransactionHistory from './TransactionHistory.jsx'
 
@@ -32,7 +34,9 @@ export default function PaymentsPage({
   showNotification,
 }) {
   const [isAddBankOpen, setIsAddBankOpen] = useState(false)
+  const [editingBank, setEditingBank] = useState(null)
   const [isAddCashOpen, setIsAddCashOpen] = useState(false)
+  const [isEditCashOpen, setIsEditCashOpen] = useState(false)
   const [isManageCashOpen, setIsManageCashOpen] = useState(false)
   const [txnRefreshTrigger, setTxnRefreshTrigger] = useState(0)
 
@@ -47,6 +51,20 @@ export default function PaymentsPage({
   const emptySlotsCount = Math.max(0, 3 - displayBankAccounts.length)
 
   const handleBankCreated = async () => {
+    if (onRefreshAccounts) {
+      await onRefreshAccounts()
+    }
+    setTxnRefreshTrigger((prev) => prev + 1)
+  }
+
+  const handleBankUpdated = async () => {
+    if (onRefreshAccounts) {
+      await onRefreshAccounts()
+    }
+    setTxnRefreshTrigger((prev) => prev + 1)
+  }
+
+  const handleBankDeleted = async () => {
     if (onRefreshAccounts) {
       await onRefreshAccounts()
     }
@@ -121,9 +139,12 @@ export default function PaymentsPage({
             {cashAccount && (
               <div
                 className="payment-bank-card payment-cash-card"
+                onClick={() => setIsEditCashOpen(true)}
                 style={{
                   borderTop: '3.5px solid #10B981',
+                  cursor: 'pointer',
                 }}
+                title="Click to edit or delete cash"
               >
                 <div className="payment-bank-card-top">
                   <span className="payment-bank-tag" style={{ color: '#047857', fontWeight: 700 }}>
@@ -133,8 +154,11 @@ export default function PaymentsPage({
                     <button
                       type="button"
                       className="payment-cash-manage-btn"
-                      onClick={() => setIsManageCashOpen(true)}
-                      title="Manage cash records (Edit / Delete)"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setIsEditCashOpen(true)
+                      }}
+                      title="Manage cash (Edit / Delete)"
                       style={{
                         fontSize: '11px',
                         fontWeight: 600,
@@ -192,9 +216,12 @@ export default function PaymentsPage({
                 <div
                   key={account._id || account.id || index}
                   className="payment-bank-card"
+                  onClick={() => setEditingBank(account)}
                   style={{
                     borderTop: `3.5px solid ${accent}`,
+                    cursor: 'pointer',
                   }}
+                  title="Click to edit or delete bank account"
                 >
                   <div className="payment-bank-card-top">
                     <span className="payment-bank-tag">{tag}</span>
@@ -268,6 +295,17 @@ export default function PaymentsPage({
         showNotification={showNotification}
       />
 
+      {/* Edit / Delete Bank Modal */}
+      <EditBankModal
+        isOpen={Boolean(editingBank)}
+        account={editingBank}
+        onClose={() => setEditingBank(null)}
+        onBankUpdated={handleBankUpdated}
+        onBankDeleted={handleBankDeleted}
+        existingAccounts={bankAccounts}
+        showNotification={showNotification}
+      />
+
       {/* Add Cash Modal */}
       <AddCashModal
         isOpen={isAddCashOpen}
@@ -276,11 +314,21 @@ export default function PaymentsPage({
         showNotification={showNotification}
       />
 
-      {/* Manage Cash Modal (Edit / Delete) */}
+      {/* Manage Cash Modal */}
       <ManageCashModal
         isOpen={isManageCashOpen}
         onClose={() => setIsManageCashOpen(false)}
         onCashUpdated={handleCashChanged}
+        showNotification={showNotification}
+      />
+
+      {/* Edit / Delete Cash Modal */}
+      <EditCashModal
+        isOpen={isEditCashOpen}
+        onClose={() => setIsEditCashOpen(false)}
+        cashAccount={cashAccount}
+        onCashUpdated={handleCashChanged}
+        onCashDeleted={handleCashChanged}
         showNotification={showNotification}
       />
     </div>

@@ -47,6 +47,20 @@ export default function Sidebar({ activeTab, setActiveTab }) {
     setIsMoreOpen(false)
   }, [activeTab])
 
+  // Prevent background scrolling when more menu is open
+  useEffect(() => {
+    if (isMoreOpen) {
+      const origBodyOverflow = document.body.style.overflow
+      const origHtmlOverflow = document.documentElement.style.overflow
+      document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = origBodyOverflow
+        document.documentElement.style.overflow = origHtmlOverflow
+      }
+    }
+  }, [isMoreOpen])
+
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -147,6 +161,8 @@ export default function Sidebar({ activeTab, setActiveTab }) {
         <div
           className="mobile-more-backdrop"
           onClick={() => setIsMoreOpen(false)}
+          onTouchMove={(e) => e.preventDefault()}
+          style={{ touchAction: 'none' }}
         />
       )}
 

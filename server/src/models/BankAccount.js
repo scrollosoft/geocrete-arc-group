@@ -124,7 +124,16 @@ export const BankAccount = {
   async delete(id) {
     const existing = await this.findById(id)
     if (!existing) return null
-    await getPool().query('DELETE FROM bank_accounts WHERE id = ?', [id])
+    const pool = getPool()
+    // Nullify references in linked tables so foreign key constraints do not block deletion
+    await pool.query('UPDATE worker_payments SET bank_account_id = NULL WHERE bank_account_id = ?', [id]).catch(() => {})
+    await pool.query('UPDATE labours SET bank_account_id = NULL WHERE bank_account_id = ?', [id]).catch(() => {})
+    await pool.query('UPDATE expenses SET bank_account_id = NULL WHERE bank_account_id = ?', [id]).catch(() => {})
+    await pool.query('UPDATE expense_payments SET bank_account_id = NULL WHERE bank_account_id = ?', [id]).catch(() => {})
+    await pool.query('UPDATE client_payments SET bank_account_id = NULL WHERE bank_account_id = ?', [id]).catch(() => {})
+    await pool.query('UPDATE materials SET bank_account_id = NULL WHERE bank_account_id = ?', [id]).catch(() => {})
+    await pool.query('UPDATE consulting SET bank_account_id = NULL WHERE bank_account_id = ?', [id]).catch(() => {})
+    await pool.query('DELETE FROM bank_accounts WHERE id = ?', [id])
     return existing
   },
 
