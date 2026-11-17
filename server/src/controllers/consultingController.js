@@ -354,14 +354,20 @@ export const updateConsulting = async (req, res, next) => {
     const oldBankId = existing.bank_account_id ? Number(existing.bank_account_id) : null
     const oldReceived = Number(existing.total_received || 0)
 
-    if (oldBankId && oldReceived > 0) {
-      // Reverse old bank credit
-      await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [oldReceived, oldBankId])
-    }
-
-    if (validBankId && numReceived > 0) {
-      // Apply new bank credit
-      await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [numReceived, validBankId])
+    if (oldBankId === validBankId) {
+      // Same bank: adjust by difference only (credit direction, so +diff)
+      const diff = numReceived - oldReceived
+      if (diff !== 0 && validBankId) {
+        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [diff, validBankId])
+      }
+    } else {
+      // Bank changed: reverse old credit from old bank, apply new credit to new bank
+      if (oldBankId && oldReceived > 0) {
+        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [oldReceived, oldBankId])
+      }
+      if (validBankId && numReceived > 0) {
+        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [numReceived, validBankId])
+      }
     }
 
     // Update sites row

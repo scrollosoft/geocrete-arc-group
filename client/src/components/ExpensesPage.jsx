@@ -827,11 +827,6 @@ export default function ExpensesPage({
           </table>
         </div>
 
-        {/* Scrollbar Indicator Bar */}
-        <div className="sites-scrollbar-indicator">
-          <div className="scrollbar-thumb-indicator" />
-        </div>
-
         {/* 5. Pagination Footer */}
         <div className="sites-pagination-row">
           <div className="pagination-left">

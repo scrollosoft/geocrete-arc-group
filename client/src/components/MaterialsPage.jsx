@@ -821,13 +821,6 @@ export default function MaterialsPage({
           </table>
         </div>
 
-        {/* Scrollbar Indicator Bar */}
-        <div style={{ padding: '0 20px', marginTop: '12px' }}>
-          <div className="sites-scrollbar-indicator" style={{ margin: '0' }}>
-            <div className="scrollbar-thumb-indicator" style={{ width: '22%' }}></div>
-          </div>
-        </div>
-
         {/* Pagination Footer */}
         <div className="sites-pagination-row" style={{ padding: '16px 20px 0 20px', margin: '0' }}>
           <div className="pagination-left">

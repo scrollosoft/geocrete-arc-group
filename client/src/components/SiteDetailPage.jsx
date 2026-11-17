@@ -44,7 +44,7 @@ export default function SiteDetailPage({
     setLoadingPayments(true)
     setLoadingLabour(true)
     Promise.all([
-      materialService.getAll({ siteId }).catch(() => ({ materials: [] })),
+      materialService.getAll({ siteId, grouped: false }).catch(() => ({ materials: [] })),
       supplierService.getAll().catch(() => []),
       expenseService.getAll({ siteId }).catch(() => ({ expenses: [] })),
       siteService.getPayments(siteId).catch(() => []),
@@ -116,10 +116,15 @@ export default function SiteDetailPage({
     return eSiteName && targetName && eSiteName === targetName
   })
 
-  // Material purchase records for the Materials tab (siteMaterials is the primary source of truth)
-  const materialRecords = siteMaterials.length > 0
-    ? siteMaterials
-    : siteExpenses.filter((e) => e.category && !['labour', 'equipment', 'transport', 'fuel', 'utilities'].includes(e.category.toLowerCase()))
+  // Material purchase records for the Materials tab — use individual expense records
+  // so that multiple purchases of the same material on different dates show as separate rows.
+  // siteMaterials (grouped API data) is still used for the Suppliers tab aggregation below.
+  const materialExpenseRecords = siteExpenses.filter(
+    (e) => e.category && !['labour', 'equipment', 'transport', 'fuel', 'utilities'].includes(e.category.toLowerCase())
+  )
+  const materialRecords = materialExpenseRecords.length > 0
+    ? materialExpenseRecords
+    : siteMaterials
 
   // Unique material names for the Materials filter dropdown
   const uniqueMaterialNames = useMemo(() => {

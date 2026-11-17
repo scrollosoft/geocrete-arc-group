@@ -154,7 +154,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       {isMoreOpen && (
         <div className="mobile-more-sheet" role="dialog" aria-modal="true" aria-label="More Menu">
           <div className="mobile-more-header">
-            <span className="mobile-more-title">More Workspace Options</span>
+            <span className="mobile-more-title">More Menu</span>
             <button
               type="button"
               className="mobile-more-close-btn"

@@ -106,6 +106,13 @@ export default function SiteOwnerDetailPage({
       setPayError('Please enter a valid payment amount greater than zero.')
       return
     }
+    const pendingAmt = Number(client?.receivable !== undefined
+      ? client.receivable
+      : Math.max(0, Number(client?.projectValue || 0) - Number(client?.totalReceived || 0)))
+    if (pendingAmt > 0 && amt > pendingAmt) {
+      setPayError(`Amount cannot exceed the pending amount of ₹${pendingAmt.toLocaleString('en-IN')}.`)
+      return
+    }
     if (!payBankAccountId) {
       setPayError('Please select a bank account.')
       return

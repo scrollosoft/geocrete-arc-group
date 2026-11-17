@@ -290,6 +290,7 @@ export default function SitesPage({
           address: editFormData.address,
           projectValue: Number(editFormData.projectValue),
           advanceAmount: Number(editFormData.advanceAmount || 0),
+          totalReceived: Number(editFormData.totalReceived || 0),
           bankAccountId: editFormData.bankAccountId || null,
           startDate: editFormData.startDate || null,
           expectedCompletionDate: editFormData.expectedCompletionDate || null,
@@ -591,11 +592,6 @@ export default function SitesPage({
               )}
             </tbody>
           </table>
-        </div>
-
-        {/* Scroll indicator bar under table */}
-        <div className="sites-scrollbar-indicator">
-          <div className="scrollbar-thumb-indicator" />
         </div>
 
         {/* 5. Dynamic Pagination Footer */}
@@ -940,9 +936,8 @@ export default function SitesPage({
                     type="number"
                     className="form-input"
                     value={editFormData.totalReceived}
-                    readOnly
-                    style={{ background: '#f5f7fa', cursor: 'not-allowed', color: '#6b7c96' }}
-                    tabIndex={-1}
+                    onChange={(e) => setEditFormData({ ...editFormData, totalReceived: e.target.value })}
+                    min="0"
                   />
                 </div>
 

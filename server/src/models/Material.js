@@ -786,19 +786,19 @@ export const Material = {
     const cost = Number(amount) || 0
     const paid = Math.min(cost, Math.max(0, Number(paidAmount) || 0))
 
-    const purchasedQty = Number(existing.quantity || 0)
-    const newUsed = Math.max(0, Number(existing.quantity_used || 0) - qty)
+    const newQuantity = Math.max(0, Number(existing.quantity || 0) - qty)
+    const existingUsed = Number(existing.quantity_used || 0)
     const newCost = Math.max(0, Number(existing.total_cost || 0) - cost)
     const newPaid = Math.min(newCost, Math.max(0, Number(existing.paid_amount || 0) - paid))
     const status = paymentStatusFromAmounts(newCost, newPaid)
-    const unitPrice = purchasedQty > 0 ? Number((newCost / purchasedQty).toFixed(2)) : 0
+    const unitPrice = newQuantity > 0 ? Number((newCost / newQuantity).toFixed(2)) : 0
 
     await conn.query(
       `UPDATE materials
-       SET total_cost = ?, paid_amount = ?, quantity_used = ?,
+       SET quantity = ?, total_cost = ?, paid_amount = ?, quantity_used = ?,
            unit_price = ?, payment_status = ?
        WHERE id = ?`,
-      [newCost, newPaid, newUsed, unitPrice, status, existing.id],
+      [newQuantity, newCost, newPaid, existingUsed, unitPrice, status, existing.id],
     )
     return existing.id
   },
