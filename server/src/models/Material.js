@@ -379,7 +379,19 @@ export const Material = {
       matSql += ' AND m.supplier_id IS NULL'
     }
 
-    const [matRows] = await pool.query(matSql, matParams)
+    let matRows
+    try {
+      const [rows] = await pool.query(matSql, matParams)
+      matRows = rows
+    } catch (matErr) {
+      if (matErr.message && matErr.message.includes('payment_method')) {
+        const fallbackSql = matSql.replace('m.payment_method,', "'Bank Transfer' AS payment_method,")
+        const [rows] = await pool.query(fallbackSql, matParams)
+        matRows = rows
+      } else {
+        throw matErr
+      }
+    }
 
     // Also include any unapplied material expenses with matching category & site & supplier
     let expSql = `
@@ -739,29 +751,91 @@ export const Material = {
       const refNumber = data.refNumber || (await this.generateRefNumber())
       const status = paymentStatusFromAmounts(cost, paid)
       const paymentMethod = data.paymentMethod || data.payment_method || 'Bank Transfer'
-      const [result] = await conn.query(
-        `INSERT INTO materials
-          (ref_number, purchase_date, site_id, supplier_id, bank_account_id, category,
-           quantity, unit, unit_price, total_cost, paid_amount, quantity_used, payment_status, payment_method, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          refNumber,
-          purchaseDate,
-          siteId,
-          supplierId || null,
-          bankAccountId,
-          materialName || data.category || 'Other',
-          qty,
-          data.unit || 'Units',
-          Number(data.unitPrice) || (qty > 0 ? Number((cost / qty).toFixed(2)) : 0),
-          cost,
-          paid,
-          addUsed,
-          status,
-          paymentMethod,
-          data.notes || '',
-        ],
-      )
+      let result
+      try {
+        const [insertRes] = await conn.query(
+          `INSERT INTO materials
+            (ref_number, purchase_date, site_id, supplier_id, bank_account_id, category,
+             quantity, unit, unit_price, total_cost, paid_amount, quantity_used, payment_status, payment_method, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            refNumber,
+            purchaseDate,
+            siteId,
+            supplierId || null,
+            bankAccountId,
+            materialName || data.category || 'Other',
+            qty,
+            data.unit || 'Units',
+            Number(data.unitPrice) || (qty > 0 ? Number((cost / qty).toFixed(2)) : 0),
+            cost,
+            paid,
+            addUsed,
+            status,
+            paymentMethod,
+            data.notes || '',
+          ],
+        )
+        result = insertRes
+      } catch (insertErr) {
+        if (insertErr.message && insertErr.message.includes('payment_method')) {
+          try {
+            await conn.query(
+              `ALTER TABLE materials ADD COLUMN payment_method VARCHAR(50) NOT NULL DEFAULT 'Bank Transfer' AFTER payment_status`,
+            )
+            const [retryRes] = await conn.query(
+              `INSERT INTO materials
+                (ref_number, purchase_date, site_id, supplier_id, bank_account_id, category,
+                 quantity, unit, unit_price, total_cost, paid_amount, quantity_used, payment_status, payment_method, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                refNumber,
+                purchaseDate,
+                siteId,
+                supplierId || null,
+                bankAccountId,
+                materialName || data.category || 'Other',
+                qty,
+                data.unit || 'Units',
+                Number(data.unitPrice) || (qty > 0 ? Number((cost / qty).toFixed(2)) : 0),
+                cost,
+                paid,
+                addUsed,
+                status,
+                paymentMethod,
+                data.notes || '',
+              ],
+            )
+            result = retryRes
+          } catch {
+            const [fallbackRes] = await conn.query(
+              `INSERT INTO materials
+                (ref_number, purchase_date, site_id, supplier_id, bank_account_id, category,
+                 quantity, unit, unit_price, total_cost, paid_amount, quantity_used, payment_status, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                refNumber,
+                purchaseDate,
+                siteId,
+                supplierId || null,
+                bankAccountId,
+                materialName || data.category || 'Other',
+                qty,
+                data.unit || 'Units',
+                Number(data.unitPrice) || (qty > 0 ? Number((cost / qty).toFixed(2)) : 0),
+                cost,
+                paid,
+                addUsed,
+                status,
+                data.notes || '',
+              ],
+            )
+            result = fallbackRes
+          }
+        } else {
+          throw insertErr
+        }
+      }
       if (shouldManageTransaction) await conn.commit()
       return this.findById(result.insertId)
     } catch (err) {

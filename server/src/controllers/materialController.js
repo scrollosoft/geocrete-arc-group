@@ -614,39 +614,116 @@ export const updateMaterial = async (req, res, next) => {
 
     // --- UPDATE DATABASE RECORDS ---
     if (existingMat) {
-      await conn.query(
-        `UPDATE materials SET
-          purchase_date = ?,
-          site_id = ?,
-          supplier_id = ?,
-          bank_account_id = ?,
-          category = ?,
-          quantity = ?,
-          unit = ?,
-          unit_price = ?,
-          total_cost = ?,
-          paid_amount = ?,
-          payment_status = ?,
-          payment_method = ?,
-          notes = ?
-         WHERE id = ?`,
-        [
-          purchaseDate,
-          siteId,
-          supplierId,
-          bankAccountId,
-          materialName,
-          quantity,
-          unit,
-          ratePerUnit,
-          totalCost,
-          numPaid,
-          calculatedStatus,
-          paymentMethod,
-          notes,
-          existingMat.id,
-        ]
-      )
+      try {
+        await conn.query(
+          `UPDATE materials SET
+            purchase_date = ?,
+            site_id = ?,
+            supplier_id = ?,
+            bank_account_id = ?,
+            category = ?,
+            quantity = ?,
+            unit = ?,
+            unit_price = ?,
+            total_cost = ?,
+            paid_amount = ?,
+            payment_status = ?,
+            payment_method = ?,
+            notes = ?
+           WHERE id = ?`,
+          [
+            purchaseDate,
+            siteId,
+            supplierId,
+            bankAccountId,
+            materialName,
+            quantity,
+            unit,
+            ratePerUnit,
+            totalCost,
+            numPaid,
+            calculatedStatus,
+            paymentMethod,
+            notes,
+            existingMat.id,
+          ],
+        )
+      } catch (matErr) {
+        if (matErr.message && matErr.message.includes('payment_method')) {
+          try {
+            await conn.query(
+              `ALTER TABLE materials ADD COLUMN payment_method VARCHAR(50) NOT NULL DEFAULT 'Bank Transfer' AFTER payment_status`,
+            )
+            await conn.query(
+              `UPDATE materials SET
+                purchase_date = ?,
+                site_id = ?,
+                supplier_id = ?,
+                bank_account_id = ?,
+                category = ?,
+                quantity = ?,
+                unit = ?,
+                unit_price = ?,
+                total_cost = ?,
+                paid_amount = ?,
+                payment_status = ?,
+                payment_method = ?,
+                notes = ?
+               WHERE id = ?`,
+              [
+                purchaseDate,
+                siteId,
+                supplierId,
+                bankAccountId,
+                materialName,
+                quantity,
+                unit,
+                ratePerUnit,
+                totalCost,
+                numPaid,
+                calculatedStatus,
+                paymentMethod,
+                notes,
+                existingMat.id,
+              ],
+            )
+          } catch {
+            await conn.query(
+              `UPDATE materials SET
+                purchase_date = ?,
+                site_id = ?,
+                supplier_id = ?,
+                bank_account_id = ?,
+                category = ?,
+                quantity = ?,
+                unit = ?,
+                unit_price = ?,
+                total_cost = ?,
+                paid_amount = ?,
+                payment_status = ?,
+                notes = ?
+               WHERE id = ?`,
+              [
+                purchaseDate,
+                siteId,
+                supplierId,
+                bankAccountId,
+                materialName,
+                quantity,
+                unit,
+                ratePerUnit,
+                totalCost,
+                numPaid,
+                calculatedStatus,
+                notes,
+                existingMat.id,
+              ],
+            )
+          }
+        } else {
+          throw matErr
+        }
+      }
 
       // Sync linked expenses record so Payments page and Transaction History stay 100% in sync
       const [[matchedExp]] = await conn.query(
