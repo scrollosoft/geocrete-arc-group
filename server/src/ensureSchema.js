@@ -37,6 +37,15 @@ export async function ensureSchema() {
     console.log('Added materials.paid_amount column')
   }
 
+  if (!(await columnExists(pool, 'materials', 'payment_method'))) {
+    await pool.query(
+      `ALTER TABLE materials
+       ADD COLUMN payment_method VARCHAR(50) NOT NULL DEFAULT 'Bank Transfer'
+       AFTER payment_status`,
+    )
+    console.log('Added materials.payment_method column')
+  }
+
   if (!(await columnExists(pool, 'expenses', 'applied_to_material'))) {
     await pool.query(
       `ALTER TABLE expenses
