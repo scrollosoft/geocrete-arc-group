@@ -722,6 +722,11 @@
   justify-content: center;
   gap: 6px;
   transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-add-expense-submit span {
+  white-space: nowrap;
 }
 
 .btn-add-expense-submit:hover:not(:disabled) {

@@ -707,7 +707,7 @@ export default function LabourPage({
           </div>
 
           {/* 2. Three Stat Cards for the Worker */}
-          <div className="sites-stat-grid">
+          <div className="sites-stat-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
             {/* Card 1: Total Amount */}
             <div className="site-stat-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

@@ -444,14 +444,15 @@ export default function DailyExpenseForm({
             </div>
           </div>
 
-          <div className="form-group form-submit-group">
+          <div className="form-group form-submit-group" style={{ minWidth: '125px' }}>
             <button
               type="submit"
               className="btn btn-add-expense-submit"
               disabled={submitting}
+              style={{ whiteSpace: 'nowrap' }}
             >
-              <Plus size={16} />
-              <span>{submitting ? 'Recording...' : 'Add Expense'}</span>
+              <Plus size={16} style={{ flexShrink: 0 }} />
+              <span style={{ whiteSpace: 'nowrap' }}>{submitting ? 'Recording...' : 'Add Expense'}</span>
             </button>
           </div>
         </div>
