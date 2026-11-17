@@ -143,6 +143,11 @@ export const deleteBankAccount = async (req, res, next) => {
   }
 }
 
+// IST offset in ms (UTC+05:30). DB strings arrive already converted to IST
+// by mysql2 (timezone: '+05:30'), so we treat parsed values as IST when
+// building a UTC-based rawTimestamp for consistent cross-environment sorting.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+
 function formatActualDateTime(rawDbStr, fallbackDate) {
   const str = String(rawDbStr || fallbackDate || '').trim()
   const match = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/)
@@ -158,10 +163,12 @@ function formatActualDateTime(rawDbStr, fallbackDate) {
     const period = hour24 >= 12 ? 'pm' : 'am'
     const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12
     const minutePad = String(minute).padStart(2, '0')
+    // Build rawTimestamp as UTC ms: treat parsed values as IST, subtract offset
+    const rawTimestamp = Date.UTC(year, month, day, hour24, minute) - IST_OFFSET_MS
     return {
       date: `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
       dateTime: `${day} ${monthName} ${year}, ${hour12}:${minutePad} ${period}`,
-      rawTimestamp: new Date(year, month, day, hour24, minute).getTime(),
+      rawTimestamp,
     }
   }
   const d = new Date(str)
