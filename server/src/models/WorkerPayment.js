@@ -495,6 +495,23 @@ export const WorkerPayment = {
         params.push(workerId)
         await conn.query(`UPDATE labours SET ${updates.join(', ')} WHERE id = ?`, params)
 
+        // Keep linked worker_payments record in sync if one exists for this initial advance
+        const [[linkedPayment]] = await conn.query(
+          `SELECT id FROM worker_payments 
+           WHERE worker_id = ? AND payment_type = 'Advance Payment' 
+             AND (reference_id = CONCAT('TXN-WRK-', LPAD(worker_id, 4, '0')) OR reference_id = CONCAT('TXN-WRK-', worker_id))
+           LIMIT 1`,
+          [workerId]
+        )
+        if (linkedPayment) {
+          await conn.query(
+            `UPDATE worker_payments
+             SET bank_account_id = ?, amount = ?, payment_date = COALESCE(?, payment_date), remarks = COALESCE(?, remarks), updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [newBankId || null, newAmount, newDate || null, remarks !== undefined ? remarks : null, linkedPayment.id]
+          )
+        }
+
         await conn.commit()
         return { id, amount: newAmount, paymentDate: newDate, bankAccountId: newBankId }
       }
@@ -564,6 +581,11 @@ export const WorkerPayment = {
       const effectiveInitial = initialInPayments > 0 ? 0 : initialAdvance
       const newTotalPaid = effectiveInitial + Number(paySum?.total_extra || 0)
       await conn.query('UPDATE labours SET total_paid = ? WHERE id = ?', [newTotalPaid, existing.worker_id])
+
+      // If this was an advance payment linked to labour's initial advance, sync labours.advance_amount
+      if (existing.payment_type === 'Advance Payment' && (existing.reference_id === `TXN-WRK-${String(existing.worker_id).padStart(4, '0')}` || existing.reference_id === `TXN-WRK-${existing.worker_id}`)) {
+        await conn.query('UPDATE labours SET advance_amount = ?, bank_account_id = ? WHERE id = ?', [newAmount, newBankId || null, existing.worker_id])
+      }
 
       await conn.commit()
       return { id, amount: newAmount, paymentDate: newDate, paymentType: newType, bankAccountId: newBankId, remarks: newRemarks }

@@ -254,24 +254,103 @@ export const updateLabour = async (req, res, next) => {
       )
     }
 
-    // 2. Recalculate worker's total_paid in labours table
-    // Total Paid = (initial advance if not in worker_payments) + (sum of worker_payments)
-    const [[paySum]] = await conn.query(
-      `SELECT
-        COALESCE(SUM(amount), 0) AS total_extra,
-        COALESCE(SUM(CASE WHEN payment_type = 'Advance Payment' AND (reference_id = CONCAT('TXN-WRK-', LPAD(worker_id, 4, '0')) OR reference_id = CONCAT('TXN-WRK-', worker_id)) THEN amount ELSE 0 END), 0) AS initial_in_payments
-       FROM worker_payments WHERE worker_id = ?`,
-      [id],
-    )
-    const initialAdvance = Number(existingWorker.advanceAmount || 0)
-    const initialInPayments = Number(paySum.initial_in_payments || 0)
-    const effectiveInitial = initialInPayments > 0 ? 0 : initialAdvance
-    const calculatedPaid = effectiveInitial + Number(paySum.total_extra || 0)
-    const newTotalPaid = numAdditionalAdvance > 0
-      ? calculatedPaid
-      : (totalPaid !== undefined ? Number(totalPaid) : calculatedPaid)
+    // 2. Determine target total paid and effective bank
+    const oldPaid = Number(existingWorker.totalPaid || 0)
+    const oldBankId = existingWorker.bankAccountId ? Number(existingWorker.bankAccountId) : null
+    const effectiveBankId = bankAccountId !== undefined
+      ? (bankAccountId ? Number(bankAccountId) : null)
+      : oldBankId
 
-    // 3. Update worker details in labours table
+    let newTotalPaid = oldPaid
+    if (numAdditionalAdvance > 0) {
+      newTotalPaid = oldPaid + numAdditionalAdvance
+    } else if (totalPaid !== undefined && totalPaid !== '') {
+      newTotalPaid = Number(totalPaid)
+    }
+
+    // 3. Bank balance adjustment for difference in total paid
+    if (numAdditionalAdvance === 0) {
+      const paidDiff = newTotalPaid - oldPaid
+      if (oldBankId === effectiveBankId) {
+        if (paidDiff !== 0 && effectiveBankId) {
+          // paidDiff > 0: paid more, deduct from bank. paidDiff < 0: paid less, refund to bank
+          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [paidDiff, effectiveBankId])
+        }
+      } else {
+        // Bank changed: refund old paid from old bank, deduct new paid from new bank
+        if (oldBankId && oldPaid > 0) {
+          await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [oldPaid, oldBankId])
+        }
+        if (effectiveBankId && newTotalPaid > 0) {
+          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [newTotalPaid, effectiveBankId])
+        }
+      }
+    }
+
+    // 4. Sync worker_payments records so total paid & transactions match
+    if (numAdditionalAdvance === 0 && (newTotalPaid !== oldPaid || oldBankId !== effectiveBankId)) {
+      const [payments] = await conn.query(
+        'SELECT id, amount, payment_type, reference_id FROM worker_payments WHERE worker_id = ? ORDER BY id ASC',
+        [id],
+      )
+
+      if (payments.length > 0) {
+        if (payments.length === 1) {
+          await conn.query(
+            'UPDATE worker_payments SET amount = ?, bank_account_id = ? WHERE id = ?',
+            [newTotalPaid, effectiveBankId, payments[0].id],
+          )
+          if (payments[0].payment_type === 'Advance Payment') {
+            await conn.query('UPDATE labours SET advance_amount = ? WHERE id = ?', [newTotalPaid, id])
+          }
+        } else {
+          const firstPay = payments[0]
+          const firstAmt = Number(firstPay.amount || 0)
+
+          if (newTotalPaid >= firstAmt) {
+            if (effectiveBankId) {
+              await conn.query('UPDATE worker_payments SET bank_account_id = ? WHERE id = ?', [effectiveBankId, firstPay.id])
+            }
+            const remainingTarget = newTotalPaid - firstAmt
+            const otherPayments = payments.slice(1)
+            const lastPay = otherPayments[otherPayments.length - 1]
+            const intermediateSum = otherPayments.slice(0, -1).reduce((s, p) => s + Number(p.amount || 0), 0)
+            const lastAmount = Math.max(0, remainingTarget - intermediateSum)
+
+            for (const p of otherPayments.slice(0, -1)) {
+              if (effectiveBankId) {
+                await conn.query('UPDATE worker_payments SET bank_account_id = ? WHERE id = ?', [effectiveBankId, p.id])
+              }
+            }
+            await conn.query(
+              'UPDATE worker_payments SET amount = ?, bank_account_id = ? WHERE id = ?',
+              [lastAmount, effectiveBankId, lastPay.id],
+            )
+          } else {
+            await conn.query(
+              'UPDATE worker_payments SET amount = ?, bank_account_id = ? WHERE id = ?',
+              [newTotalPaid, effectiveBankId, firstPay.id],
+            )
+            if (firstPay.payment_type === 'Advance Payment') {
+              await conn.query('UPDATE labours SET advance_amount = ? WHERE id = ?', [newTotalPaid, id])
+            }
+            await conn.query('DELETE FROM worker_payments WHERE worker_id = ? AND id != ?', [id, firstPay.id])
+          }
+        }
+      } else if (newTotalPaid > 0) {
+        const formattedDate = new Date().toISOString().slice(0, 10)
+        const referenceId = `TXN-WRK-${String(id).padStart(4, '0')}`
+        await conn.query(
+          `INSERT INTO worker_payments
+            (worker_id, site_id, bank_account_id, payment_date, amount, payment_type, payment_method, reference_id, remarks, created_by)
+           VALUES (?, ?, ?, ?, ?, 'Advance Payment', 'Bank Transfer', ?, 'Payment', 'Admin')`,
+          [id, existingWorker.site?._id || existingWorker.site || null, effectiveBankId, formattedDate, newTotalPaid, referenceId],
+        )
+        await conn.query('UPDATE labours SET advance_amount = ? WHERE id = ?', [newTotalPaid, id])
+      }
+    }
+
+    // 5. Update worker details in labours table
     const updateData = {
       name: name !== undefined ? name.trim() : undefined,
       phone: phone !== undefined ? phone.trim() : undefined,
@@ -279,6 +358,7 @@ export const updateLabour = async (req, res, next) => {
       dailyRate: dailyRate !== undefined ? Number(dailyRate) : undefined,
       wagesEarned: wagesEarned !== undefined ? Number(wagesEarned) : undefined,
       totalPaid: newTotalPaid,
+      bankAccountId: effectiveBankId,
       address: address !== undefined ? address.trim() : undefined,
       remarks: remarks !== undefined ? remarks.trim() : undefined,
     }

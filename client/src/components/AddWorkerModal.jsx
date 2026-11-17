@@ -194,7 +194,7 @@ export default function AddWorkerModal({
       if (showNotification) {
         showNotification({
           type: 'success',
-          message: `Worker "${newWorker.name}" added successfully and saved to database!`,
+          message: `Worker "${newWorker.name}" added successfully!`,
         })
       }
 

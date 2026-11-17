@@ -290,13 +290,6 @@ export default function SupplierDetailPage({
           </table>
         </div>
 
-        {/* Scrollbar indicator */}
-        <div style={{ padding: '0 20px', marginTop: '12px' }}>
-          <div className="sites-scrollbar-indicator" style={{ margin: 0 }}>
-            <div className="scrollbar-thumb-indicator" style={{ width: '30%' }} />
-          </div>
-        </div>
-
         {/* Pagination */}
         <div className="sites-pagination-row" style={{ padding: '14px 20px 0', margin: 0 }}>
           <div className="pagination-left">

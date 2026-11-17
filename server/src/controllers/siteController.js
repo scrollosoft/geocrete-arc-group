@@ -254,6 +254,7 @@ export const updateSite = async (req, res, next) => {
       totalBudget,
       projectValue,
       advanceAmount,
+      totalReceived,
       bankAccountId,
       startDate,
       expectedCompletionDate,
@@ -311,6 +312,13 @@ export const updateSite = async (req, res, next) => {
       return res.status(400).json({ error: 'Advance amount cannot exceed total project value' })
     }
 
+    // Direct total received value from form
+    const newTotalReceived =
+      totalReceived !== undefined && totalReceived !== '' ? Number(totalReceived) : 0
+    if (isNaN(newTotalReceived) || newTotalReceived < 0) {
+      return res.status(400).json({ error: 'Total received amount must be a non-negative number' })
+    }
+
     const addlReceived =
       additionalReceived !== undefined && additionalReceived !== '' ? Number(additionalReceived) : 0
     if (isNaN(addlReceived) || addlReceived < 0) {
@@ -336,7 +344,21 @@ export const updateSite = async (req, res, next) => {
     // --- Atomic transaction ---
     await connection.beginTransaction()
 
-    // 1. Update sites row (total_received is NOT touched here — only via payment records)
+    // Read current site state inside the transaction (locked for consistency)
+    const [currentSiteRows] = await connection.query(
+      'SELECT total_received, bank_account_id FROM sites WHERE id = ? LIMIT 1',
+      [siteId]
+    )
+    if (currentSiteRows.length === 0) {
+      await connection.rollback()
+      return res.status(404).json({ error: 'Site not found' })
+    }
+    const oldTotalReceived = Number(currentSiteRows[0].total_received || 0)
+    // If user didn't select a bank in the dropdown, keep the existing bank on the site
+    const effectiveBankId = validBankId || (currentSiteRows[0].bank_account_id ? Number(currentSiteRows[0].bank_account_id) : null)
+    const diff = newTotalReceived - oldTotalReceived
+
+    // 1. Update sites row (total_received set directly; preserve bank if not changed)
     await connection.query(
       `UPDATE sites SET
         name = ?,
@@ -347,6 +369,7 @@ export const updateSite = async (req, res, next) => {
         address = ?,
         total_budget = ?,
         advance_amount = ?,
+        total_received = ?,
         bank_account_id = ?,
         start_date = ?,
         expected_completion_date = ?,
@@ -362,7 +385,8 @@ export const updateSite = async (req, res, next) => {
         (address || '').trim(),
         projectVal,
         adv,
-        validBankId,
+        newTotalReceived,
+        effectiveBankId,
         cleanStartDate,
         cleanCompletionDate,
         status || 'Active',
@@ -371,7 +395,102 @@ export const updateSite = async (req, res, next) => {
       ]
     )
 
-    // 2. If additional payment, record it atomically
+    // 2. Sync site_owners with updated values
+    let ownerId = null
+    const [ownerSyncRows] = await connection.query(
+      'SELECT id FROM site_owners WHERE site_id = ? LIMIT 1',
+      [siteId]
+    )
+    if (ownerSyncRows.length > 0) {
+      ownerId = ownerSyncRows[0].id
+      await connection.query(
+        `UPDATE site_owners SET
+          name = ?,
+          phone = ?,
+          email = ?,
+          address = ?,
+          project_value = ?,
+          advance_amount = ?,
+          total_received = ?,
+          notes = ?
+         WHERE id = ?`,
+        [
+          siteOwner.trim(),
+          finalContact,
+          trimmedEmail,
+          (address || '').trim(),
+          projectVal,
+          adv,
+          newTotalReceived,
+          description || '',
+          ownerId,
+        ]
+      )
+    }
+
+    // 3. Update existing client payments and bank balances
+    const [existingPayments] = await connection.query(
+      'SELECT id, amount, bank_account_id FROM client_payments WHERE site_id = ? ORDER BY id ASC',
+      [siteId]
+    )
+
+    if (existingPayments.length === 1) {
+      const prevPay = existingPayments[0]
+      const prevAmt = Number(prevPay.amount || 0)
+      const prevBank = prevPay.bank_account_id ? Number(prevPay.bank_account_id) : null
+
+      // Revert previous payment amount from previous bank
+      if (prevBank && prevAmt > 0) {
+        await connection.query(
+          'UPDATE bank_accounts SET balance = balance - ? WHERE id = ?',
+          [prevAmt, prevBank]
+        )
+      }
+      // Apply new payment amount to effective bank
+      if (effectiveBankId && newTotalReceived > 0) {
+        await connection.query(
+          'UPDATE bank_accounts SET balance = balance + ? WHERE id = ?',
+          [newTotalReceived, effectiveBankId]
+        )
+      }
+      // Update existing payment record to reflect new amount and bank
+      await connection.query(
+        'UPDATE client_payments SET amount = ?, bank_account_id = ? WHERE id = ?',
+        [newTotalReceived, effectiveBankId, prevPay.id]
+      )
+    } else if (existingPayments.length > 1) {
+      const prevSum = existingPayments.reduce((acc, p) => acc + Number(p.amount || 0), 0)
+      const diffAmt = newTotalReceived - prevSum
+      if (diffAmt !== 0) {
+        const lastPay = existingPayments[existingPayments.length - 1]
+        const targetBank = effectiveBankId || (lastPay.bank_account_id ? Number(lastPay.bank_account_id) : null)
+        if (targetBank) {
+          await connection.query(
+            'UPDATE bank_accounts SET balance = balance + ? WHERE id = ?',
+            [diffAmt, targetBank]
+          )
+        }
+        await connection.query(
+          'UPDATE client_payments SET amount = amount + ? WHERE id = ?',
+          [diffAmt, lastPay.id]
+        )
+      }
+    } else if (newTotalReceived > 0 && effectiveBankId) {
+      // No payment record exists yet, create one
+      const paymentDate = cleanStartDate || new Date().toISOString().slice(0, 10)
+      await connection.query(
+        `INSERT INTO client_payments
+          (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
+         VALUES (?, ?, ?, ?, ?, 'Site Advance Received', 'Bank transfer', 'Payment receipt', 'Paid', 'credit')`,
+        [ownerId, siteId, effectiveBankId, newTotalReceived, paymentDate]
+      )
+      await connection.query(
+        'UPDATE bank_accounts SET balance = balance + ? WHERE id = ?',
+        [newTotalReceived, effectiveBankId]
+      )
+    }
+
+    // 4. If additional payment block (legacy — addlReceived is no longer sent from frontend but kept for safety)
     if (addlReceived > 0 && validBankId) {
       const paymentDate = new Date().toISOString().slice(0, 10)
 

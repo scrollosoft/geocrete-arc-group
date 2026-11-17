@@ -14,7 +14,7 @@ async function insertExpenseForPurchase({ materialId, purchaseDate, siteId, supp
   const dateVal = purchaseDate
     ? (typeof purchaseDate === 'string' ? purchaseDate.slice(0, 10) : new Date(purchaseDate).toISOString().slice(0, 10))
     : new Date().toISOString().slice(0, 10)
-  await conn.query(
+  const [expResult] = await conn.query(
     `INSERT INTO expenses
        (material_id, date, site_id, supplier_id, category, quantity, unit, rate_per_unit, amount, paid_amount, pending_amount, payment_method, remark, status, applied_to_material, bank_account_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
@@ -36,12 +36,33 @@ async function insertExpenseForPurchase({ materialId, purchaseDate, siteId, supp
       bankAccountId || null,
     ]
   )
+  if (paid > 0 && expResult.insertId) {
+    await conn.query(
+      `INSERT INTO expense_payments
+        (expense_id, site_id, supplier_id, bank_account_id, amount, payment_date, payment_method, reference, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        expResult.insertId,
+        siteId,
+        supplierId || null,
+        bankAccountId || null,
+        paid,
+        dateVal,
+        paymentMethod || 'Bank transfer',
+        notes || '',
+        'Material Purchase Payment',
+      ]
+    )
+  }
 }
 
 export const getMaterials = async (req, res, next) => {
   try {
-    const { search, siteId, category, status, sort } = req.query
-    const materials = await Material.findGrouped({ search, siteId, category, status, sort })
+    const { search, siteId, category, status, sort, grouped } = req.query
+    // When grouped=false, return individual (date-wise) records instead of aggregated groups
+    const materials = grouped === 'false'
+      ? await Material.find({ search, siteId, category, status, sort })
+      : await Material.findGrouped({ search, siteId, category, status, sort })
     const summary = await Material.getGroupedSummary({ siteId })
 
     res.json({ materials, summary })
@@ -550,31 +571,12 @@ export const updateMaterial = async (req, res, next) => {
     const refId = existingMat?.ref_number || (existingExp?.remark ? existingExp.remark : (`MAT-${cleanId}`))
     const targetRefundBankId = bankAccountId || oldBankAccountId
 
-    // --- BANK BALANCE MANAGEMENT & REFUND LOGIC ---
-    if (String(bankAccountId || '') !== String(oldBankAccountId || '') && oldBankAccountId) {
-      // Case 3: Bank Account changes
-      // 1. Refund previous paid amount to old bank account
-      if (oldPaid > 0) {
+    // --- BANK BALANCE MANAGEMENT (SAME AS EXPENSE EDIT FORM) ---
+    if (String(bankAccountId || '') !== String(oldBankAccountId || '')) {
+      // Bank account changed — refund old bank, deduct new bank
+      if (oldBankAccountId && oldPaid > 0) {
         await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [oldPaid, oldBankAccountId])
-
-        // Create bank transaction of oldPaid with transaction type Credit / Refund
-        await conn.query(
-          `INSERT INTO client_payments
-             (site_id, client_id, bank_account_id, amount, payment_date, title, payment_method, reference, status)
-           VALUES (?, ?, ?, ?, ?, 'Material Purchase Refund', ?, ?, 'Completed')`,
-          [
-            siteId,
-            siteDoc?.client_id || null,
-            oldBankAccountId,
-            oldPaid,
-            purchaseDate,
-            paymentMethod || 'Bank Transfer',
-            refId ? `REFUND-${refId}` : 'REFUND-PURCHASE',
-          ]
-        )
       }
-
-      // 2. Deduct new paid amount from new bank account
       if (bankAccountId && numPaid > 0) {
         const [[newBankRow]] = await conn.query('SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE', [bankAccountId])
         if (!newBankRow) {
@@ -588,13 +590,11 @@ export const updateMaterial = async (req, res, next) => {
         }
         await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [numPaid, bankAccountId])
       }
-    } else if (targetRefundBankId) {
-      // Same bank account: check difference
+    } else if (bankAccountId) {
+      // Same bank account — adjust only the difference
       const diff = Number((numPaid - oldPaid).toFixed(2))
-
       if (diff > 0) {
-        // Case 1: Paid amount increases — deduct ONLY the difference from bank
-        const [[bankRow]] = await conn.query('SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE', [targetRefundBankId])
+        const [[bankRow]] = await conn.query('SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE', [bankAccountId])
         if (!bankRow) {
           await conn.rollback(); conn.release()
           return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
@@ -604,31 +604,10 @@ export const updateMaterial = async (req, res, next) => {
           await conn.rollback(); conn.release()
           return res.status(400).json({ error: `Insufficient bank balance in selected account. Available balance: ₹${bal.toLocaleString('en-IN')}.` })
         }
-        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [diff, targetRefundBankId])
+        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [diff, bankAccountId])
       } else if (diff < 0) {
-        // Case 2 & Case 5: Paid amount decreases or becomes zero — credit (refund) ONLY the difference back to the bank
-        const refundDifference = Math.abs(diff)
-
-        // 1. Add refund difference back to the bank account (bank balance increases)
-        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [refundDifference, targetRefundBankId])
-
-        // 2. Create bank transaction of refundDifference with transaction type Credit / Refund
-        await conn.query(
-          `INSERT INTO client_payments
-             (site_id, client_id, bank_account_id, amount, payment_date, title, payment_method, reference, status)
-           VALUES (?, ?, ?, ?, ?, 'Material Purchase Refund', ?, ?, 'Completed')`,
-          [
-            siteId,
-            siteDoc?.client_id || null,
-            targetRefundBankId,
-            refundDifference,
-            purchaseDate,
-            paymentMethod || 'Bank Transfer',
-            refId ? `REFUND-${refId}` : 'REFUND-PURCHASE',
-          ]
-        )
+        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [Math.abs(diff), bankAccountId])
       }
-      // Case 4: diff === 0 -> Paid amount unchanged, do not deduct or refund, do not create any bank transaction
     }
 
     const pendingAmount = Math.max(0, Number((totalCost - numPaid).toFixed(2)))
@@ -717,6 +696,36 @@ export const updateMaterial = async (req, res, next) => {
             matchedExp.id,
           ]
         )
+
+        // Keep expense_payments in sync with updated material payment
+        if (numPaid > 0) {
+          const [mPay] = await conn.query('SELECT id FROM expense_payments WHERE expense_id = ? ORDER BY id ASC LIMIT 1', [matchedExp.id])
+          if (mPay.length > 0) {
+            await conn.query(
+              'UPDATE expense_payments SET amount = ?, bank_account_id = ?, site_id = ?, supplier_id = ?, payment_date = ?, payment_method = ? WHERE id = ?',
+              [numPaid, bankAccountId, siteId, supplierId || null, purchaseDate, paymentMethod, mPay[0].id]
+            )
+          } else {
+            await conn.query(
+              `INSERT INTO expense_payments
+                (expense_id, site_id, supplier_id, bank_account_id, amount, payment_date, payment_method, reference, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                matchedExp.id,
+                siteId,
+                supplierId || null,
+                bankAccountId,
+                numPaid,
+                purchaseDate,
+                paymentMethod,
+                notes || '',
+                'Material Purchase Payment',
+              ]
+            )
+          }
+        } else {
+          await conn.query('DELETE FROM expense_payments WHERE expense_id = ?', [matchedExp.id])
+        }
       } else {
         await insertExpenseForPurchase({
           materialId: existingMat.id,
@@ -771,6 +780,36 @@ export const updateMaterial = async (req, res, next) => {
           existingExp.id,
         ]
       )
+
+      // Keep expense_payments in sync when editing directly from expense record
+      if (numPaid > 0) {
+        const [mPay] = await conn.query('SELECT id FROM expense_payments WHERE expense_id = ? ORDER BY id ASC LIMIT 1', [existingExp.id])
+        if (mPay.length > 0) {
+          await conn.query(
+            'UPDATE expense_payments SET amount = ?, bank_account_id = ?, site_id = ?, supplier_id = ?, payment_date = ?, payment_method = ? WHERE id = ?',
+            [numPaid, bankAccountId, siteId, supplierId || null, purchaseDate, paymentMethod, mPay[0].id]
+          )
+        } else {
+          await conn.query(
+            `INSERT INTO expense_payments
+              (expense_id, site_id, supplier_id, bank_account_id, amount, payment_date, payment_method, reference, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              existingExp.id,
+              siteId,
+              supplierId || null,
+              bankAccountId,
+              numPaid,
+              purchaseDate,
+              paymentMethod,
+              notes || '',
+              'Material Purchase Payment',
+            ]
+          )
+        }
+      } else {
+        await conn.query('DELETE FROM expense_payments WHERE expense_id = ?', [existingExp.id])
+      }
     }
 
     await conn.commit()

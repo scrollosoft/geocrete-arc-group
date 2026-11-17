@@ -386,6 +386,49 @@ export const updateExpense = async (req, res, next) => {
         })
       }
 
+      // Keep expense_payments in sync so Transaction History shows the updated amount and bank account
+      const [existingPayRows] = await conn.query(
+        'SELECT id, amount, bank_account_id FROM expense_payments WHERE expense_id = ? ORDER BY id ASC',
+        [req.params.id]
+      )
+      if (existingPayRows.length > 0) {
+        if (paidAmount > 0) {
+          await conn.query(
+            `UPDATE expense_payments
+             SET amount = ?, bank_account_id = ?, site_id = ?, supplier_id = ?, payment_date = ?, payment_method = ?
+             WHERE id = ?`,
+            [
+              paidAmount,
+              newBankAccountId,
+              newSiteId,
+              newSupplierId || null,
+              newDate ? new Date(newDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+              req.body.paymentMethod || existingExpense.paymentMethod || 'Bank transfer',
+              existingPayRows[0].id,
+            ]
+          )
+        } else {
+          await conn.query('DELETE FROM expense_payments WHERE expense_id = ?', [req.params.id])
+        }
+      } else if (paidAmount > 0) {
+        await conn.query(
+          `INSERT INTO expense_payments
+            (expense_id, site_id, supplier_id, bank_account_id, amount, payment_date, payment_method, reference, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            req.params.id,
+            newSiteId,
+            newSupplierId || null,
+            newBankAccountId,
+            paidAmount,
+            newDate ? new Date(newDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+            req.body.paymentMethod || existingExpense.paymentMethod || 'Bank transfer',
+            req.body.remark || existingExpense.remark || '',
+            'Expense Payment',
+          ]
+        )
+      }
+
       await conn.commit()
       conn.release()
 

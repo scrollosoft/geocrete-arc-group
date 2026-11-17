@@ -280,7 +280,13 @@ export const getBankTransactions = async (req, res, next) => {
       FROM labours l
       LEFT JOIN bank_accounts ba ON ba.id = l.bank_account_id AND ba.is_active = 1
       LEFT JOIN sites s ON s.id = l.site_id
-      WHERE l.advance_amount > 0 AND (ba.id IS NOT NULL OR LOWER(l.remarks) LIKE '%cash%' OR l.bank_account_id IS NULL)
+      WHERE l.advance_amount > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM worker_payments wp 
+          WHERE wp.worker_id = l.id 
+            AND wp.payment_type = 'Advance Payment'
+        )
+        AND (ba.id IS NOT NULL OR LOWER(l.remarks) LIKE '%cash%' OR l.bank_account_id IS NULL)
     `)
 
     // 3c. Fetch recorded worker payments (wage payments, additional advances, settlements)

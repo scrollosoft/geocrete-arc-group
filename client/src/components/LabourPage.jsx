@@ -148,25 +148,48 @@ export default function LabourPage({
     return `₹${Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-'
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return String(dateStr)
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    return `${day}/${month}/${year}`
+  }
+
   // Use localWorkers after an edit/delete, otherwise use prop workers
   const baseWorkers = localWorkers !== null ? localWorkers : workers
 
-  const displayWorkers = (baseWorkers || []).map((w) => ({
-    _id: w._id,
-    name: w.name,
-    phone: w.phone || '',
-    trade: w.trade || '',
-    siteName: w.site?.name || w.siteName || '',
-    dailyRate: Number(w.dailyRate || 0),
-    wagesEarned: Number(w.wagesEarned || 0),
-    totalPaid: Number(w.totalPaid || 0),
-    outstanding: Math.max(0, (Number(w.wagesEarned) || 0) - (Number(w.totalPaid) || 0)),
-    paymentType: w.paymentType || 'Daily',
-    status: w.status || 'Active',
-    address: w.address || '',
-    remarks: w.remarks || '',
-    joiningDate: w.joiningDate,
-  }))
+  const displayWorkers = (baseWorkers || []).map((w) => {
+    const totalAmt = Number(w.totalAmount !== undefined ? w.totalAmount : (w.wagesEarned !== undefined ? w.wagesEarned : w.dailyRate || 0))
+    const earned = Number(w.wagesEarned !== undefined ? w.wagesEarned : totalAmt)
+    const paid = Number(w.totalPaid || 0)
+    const out = Math.max(0, earned - paid)
+    return {
+      _id: w._id || w.id,
+      id: w.id || w._id,
+      name: w.name,
+      phone: w.phone || '',
+      trade: w.trade || '',
+      site: w.site,
+      siteName: w.site?.name || w.siteName || '',
+      dailyRate: Number(w.dailyRate || totalAmt),
+      totalAmount: totalAmt,
+      wagesEarned: earned,
+      totalPaid: paid,
+      advanceAmount: Number(w.advanceAmount || 0),
+      advancePaid: Number(w.advancePaid || 0),
+      bankAccountId: w.bankAccountId,
+      bankName: w.bankName,
+      outstanding: out,
+      paymentType: w.paymentType || 'Daily',
+      status: w.status || 'Active',
+      address: w.address || '',
+      remarks: w.remarks || '',
+      joiningDate: w.joiningDate,
+    }
+  })
 
   // Dynamic summary values from props or calculated from dataset
   const totalWorkersCount = summary?.totalWorkers !== undefined
@@ -409,12 +432,12 @@ export default function LabourPage({
       name: item.name || '',
       phone: item.phone || '',
       trade: item.trade || '',
-      dailyRate: item.dailyRate || '',
-      wagesEarned: item.wagesEarned || 0,
-      totalPaid: item.totalPaid || 0,
+      dailyRate: item.dailyRate || item.wagesEarned || '',
+      wagesEarned: item.wagesEarned !== undefined ? item.wagesEarned : (item.dailyRate || 0),
+      totalPaid: item.totalPaid !== undefined ? item.totalPaid : 0,
       previousAdvanceAmount: prevAdv,
       additionalAdvance: '',
-      bankAccountId: '',
+      bankAccountId: item.bankAccountId || item.bank_account_id || '',
       address: item.address || '',
       remarks: item.remarks || '',
     })
@@ -442,67 +465,57 @@ export default function LabourPage({
 
   const handleEditSave = async () => {
     if (editSaving) return
-    if (!editForm.name?.trim()) { setEditError('Name is required.'); return }
-    if (!editForm.trade?.trim()) { setEditError('Trade is required.'); return }
-    if (!editForm.dailyRate || Number(editForm.dailyRate) <= 0) { setEditError('Daily rate must be > 0.'); return }
-
-    const numAdditionalAdv = Number(editForm.additionalAdvance || 0)
-    if (numAdditionalAdv < 0) {
-      setEditError('Additional advance amount cannot be negative.')
+    if (!editWorker) return
+    const workerId = editWorker._id || editWorker.id
+    if (!workerId) {
+      setEditError('Worker ID is missing.')
       return
     }
 
-    if (numAdditionalAdv > 0) {
-      if (!editForm.bankAccountId) {
-        setEditError('Please select a Bank Name for the additional advance.')
-        return
-      }
-      const selBank = bankAccounts.find((b) => String(b.id || b._id) === String(editForm.bankAccountId))
-      if (selBank && Number(selBank.balance || 0) < numAdditionalAdv) {
-        setEditError(
-          `Insufficient bank balance in ${selBank.bankName || selBank.bank_name}. Available: ₹${Number(selBank.balance || 0).toLocaleString('en-IN')}, Requested: ₹${numAdditionalAdv.toLocaleString('en-IN')}. Please select another account or reduce the advance amount.`
-        )
-        return
-      }
-    }
+    if (!editForm.name?.trim()) { setEditError('Name is required.'); return }
+    if (!editForm.trade?.trim()) { setEditError('Trade is required.'); return }
+    const effectiveAmount = editForm.wagesEarned !== undefined && editForm.wagesEarned !== '' ? editForm.wagesEarned : editForm.dailyRate
+    if (!effectiveAmount || Number(effectiveAmount) <= 0) { setEditError('Total Amount must be > 0.'); return }
 
     setEditSaving(true)
     setEditError('')
     try {
-      const updated = await labourService.update(editWorker._id, {
+      const updated = await labourService.update(workerId, {
         name: editForm.name.trim(),
         phone: editForm.phone.trim(),
         trade: editForm.trade.trim(),
-        dailyRate: Number(editForm.dailyRate),
-        wagesEarned: Number(editForm.wagesEarned) || 0,
+        dailyRate: Number(effectiveAmount),
+        wagesEarned: Number(effectiveAmount) || 0,
         totalPaid: Number(editForm.totalPaid) || 0,
-        additionalAdvance: numAdditionalAdv > 0 ? numAdditionalAdv : undefined,
-        bankAccountId: numAdditionalAdv > 0 ? editForm.bankAccountId : undefined,
+        bankAccountId: editForm.bankAccountId ? Number(editForm.bankAccountId) : undefined,
         address: editForm.address,
         remarks: editForm.remarks,
       })
       setLocalWorkers((prev) => {
         const base = prev !== null ? prev : workers
-        return base.map((w) => w._id === editWorker._id ? { ...w, ...updated } : w)
+        return base.map((w) => String(w._id || w.id) === String(workerId) ? { ...w, ...updated } : w)
       })
-      if (viewWorker && viewWorker._id === editWorker._id) {
+      if (viewWorker && String(viewWorker._id || viewWorker.id) === String(workerId)) {
+        const effWages = Number(updated?.wagesEarned !== undefined ? updated.wagesEarned : effectiveAmount)
+        const effPaid = Number(updated?.totalPaid !== undefined ? updated.totalPaid : editForm.totalPaid)
+        const effOutstanding = Math.max(0, effWages - effPaid)
         setViewWorker((prev) => ({
           ...prev,
           ...updated,
           name: editForm.name.trim(),
           phone: editForm.phone.trim(),
           trade: editForm.trade.trim(),
-          dailyRate: Number(editForm.dailyRate),
-          wagesEarned: Number(updated?.wagesEarned !== undefined ? updated.wagesEarned : editForm.wagesEarned),
-          totalPaid: Number(updated?.totalPaid !== undefined ? updated.totalPaid : editForm.totalPaid),
-          outstanding: Math.max(0, (Number(updated?.wagesEarned !== undefined ? updated.wagesEarned : editForm.wagesEarned) || 0) - (Number(updated?.totalPaid !== undefined ? updated.totalPaid : editForm.totalPaid) || 0)),
+          dailyRate: Number(effectiveAmount),
+          totalAmount: effWages,
+          wagesEarned: effWages,
+          totalPaid: effPaid,
+          outstanding: effOutstanding,
           address: editForm.address,
           remarks: editForm.remarks,
           siteName: updated?.site?.name || prev?.siteName || 'N/A',
         }))
         // Refresh payment history if currently viewing this worker
-        const wId = viewWorker._id || viewWorker.id
-        workerPaymentService.getByWorker(wId)
+        workerPaymentService.getByWorker(workerId)
           .then((res) => {
             const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
             setWorkerPaymentHistory(list)
@@ -511,7 +524,7 @@ export default function LabourPage({
       }
       setEditWorker(null)
       if (onLabourChanged) onLabourChanged()
-      if (numAdditionalAdv > 0 && onRefreshAccounts) onRefreshAccounts()
+      if (onRefreshAccounts) onRefreshAccounts()
     } catch (err) {
       setEditError(err.message || 'Update failed.')
     } finally {
@@ -693,33 +706,21 @@ export default function LabourPage({
             </button>
           </div>
 
-          {/* 2. Four Stat Cards for the Worker */}
+          {/* 2. Three Stat Cards for the Worker */}
           <div className="sites-stat-grid">
-            {/* Card 1: Daily Rate */}
+            {/* Card 1: Total Amount */}
             <div className="site-stat-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <span className="stat-label">Daily Rate</span>
+                <span className="stat-label">Total Amount</span>
                 <div className="stat-icon-wrap stat-icon-blue">
                   <CreditCard size={18} />
                 </div>
               </div>
-              <div className="stat-value">{formatExactCurrency(viewWorker.dailyRate)}</div>
-              <span className="stat-desc">{viewWorker.trade || 'Worker'}</span>
+              <div className="stat-value">{formatExactCurrency(viewWorker.totalAmount !== undefined ? viewWorker.totalAmount : viewWorker.wagesEarned)}</div>
+              <span className="stat-desc">Total amount</span>
             </div>
 
-            {/* Card 2: Wages Earned */}
-            <div className="site-stat-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <span className="stat-label">Wages Earned</span>
-                <div className="stat-icon-wrap stat-icon-green">
-                  <CreditCard size={18} />
-                </div>
-              </div>
-              <div className="stat-value">{formatExactCurrency(viewWorker.wagesEarned)}</div>
-              <span className="stat-desc">Total wages earned</span>
-            </div>
-
-            {/* Card 3: Total Paid */}
+            {/* Card 2: Total Paid */}
             <div className="site-stat-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <span className="stat-label">Total Paid</span>
@@ -805,7 +806,7 @@ export default function LabourPage({
                         const tc = typeColors[p.paymentType] || { bg: '#F1F5F9', color: '#64748B' }
                         return (
                           <tr key={p.id} className="labour-data-row">
-                            <td style={{ padding: '18px 16px', color: '#70829F', fontSize: '13.5px' }}>{p.paymentDate}</td>
+                            <td style={{ padding: '18px 16px', color: '#70829F', fontSize: '13.5px' }}>{formatDate(p.rawDate || p.paymentDate)}</td>
                             <td style={{ padding: '18px 16px' }}>
                               <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 14px', borderRadius: '999px', fontSize: '11.5px', fontWeight: 600, background: tc.bg, color: tc.color }}>
                                 {p.paymentType}
@@ -1003,7 +1004,7 @@ export default function LabourPage({
                           return (
                             <tr key={p.id} className="labour-data-row">
                               <td style={{ padding: '18px 16px', color: '#70829F', fontSize: '13.5px' }}>
-                                {p.date || p.paymentDate}
+                                {formatDate(p.rawDate || p.date || p.paymentDate)}
                               </td>
                               <td style={{ padding: '18px 16px', fontWeight: 700, color: '#172033', fontSize: '13.5px' }}>
                                 {p.workerName}
@@ -1169,11 +1170,6 @@ export default function LabourPage({
               </div>
             )}
 
-            {/* Scrollbar Indicator Bar */}
-            <div className="sites-scrollbar-indicator" style={{ marginTop: '16px' }}>
-              <div className="scrollbar-thumb-indicator" />
-            </div>
-
             {/* Dynamic Pagination Footer */}
             <div className="sites-pagination-row" style={{ marginTop: '16px' }}>
               <div className="pagination-left">
@@ -1280,7 +1276,7 @@ export default function LabourPage({
                 </div>
                 <div>
                   <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>PAYMENT DATE</div>
-                  <div style={{ color: '#475569', fontSize: '14px' }}>{viewPayment.date || viewPayment.paymentDate || '—'}</div>
+                  <div style={{ color: '#475569', fontSize: '14px' }}>{formatDate(viewPayment.rawDate || viewPayment.date || viewPayment.paymentDate) || '—'}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C9CAB', letterSpacing: '0.5px', marginBottom: '4px' }}>PAYMENT TYPE</div>
@@ -1641,8 +1637,7 @@ export default function LabourPage({
                 <div className="ledit-field"><label className="ledit-label">Full Name *</label><input className="ledit-input" value={editForm.name || ''} onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))} /></div>
                 <div className="ledit-field"><label className="ledit-label">Phone</label><input className="ledit-input" value={editForm.phone || ''} onChange={(e) => setEditForm(f => ({ ...f, phone: e.target.value }))} /></div>
                 <div className="ledit-field"><label className="ledit-label">Trade / Role *</label><input className="ledit-input" value={editForm.trade || ''} onChange={(e) => setEditForm(f => ({ ...f, trade: e.target.value }))} /></div>
-                <div className="ledit-field"><label className="ledit-label">Daily Rate (₹) *</label><input className="ledit-input" type="number" min="0" value={editForm.dailyRate || ''} onChange={(e) => setEditForm(f => ({ ...f, dailyRate: e.target.value }))} /></div>
-                <div className="ledit-field"><label className="ledit-label">Wages Earned (₹)</label><input className="ledit-input" type="number" min="0" value={editForm.wagesEarned || ''} onChange={(e) => setEditForm(f => ({ ...f, wagesEarned: e.target.value }))} /></div>
+                <div className="ledit-field"><label className="ledit-label">Total Amount</label><input className="ledit-input" type="number" min="0" value={editForm.wagesEarned || ''} onChange={(e) => setEditForm(f => ({ ...f, wagesEarned: e.target.value, dailyRate: e.target.value }))} /></div>
                 <div className="ledit-field"><label className="ledit-label">Total Paid (₹)</label><input className="ledit-input" type="number" min="0" value={editForm.totalPaid || ''} onChange={(e) => setEditForm(f => ({ ...f, totalPaid: e.target.value }))} /></div>
                 {/* Previous Advance Amount (Read-only) */}
                 <div className="ledit-field">
@@ -1656,24 +1651,10 @@ export default function LabourPage({
                   />
                 </div>
 
-                {/* Additional Advance Amount (Optional) */}
-                <div className="ledit-field">
-                  <label className="ledit-label">Additional Advance Amount</label>
-                  <input
-                    className="ledit-input"
-                    type="number"
-                    min="0"
-                    placeholder="Enter advance amount..."
-                    value={editForm.additionalAdvance || ''}
-                    onChange={(e) => setEditForm(f => ({ ...f, additionalAdvance: e.target.value }))}
-                  />
-                </div>
 
                 {/* Bank Name (Dropdown populated with actual bank names) */}
                 <div className="ledit-field ledit-full">
-                  <label className="ledit-label">
-                    Bank Name {Number(editForm.additionalAdvance) > 0 && <span style={{ color: '#EF4444' }}>*</span>}
-                  </label>
+                  <label className="ledit-label">Bank Name</label>
                   <select
                     className="ledit-input"
                     value={editForm.bankAccountId || ''}

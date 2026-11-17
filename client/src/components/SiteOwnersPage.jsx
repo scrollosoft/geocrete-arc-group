@@ -487,31 +487,6 @@ export default function SiteOwnersPage({
           </table>
         </div>
 
-        {/* Scrollbar Indicator Bar */}
-        <div style={{ padding: '16px 20px 0 20px' }}>
-          <div
-            style={{
-              height: '4px',
-              background: '#F1F5F9',
-              borderRadius: '2px',
-              position: 'relative',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: '18%',
-                background: '#CBD5E1',
-                borderRadius: '2px',
-              }}
-            />
-          </div>
-        </div>
-
         {/* 5. Pagination Footer */}
         <div
           style={{
