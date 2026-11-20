@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { X, Truck, Check } from 'lucide-react'
 import { supplierService } from '../services/supplierService.js'
 
@@ -354,7 +354,7 @@ export default function AddSupplierModal({
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="Specify custom category..."
+                    placeholder="Enter other category"
                     value={customCategory}
                     onChange={(e) => {
                       setCustomCategory(e.target.value)

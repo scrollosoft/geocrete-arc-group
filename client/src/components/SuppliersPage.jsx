@@ -94,12 +94,45 @@ export default function SuppliersPage({
   }
 
   const handleEdit = (item) => {
-    let cats = []
+    let rawCats = []
     if (Array.isArray(item.categories)) {
-      cats = item.categories
+      rawCats = item.categories
     } else if (typeof item.categories === 'string' && item.categories.trim()) {
-      cats = item.categories.split(',').map((c) => c.trim()).filter(Boolean)
+      rawCats = item.categories.split(',').map((c) => c.trim()).filter(Boolean)
     }
+
+    const standardCats = AVAILABLE_CATEGORIES.filter((c) => c !== 'Other')
+    const stdSelected = []
+    const customCats = []
+
+    rawCats.forEach((rawCat) => {
+      const matchedStd = standardCats.find(
+        (sc) => sc.toLowerCase() === rawCat.toLowerCase()
+      )
+      if (matchedStd) {
+        if (!stdSelected.includes(matchedStd)) {
+          stdSelected.push(matchedStd)
+        }
+      } else {
+        customCats.push(rawCat)
+      }
+    })
+
+    let selectedCategories = [...stdSelected]
+    let customCatVal = (item.customCategory || '').trim()
+
+    if (customCats.length > 0 || customCatVal) {
+      if (!selectedCategories.includes('Other')) {
+        selectedCategories.push('Other')
+      }
+      if (!customCatVal) {
+        const nonOther = customCats.filter((c) => c.toLowerCase() !== 'other')
+        if (nonOther.length > 0) {
+          customCatVal = nonOther.join(', ').replace(/^Other\s*[:\-]\s*/i, '').trim()
+        }
+      }
+    }
+
     setEditFormData({
       id: item._id || item.id,
       name: item.name || '',
@@ -108,7 +141,8 @@ export default function SuppliersPage({
       phone: item.phone || '',
       email: item.email || '',
       address: item.address || '',
-      categories: cats,
+      categories: selectedCategories,
+      customCategory: customCatVal,
       paymentTerms: item.paymentTerms || 'Immediate',
       status: item.isActive === false ? 'Inactive' : 'Active',
     })
@@ -125,6 +159,7 @@ export default function SuppliersPage({
         : [...current, cat]
       return { ...prev, categories: next }
     })
+    if (editError) setEditError('')
   }
 
   const handleEditSave = async (e) => {
@@ -137,9 +172,18 @@ export default function SuppliersPage({
       setEditError('Contact phone number is required.')
       return
     }
+    const hasOther = (editFormData.categories || []).includes('Other')
+    const customCat = (editFormData.customCategory || '').trim()
+    if (hasOther && !customCat) {
+      setEditError('Please specify the custom category for "Other".')
+      return
+    }
     setEditLoading(true)
     setEditError('')
     try {
+      const finalCategories = (editFormData.categories || []).map((c) =>
+        c === 'Other' ? (customCat || 'Other') : c
+      )
       const payload = {
         name: editFormData.name.trim(),
         companyName: (editFormData.companyName || editFormData.name).trim(),
@@ -147,7 +191,7 @@ export default function SuppliersPage({
         phone: editFormData.phone.trim(),
         email: (editFormData.email || '').trim(),
         address: (editFormData.address || '').trim(),
-        categories: editFormData.categories.length > 0 ? editFormData.categories.join(', ') : 'General Supplier',
+        categories: finalCategories.length > 0 ? finalCategories.join(', ') : 'General Supplier',
         paymentTerms: editFormData.paymentTerms || 'Immediate',
         isActive: editFormData.status === 'Active',
       }
@@ -875,6 +919,33 @@ export default function SuppliersPage({
                       )
                     })}
                   </div>
+
+                  {/* If "Other" category is chosen, display custom category input */}
+                  {(editFormData.categories || []).includes('Other') && (
+                    <div style={{ marginTop: '10px' }}>
+                      <input
+                        type="text"
+                        placeholder="Enter other category"
+                        value={editFormData.customCategory || ''}
+                        onChange={(e) => {
+                          setEditFormData((prev) => ({ ...prev, customCategory: e.target.value }))
+                          if (editError) setEditError('')
+                        }}
+                        style={{
+                          width: '100%',
+                          height: '42px',
+                          padding: '0 14px',
+                          border: '1.5px solid #0293DE',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          boxSizing: 'border-box',
+                          color: '#172033',
+                          backgroundColor: '#FFFFFF',
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Address */}
