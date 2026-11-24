@@ -1,5 +1,5 @@
 import { getPool } from '../config/db.js'
-import { fmtDate, fmtDateOnly } from './helpers.js'
+import { fmtDate, fmtDateOnly, isCurrentMonth } from './helpers.js'
 
 const NON_MATERIAL_CATEGORIES = ['labour', 'equipment', 'transport', 'fuel', 'utilities']
 
@@ -189,6 +189,7 @@ export const Material = {
           paidAmount: 0,
           quantityUsed: 0,
           purchaseDate: m.purchaseDate,
+          createdAt: m.createdAt,
           bankAccountId: m.bankAccountId || null,
           paymentMethod: m.paymentMethod || 'Bank Transfer',
           notes: m.notes || '',
@@ -231,6 +232,7 @@ export const Material = {
           paidAmount: 0,
           quantityUsed: 0,
           purchaseDate: fmtDateOnly(e.date),
+          createdAt: fmtDate(e.created_at),
           bankAccountId: e.bank_account_id ? String(e.bank_account_id) : null,
           paymentMethod: e.payment_method || 'Bank Transfer',
           notes: e.remark || '',
@@ -243,6 +245,9 @@ export const Material = {
       const eDate = fmtDateOnly(e.date)
       if (eDate && (!g.purchaseDate || new Date(eDate) > new Date(g.purchaseDate))) {
         g.purchaseDate = eDate
+      }
+      if (!g.createdAt && e.created_at) {
+        g.createdAt = fmtDate(e.created_at)
       }
     }
 
@@ -1170,8 +1175,7 @@ export const Material = {
       }
     }
 
-    const monthPrefix = new Date().toISOString().slice(0, 7)
-    const monthItems = list.filter((item) => (item.purchaseDate || '').startsWith(monthPrefix))
+    const monthItems = list.filter((item) => isCurrentMonth(item.purchaseDate, item.createdAt))
     const monthCost = monthItems.reduce((acc, it) => acc + it.totalCost, 0)
 
     return {
