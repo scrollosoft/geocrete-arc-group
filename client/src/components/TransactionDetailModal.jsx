@@ -97,7 +97,9 @@ export default function TransactionDetailModal({ isOpen, onClose, transaction })
               Transaction Type
             </span>
             <span className="gpay-receipt-val" style={{ fontWeight: 600, color: accentColor }}>
-              {isCredit ? 'Money Received (Credit)' : 'Money Sent (Debit)'}
+              {transaction.category === 'Bank Transfer'
+                ? (isCredit ? 'Bank Transfer (Credit)' : 'Bank Transfer (Debit)')
+                : (isCredit ? 'Money Received (Credit)' : 'Money Sent (Debit)')}
             </span>
           </div>
 
@@ -143,6 +145,10 @@ export default function TransactionDetailModal({ isOpen, onClose, transaction })
                   ? 'Client'
                   : transaction.partyType === 'Worker'
                   ? 'Worker'
+                  : transaction.partyType === 'Bank Transfer'
+                  ? (isCredit ? 'From Bank' : 'To Bank')
+                  : transaction.partyType === 'Personal Account'
+                  ? 'Other Account'
                   : 'Supplier / Vendor'}
               </span>
               <span className="gpay-receipt-val">{transaction.partyName}</span>

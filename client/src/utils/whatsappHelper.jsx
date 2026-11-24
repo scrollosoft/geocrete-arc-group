@@ -135,70 +135,131 @@ export function resolveExpenseDetails(expense, suppliers = [], sites = []) {
     supplierPhone,
     clientName,
     material: expense.category || expense.material || 'Material',
+    description: expense.description || expense.remark || expense.remarks || '-',
     quantity: expense.quantity || '',
     unit: expense.unit || 'Units',
     totalAmount: total,
     paidAmount: paid,
     outstandingAmount: outstanding,
     paymentStatus,
+    paymentDate: expense.paymentDate
+      ? new Date(expense.paymentDate).toLocaleDateString('en-GB')
+      : expense.date
+      ? new Date(expense.date).toLocaleDateString('en-GB')
+      : expense.createdAt
+      ? new Date(expense.createdAt).toLocaleDateString('en-GB')
+      : new Date().toLocaleDateString('en-GB'),
   }
 }
 
 /**
- * Generate WhatsApp payment confirmation message according to required template:
- * 
- * Payment Confirmation
- * 
- * Hello [Supplier Name],
- * 
- * Your payment entry has been recorded successfully.
- * 
- * Client Name: [Client Name]
- * Material: [Material Name]
- * Quantity: [Quantity and Unit]
- * Total Amount: ₹[Total Amount]
- * Paid Amount: ₹[Paid Amount]
- * Outstanding Amount: ₹[Outstanding Amount]
- * Payment Status: [Paid / Partial / Unpaid]
- * 
- * Thank you!
+ * Generate Expense Payment Details WhatsApp message.
+ *
+ * Template:
+ * *Expense Payment Details*
+ *
+ * Hello [Name],
+ *
+ * Your expense/payment entry has been recorded successfully.
+ *
+ * - Site Name: [Site Name]
+ * - Expense Category: [Category]
+ * - Description: [Description]
+ * - Total Amount: ₹[Total Amount]
+ * - Paid Amount: ₹[Paid Amount]
+ * - Pending Amount: ₹[Pending Amount]
+ * - Payment Date: [Payment Date]
+ *
+ * Thank you.
  */
 export function generateWhatsAppPaymentMessage(details) {
   const {
     supplierName,
     clientName,
     material,
-    quantity,
-    unit,
+    description,
     totalAmount,
     paidAmount,
     outstandingAmount,
-    paymentStatus,
+    paymentDate,
   } = details
 
-  const sName = supplierName || 'Supplier'
-  const cName = clientName || 'Not specified'
-  const mat = material || 'Material'
-  const qtyUnit = quantity ? `${quantity} ${unit || 'Units'}` : (unit || '1 Units')
+  const name = supplierName || 'Sir/Madam'
+  const siteName = clientName || 'Not specified'
+  const category = material || 'Material'
+  const desc = description || '-'
   const totalFormatted = Math.round(Number(totalAmount || 0)).toLocaleString('en-IN')
   const paidFormatted = Math.round(Number(paidAmount || 0)).toLocaleString('en-IN')
-  const outstandingFormatted = Math.round(Number(outstandingAmount || 0)).toLocaleString('en-IN')
+  const pendingFormatted = Math.round(Number(outstandingAmount || 0)).toLocaleString('en-IN')
+  const dateStr = paymentDate || new Date().toLocaleDateString('en-GB')
 
-  return `Payment Confirmation
+  return `*Expense Payment Details*
 
-Hello ${sName},
+Hello ${name},
 
-Your payment entry has been recorded successfully.
+Your expense/payment entry has been recorded successfully.
 
-Client Name: ${cName}
-Material: ${mat}
-Quantity: ${qtyUnit}
-Total Amount: ₹${totalFormatted}
-Paid Amount: ₹${paidFormatted}
-Outstanding Amount: ₹${outstandingFormatted}
-Payment Status: ${paymentStatus || 'Paid'}
+- Site Name: ${siteName}
+- Expense Category: ${category}
+- Description: ${desc}
+- Total Amount: ₹${totalFormatted}
+- Paid Amount: ₹${paidFormatted}
+- Pending Amount: ₹${pendingFormatted}
+- Payment Date: ${dateStr}
 
-Thank you!`
+Thank you.`
+}
+
+/**
+ * Generate Labour Payment Details WhatsApp message.
+ *
+ * Template:
+ * *Labour Payment Details*
+ *
+ * Hello [Labour Name],
+ *
+ * Your labour payment details have been updated successfully.
+ *
+ * - Labour Name: [Labour Name]
+ * - Site Name: [Site Name]
+ * - Total Amount: ₹[Total Amount]
+ * - Advance Payment: ₹[Advance Payment]
+ * - Last Paid Amount: ₹[Last Paid Amount]
+ * - Total Paid Amount: ₹[Total Paid Amount]
+ * - Pending Amount: ₹[Pending Amount]
+ * - Payment Date: [Payment Date]
+ *
+ * Thank you.
+ */
+export function generateLabourWhatsAppMessage({
+  labourName,
+  siteName,
+  totalAmount,
+  advancePayment,
+  lastPaidAmount,
+  totalPaidAmount,
+  pendingAmount,
+  paymentDate,
+}) {
+  const fmt = (n) => Math.round(Number(n || 0)).toLocaleString('en-IN')
+  const dateStr = paymentDate || '-'
+
+  return `*Labour Payment Details*
+
+Hello ${labourName || 'Sir/Madam'},
+
+Your labour payment details have been updated successfully.
+
+- Labour Name: ${labourName || '-'}
+- Site Name: ${siteName || 'Not specified'}
+- Total Amount: ₹${fmt(totalAmount)}
+- Advance Payment: ₹${fmt(advancePayment)}
+- Last Paid Amount: ₹${fmt(lastPaidAmount)}
+- Total Paid Amount: ₹${fmt(totalPaidAmount)}
+- Pending Amount: ₹${fmt(pendingAmount)}
+- Payment Date: ${dateStr}
+
+Thank you.`
 }
 
 /**
@@ -241,4 +302,174 @@ export function shareExpenseOnWhatsApp(expense, suppliers = [], sites = [], show
   const opened = openWhatsAppClickToChat({ phone: normalizedPhone, message })
   return { success: opened, phone: normalizedPhone, message }
 }
+
+/**
+ * Generate Consulting Details WhatsApp message.
+ *
+ * Template:
+ * *Consulting Payment Details*
+ *
+ * Hello [Owner Name],
+ *
+ * Your consulting payment details have been recorded successfully.
+ *
+ * Date: [Date]
+ * Owner Name: [Owner Name]
+ * Total Amount: ₹[Total Amount]
+ * Received Amount: ₹[Received Amount]
+ * Pending Amount: ₹[Pending Amount]
+ * Payment Mode: [Payment Mode]
+ * Remark: [Remark]
+ *
+ * Thank you.
+ */
+export function generateConsultingDetailsWhatsAppMessage({
+  ownerName,
+  date,
+  totalAmount,
+  receivedAmount,
+  pendingAmount,
+  paymentMode,
+  remark,
+}) {
+  const fmt = (n) => Math.round(Number(n || 0)).toLocaleString('en-IN')
+
+  return `*Consulting Payment Details*
+
+Hello ${ownerName || 'Client'},
+
+Your consulting payment details have been recorded successfully.
+
+Date: ${date || '-'}
+Owner Name: ${ownerName || '-'}
+Total Amount: ₹${fmt(totalAmount)}
+Received Amount: ₹${fmt(receivedAmount)}
+Pending Amount: ₹${fmt(pendingAmount)}
+Payment Mode: ${paymentMode || 'UPI'}
+Remark: ${remark || '-'}
+
+Thank you.`
+}
+
+/**
+ * Generate Consulting Payment Confirmation WhatsApp message.
+ *
+ * Template:
+ * *Consulting Payment Confirmation*
+ *
+ * Hello [Owner Name],
+ *
+ * Your consulting payment has been recorded successfully.
+ *
+ * Total Consulting Amount: ₹[Total Amount]
+ * Previously Received Amount: ₹[Previous Received Amount]
+ * New Payment Received: ₹[New Payment Amount]
+ * Total Received Amount: ₹[Updated Total Received Amount]
+ * Remaining Pending Amount: ₹[Remaining Pending Amount]
+ * Payment Date: [Payment Date]
+ * Payment Mode: [Payment Mode]
+ *
+ * Thank you.
+ */
+export function generateConsultingPaymentConfirmationWhatsAppMessage({
+  ownerName,
+  totalAmount,
+  previousReceivedAmount,
+  newPaymentAmount,
+  updatedTotalReceivedAmount,
+  remainingPendingAmount,
+  paymentDate,
+  paymentMode,
+}) {
+  const fmt = (n) => Math.round(Number(n || 0)).toLocaleString('en-IN')
+
+  return `*Consulting Payment Confirmation*
+
+Hello ${ownerName || 'Client'},
+
+Your consulting payment has been recorded successfully.
+
+Total Consulting Amount: ₹${fmt(totalAmount)}
+Previously Received Amount: ₹${fmt(previousReceivedAmount)}
+New Payment Received: ₹${fmt(newPaymentAmount)}
+Total Received Amount: ₹${fmt(updatedTotalReceivedAmount)}
+Remaining Pending Amount: ₹${fmt(remainingPendingAmount)}
+Payment Date: ${paymentDate || '-'}
+Payment Mode: ${paymentMode || 'UPI'}
+
+Thank you.`
+}
+
+/**
+ * Share Consulting Details on WhatsApp
+ */
+export function shareConsultingOnWhatsApp(consulting, showNotification = null) {
+  if (!consulting) return { success: false, error: 'No consulting record selected' }
+
+  const normalizedPhone = normalizeIndianPhoneNumber(consulting.mobileNumber)
+  if (!normalizedPhone) {
+    const errorMsg = 'Please provide a valid 10-digit mobile number for WhatsApp sharing.'
+    if (showNotification) {
+      showNotification({ type: 'error', message: errorMsg })
+    } else {
+      alert(errorMsg)
+    }
+    return { success: false, error: errorMsg }
+  }
+
+  const message = generateConsultingDetailsWhatsAppMessage({
+    ownerName: consulting.ownerName,
+    date: consulting.date,
+    totalAmount: consulting.totalAmount,
+    receivedAmount: consulting.receivedAmount,
+    pendingAmount: consulting.pendingAmount,
+    paymentMode: consulting.paymentMode,
+    remark: consulting.remark,
+  })
+
+  const opened = openWhatsAppClickToChat({ phone: normalizedPhone, message })
+  return { success: opened, phone: normalizedPhone, message }
+}
+
+/**
+ * Share Consulting Payment Confirmation on WhatsApp
+ */
+export function shareConsultingPaymentConfirmationOnWhatsApp({
+  consulting,
+  newPaymentAmount,
+  previousReceivedAmount,
+  updatedTotalReceivedAmount,
+  remainingPendingAmount,
+  paymentDate,
+  paymentMode,
+  showNotification = null,
+}) {
+  if (!consulting) return { success: false, error: 'No consulting record selected' }
+
+  const normalizedPhone = normalizeIndianPhoneNumber(consulting.mobileNumber)
+  if (!normalizedPhone) {
+    const errorMsg = 'Please provide a valid 10-digit mobile number for WhatsApp sharing.'
+    if (showNotification) {
+      showNotification({ type: 'error', message: errorMsg })
+    } else {
+      alert(errorMsg)
+    }
+    return { success: false, error: errorMsg }
+  }
+
+  const message = generateConsultingPaymentConfirmationWhatsAppMessage({
+    ownerName: consulting.ownerName,
+    totalAmount: consulting.totalAmount,
+    previousReceivedAmount,
+    newPaymentAmount,
+    updatedTotalReceivedAmount,
+    remainingPendingAmount,
+    paymentDate,
+    paymentMode,
+  })
+
+  const opened = openWhatsAppClickToChat({ phone: normalizedPhone, message })
+  return { success: opened, phone: normalizedPhone, message }
+}
+
 

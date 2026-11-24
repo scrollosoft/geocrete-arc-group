@@ -48,8 +48,10 @@ export const getRecentExpenses = async (req, res, next) => {
 
 export const getSiteOverview = async (_req, res, next) => {
   try {
-    const sites = await Site.findAll({ limit: 6 })
-    const overview = sites.map((s) => ({
+    const allSites = await Site.findAll({ limit: 50 })
+    // Exclude consulting sites (they store [CONSULTING] in description)
+    const constructionOnly = allSites.filter((s) => !s.description?.includes('[CONSULTING]'))
+    const overview = constructionOnly.slice(0, 6).map((s) => ({
       _id:              s._id,
       name:             s.name,
       location:         s.location,

@@ -6,6 +6,7 @@ export const bankAccountService = {
   create: (data) => request('/bank-accounts', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/bank-accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/bank-accounts/${id}`, { method: 'DELETE' }),
+  transfer: (data) => request('/bank-accounts/transfer', { method: 'POST', body: JSON.stringify(data) }),
   getTransactions: (params = {}) => {
     const cleanParams = {}
     for (const [k, v] of Object.entries(params)) {

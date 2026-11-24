@@ -11,6 +11,7 @@ import RecentExpenses from './components/RecentExpenses.jsx'
 import SitesOverview from './components/SitesOverview.jsx'
 import AddClientSiteModal from './components/AddClientSiteModal.jsx'
 import AddWorkerModal from './components/AddWorkerModal.jsx'
+import LabourPaymentForm from './components/LabourPaymentForm.jsx'
 import NotificationToast from './components/NotificationToast.jsx'
 import SitesPage from './components/SitesPage.jsx'
 import ExpensesPage from './components/ExpensesPage.jsx'
@@ -25,6 +26,7 @@ import AddExpenseModal from './components/AddExpenseModal.jsx'
 import SettingsPage from './components/SettingsPage.jsx'
 import SupplierDetailPage from './components/SupplierDetailPage.jsx'
 import PaymentsPage from './components/PaymentsPage.jsx'
+import FilesPage from './components/FilesPage.jsx'
 import SiteDetailPage from './components/SiteDetailPage.jsx'
 import ConsultingForm from './components/ConsultingForm.jsx'
 import ConsultingTable from './components/ConsultingTable.jsx'
@@ -59,6 +61,7 @@ const getInitialTab = () => {
       'suppliers',
       'site-owners',
       'payments',
+      'files',
       'reports',
       'settings',
     ]
@@ -76,6 +79,12 @@ export default function App() {
   // ── Authentication ──────────────────────────────────────────────────────────
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authChecking, setAuthChecking] = useState(true)
+  const [userRole, setUserRole] = useState(() => {
+    return localStorage.getItem('geocrete_user_role') || 'Admin'
+  }) // 'Admin' | 'Manager'
+  const [loggedInUsername, setLoggedInUsername] = useState(() => {
+    return localStorage.getItem('geocrete_username') || ''
+  })
 
   // On mount: verify stored token with backend
   useEffect(() => {
@@ -86,10 +95,32 @@ export default function App() {
     }
     authService
       .verify()
-      .then(() => setIsAuthenticated(true))
+      .then((data) => {
+        setIsAuthenticated(true)
+        const role = data?.role || 'Admin'
+        const uname = data?.username || ''
+        setUserRole(role)
+        setLoggedInUsername(uname)
+        try {
+          localStorage.setItem('geocrete_user_role', role)
+          localStorage.setItem('geocrete_username', uname)
+        } catch {
+          // ignore
+        }
+        // If manager, force tab to expenses
+        if (role === 'Manager') {
+          setActiveTabDirect('expenses')
+        }
+      })
       .catch(() => {
         authStorage.removeToken()
         setIsAuthenticated(false)
+        try {
+          localStorage.removeItem('geocrete_user_role')
+          localStorage.removeItem('geocrete_username')
+        } catch {
+          // ignore
+        }
       })
       .finally(() => setAuthChecking(false))
   }, [])
@@ -98,6 +129,14 @@ export default function App() {
   useEffect(() => {
     const handleAutoLogout = () => {
       setIsAuthenticated(false)
+      setUserRole('Admin')
+      setLoggedInUsername('')
+      try {
+        localStorage.removeItem('geocrete_user_role')
+        localStorage.removeItem('geocrete_username')
+      } catch {
+        // ignore
+      }
     }
     window.addEventListener('auth:logout', handleAutoLogout)
     return () => window.removeEventListener('auth:logout', handleAutoLogout)
@@ -106,11 +145,20 @@ export default function App() {
   const handleLogout = useCallback(() => {
     authService.logout()
     setIsAuthenticated(false)
+    setUserRole('Admin')
+    setLoggedInUsername('')
+    try {
+      localStorage.removeItem('geocrete_user_role')
+      localStorage.removeItem('geocrete_username')
+    } catch {
+      // ignore
+    }
   }, [])
 
   // ── End Authentication ──────────────────────────────────────────────────────
 
   const [activeTab, setActiveTab] = useState(getInitialTab)
+  const setActiveTabDirect = setActiveTab
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedSiteFilter, setSelectedSiteFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('')
@@ -396,6 +444,10 @@ export default function App() {
   }, [isAuthenticated, selectedSiteFilter, dateFilter, searchQuery])
 
   const handleTabChange = useCallback((newTab) => {
+    if (userRole === 'Manager') {
+      newTab = 'expenses'
+    }
+
     if (newTab === 'sites') {
       setSelectedSiteForDetail(null)
       loadSites()
@@ -514,13 +566,33 @@ export default function App() {
 
   // Show login page if unauthenticated
   if (!isAuthenticated) {
-    return <LoginPage onLoginSuccess={() => setIsAuthenticated(true)} />
+    return (
+      <LoginPage
+        onLoginSuccess={(data) => {
+          setIsAuthenticated(true)
+          const role = data?.role || 'Admin'
+          const uname = data?.username || ''
+          setUserRole(role)
+          setLoggedInUsername(uname)
+          try {
+            localStorage.setItem('geocrete_user_role', role)
+            localStorage.setItem('geocrete_username', uname)
+          } catch {
+            // ignore
+          }
+          // If manager, force active tab to 'expenses'
+          if (role === 'Manager') {
+            setActiveTab('expenses')
+          }
+        }}
+      />
+    )
   }
 
   return (
     <div className="app-container">
       {/* 1. Left Sidebar */}
-      <Sidebar activeTab={activeTab} setActiveTab={handleTabChange} />
+      <Sidebar activeTab={activeTab} setActiveTab={handleTabChange} userRole={userRole} />
 
       {/* 2. Main Content Layout */}
       <div className="main-layout">
@@ -529,9 +601,11 @@ export default function App() {
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           onOpenAddExpense={handleScrollToAddExpense}
-          onOpenAddSite={() => setIsAddSiteOpen(true)}
-          onNavigateOwnerProfile={handleNavigateOwnerProfile}
+          onOpenAddSite={userRole !== 'Manager' ? () => setIsAddSiteOpen(true) : undefined}
+          onNavigateOwnerProfile={userRole !== 'Manager' ? handleNavigateOwnerProfile : undefined}
           ownerProfile={ownerProfile}
+          userRole={userRole}
+          loggedInUsername={loggedInUsername}
           onLogout={handleLogout}
         />
 
@@ -573,10 +647,17 @@ export default function App() {
               onExpenseChanged={handlePaymentCompleted}
               showNotification={setNotification}
               initialExpense={selectedExpenseForDetail}
+              userRole={userRole}
+              loggedInUsername={loggedInUsername}
               onBackFromDetail={() => {
                 setSelectedExpenseForDetail(null)
-                if (expenseDetailReturnTab === 'dashboard') {
+                if (userRole === 'Manager' || String(loggedInUsername || '').toLowerCase() === 'manager') {
+                  setActiveTab('expenses')
+                  loadExpenses()
+                } else if (expenseDetailReturnTab === 'dashboard') {
                   handleTabChange('dashboard')
+                } else {
+                  handleTabChange('expenses')
                 }
               }}
             />
@@ -654,22 +735,28 @@ export default function App() {
               onRefreshAccounts={loadBankAccounts}
               showNotification={setNotification}
             />
+          ) : activeTab === 'files' ? (
+            <FilesPage showNotification={setNotification} />
           ) : activeTab === 'settings' ? (
             <SettingsPage
               key={settingsKey}
               showNotification={setNotification}
               onProfileUpdated={setOwnerProfile}
+              userRole={userRole}
             />
           ) : (
             <>
               {/* Welcome Section */}
-              <WelcomeSection ownerProfile={ownerProfile} />
+              <WelcomeSection ownerProfile={ownerProfile} sites={sites} />
 
-              {/* Financial Summary (4 stat cards in a single horizontal row) */}
+              {/* Financial Summary (5 stat cards in a single horizontal row) */}
               <DashboardFinancialSummary
                 sites={constructionSites}
                 expenses={expenses}
-                loading={loadingSites || loadingExpenses}
+                accounts={accounts}
+                workers={workers}
+                labourSummary={labourSummary}
+                loading={loadingSites || loadingExpenses || loadingAccounts || loadingLabour}
               />
 
               {/* ── Dashboard Tabs: Expenses | Labour | Consulting | Other | Site ── */}
@@ -708,13 +795,11 @@ export default function App() {
                         />
                       )}
                       {dashboardTab === 'labour' && (
-                        <AddWorkerModal
-                          isOpen={false}
-                          embeddedMode={true}
-                          onClose={() => {}}
+                        <LabourPaymentForm
+                          workers={workers}
                           sites={constructionSites}
                           bankAccounts={accounts}
-                          onWorkerCreated={() => {
+                          onPaymentRecorded={() => {
                             loadLabour()
                             loadBankAccounts()
                           }}
@@ -838,13 +923,14 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Sites Overview (3 cards in a row) — always visible */}
+              {/* Sites Overview cards — always visible at the bottom */}
               <SitesOverview
                 sites={siteOverview.length > 0 ? siteOverview : constructionSites}
                 loading={loadingSites}
                 onNavigateSites={() => handleTabChange('sites')}
                 onViewSite={handleViewSite}
               />
+
             </>
           )}
         </main>

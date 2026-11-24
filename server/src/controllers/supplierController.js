@@ -129,8 +129,16 @@ export const getSupplierPurchases = async (req, res, next) => {
 
     // Fetch expenses linked to this supplier (optionally filtered by site)
     const pool = getPool()
-    // Skip expenses already folded into materials to avoid double-counting purchase totals
-    let expQuery = `SELECT e.*, s.name as site_name FROM expenses e LEFT JOIN sites s ON s.id = e.site_id WHERE e.supplier_id = ? AND COALESCE(e.applied_to_material, 0) = 0`
+    // Skip expenses already folded into materials to avoid double-counting purchase totals,
+    // and skip rejected manager expenses
+    let expQuery = `
+      SELECT e.*, s.name as site_name 
+      FROM expenses e 
+      LEFT JOIN sites s ON s.id = e.site_id 
+      WHERE e.supplier_id = ? 
+        AND COALESCE(e.applied_to_material, 0) = 0
+        AND (e.approval_status IS NULL OR e.approval_status != 'Rejected')
+    `
     const expParams = [req.params.id]
     if (siteId) {
       expQuery += ` AND e.site_id = ?`
@@ -143,6 +151,10 @@ export const getSupplierPurchases = async (req, res, next) => {
       _id: `exp-${e.id}`,
       id: `exp-${e.id}`,
       rawId: e.id,
+      materialId: e.material_id ? String(e.material_id) : null,
+      siteId: e.site_id ? String(e.site_id) : null,
+      createdByRole: e.created_by_role,
+      approvalStatus: e.approval_status,
       isExpense: true,
       refNumber: `EXP-${new Date(e.date).toISOString().slice(0, 10).replace(/-/g, '')}-${String(e.id).padStart(4, '0')}`,
       purchaseDate: e.date ? new Date(e.date).toLocaleDateString('en-GB') : null,
@@ -156,7 +168,24 @@ export const getSupplierPurchases = async (req, res, next) => {
         : Number(e.paid_amount || 0) > 0 ? 'Partial' : 'Pending',
     }))
 
-    const allPurchases = [...materials, ...expensePurchases]
+    // Deduplicate: If an expense has a corresponding material already in materials list
+    // (e.g. linked by material_id, or same manager expense already folded into materials),
+    // do not include the expense duplicate
+    const existingMaterialIds = new Set(materials.map((m) => String(m.id || m._id)))
+    const existingMaterialKeys = new Set(
+      materials.map((m) => `${m.site?._id || m.site?.id || m.siteId}__${(m.category || m.materialName || '').toLowerCase()}`)
+    )
+
+    const nonDuplicateExpensePurchases = expensePurchases.filter((e) => {
+      if (e.materialId && existingMaterialIds.has(String(e.materialId))) return false
+      if (e.createdByRole === 'Manager' && e.approvalStatus === 'Approved') {
+        const key = `${e.siteId}__${(e.category || '').toLowerCase()}`
+        if (existingMaterialKeys.has(key)) return false
+      }
+      return true
+    })
+
+    const allPurchases = [...materials, ...nonDuplicateExpensePurchases]
 
     let totalPurchase = 0
     let totalPaid = 0

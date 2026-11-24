@@ -18,7 +18,10 @@ const UNITS = [
   'Days',
   'Kg',
   'Meters',
+  'Other',
 ]
+
+const isCustomUnitAEM = (unit) => unit && !['Bags','Tons','Units','Hours','CFT','Trips','Pieces','Days','Kg','Meters'].includes(unit)
 
 const PAYMENT_METHODS = [
   'Bank Transfer',
@@ -57,6 +60,7 @@ export default function AddExpenseModal({
   const [error, setError] = useState('')
   const [materialsList, setMaterialsList] = useState([])
   const [whatsappExpense, setWhatsappExpense] = useState(null)
+  const [customUnit, setCustomUnit] = useState('')
 
   // Load actual materials when modal opens
   useEffect(() => {
@@ -84,19 +88,22 @@ export default function AddExpenseModal({
       const siteId = expenseToEdit.site?._id || expenseToEdit.site?.id || expenseToEdit.site || ''
       const supplierId = expenseToEdit.supplier?._id || expenseToEdit.supplier?.id || expenseToEdit.supplier || ''
       const rawDate = expenseToEdit.date ? String(expenseToEdit.date).split('T')[0] : getTodayString()
+      const savedUnit = expenseToEdit.unit || 'Bags'
+      const hasCustomUnit = isCustomUnitAEM(savedUnit)
       setFormData({
         date: rawDate,
         site: siteId,
         supplier: supplierId,
         category: expenseToEdit.category || '',
         quantity: expenseToEdit.quantity !== undefined && expenseToEdit.quantity !== null ? String(expenseToEdit.quantity) : '',
-        unit: expenseToEdit.unit || 'Bags',
+        unit: hasCustomUnit ? 'Other' : savedUnit,
         ratePerUnit: expenseToEdit.ratePerUnit !== undefined && expenseToEdit.ratePerUnit !== null ? String(expenseToEdit.ratePerUnit) : '',
         paidAmount: expenseToEdit.paidAmount !== undefined && expenseToEdit.paidAmount !== null ? String(expenseToEdit.paidAmount) : '',
         paymentMethod: expenseToEdit.paymentMethod || 'Bank Transfer',
         bankAccountId: expenseToEdit.bankAccountId || '',
         remark: expenseToEdit.remark || '',
       })
+      setCustomUnit(hasCustomUnit ? savedUnit : '')
       setError('')
     } else {
       setFormData({
@@ -286,7 +293,7 @@ export default function AddExpenseModal({
         supplier: formData.supplier || undefined,
         category: formData.category.trim(),
         quantity: numQuantity,
-        unit: formData.unit || 'Units',
+        unit: formData.unit === 'Other' ? (customUnit.trim() || 'Other') : (formData.unit || 'Units'),
         ratePerUnit: numRate,
         paidAmount: numPaid,
         bankAccountId: numPaid > 0 ? (formData.bankAccountId || undefined) : undefined,
@@ -328,6 +335,7 @@ export default function AddExpenseModal({
           bankAccountId: '',
           remark: '',
         })
+        setCustomUnit('')
         if (onExpenseCreated) {
           onExpenseCreated(created)
         }
@@ -544,6 +552,16 @@ export default function AddExpenseModal({
                   </option>
                 ))}
               </select>
+              {formData.unit === 'Other' && (
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Enter custom unit"
+                  value={customUnit}
+                  onChange={(e) => setCustomUnit(e.target.value)}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E5EAF1', fontSize: '14px', color: '#172033', marginTop: '8px', boxSizing: 'border-box' }}
+                />
+              )}
             </div>
 
             {/* 8. Rate per Unit */}

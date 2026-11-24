@@ -48,51 +48,42 @@ export default function AddBankModal({
   }
 
   const validate = () => {
-    // 1. Bank Name
+    // Bank Name is the only required field
     if (!formData.bankName.trim()) {
       return 'Bank name is required.'
     }
 
-    // 2. IFSC Code
+    // IFSC Code — validate format only if provided
     const trimmedIfsc = formData.ifscCode.trim().toUpperCase()
-    if (!trimmedIfsc) {
-      return 'IFSC code is required.'
-    }
-    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/
-    if (!ifscRegex.test(trimmedIfsc)) {
-      return 'Invalid IFSC code format (must be 11 characters e.g. HDFC0001234).'
-    }
-
-    // 3. Account Holder Name
-    if (!formData.accountHolderName.trim()) {
-      return 'Account holder name is required.'
+    if (trimmedIfsc) {
+      const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/
+      if (!ifscRegex.test(trimmedIfsc)) {
+        return 'Invalid IFSC code format (must be 11 characters e.g. HDFC0001234).'
+      }
     }
 
-    // 4. Account Number (preserve leading zeros, 9-18 digits)
+    // Account Number — validate format only if provided
     const trimmedAccNum = String(formData.accountNumber).trim()
-    if (!trimmedAccNum) {
-      return 'Account number is required.'
-    }
-    const accRegex = /^\d{9,18}$/
-    if (!accRegex.test(trimmedAccNum)) {
-      return 'Account number must be between 9 and 18 digits.'
-    }
-
-    // Duplicate check
-    const isDuplicate = existingAccounts.some(
-      (acc) => String(acc.accountNumber || '').trim() === trimmedAccNum,
-    )
-    if (isDuplicate) {
-      return 'A bank account with this account number already exists.'
+    if (trimmedAccNum) {
+      const accRegex = /^\d{9,18}$/
+      if (!accRegex.test(trimmedAccNum)) {
+        return 'Account number must be between 9 and 18 digits.'
+      }
+      // Duplicate check
+      const isDuplicate = existingAccounts.some(
+        (acc) => String(acc.accountNumber || '').trim() === trimmedAccNum,
+      )
+      if (isDuplicate) {
+        return 'A bank account with this account number already exists.'
+      }
     }
 
-    // 5. Initial Deposit / Opening Balance (allow 0, reject negative/invalid)
-    if (formData.balance === '' || formData.balance === null || formData.balance === undefined) {
-      return 'Initial deposit / opening balance is required.'
-    }
-    const numBalance = Number(formData.balance)
-    if (isNaN(numBalance) || numBalance < 0) {
-      return 'Opening balance must be 0 or a positive number.'
+    // Opening Balance — validate only if provided
+    if (formData.balance !== '' && formData.balance !== null && formData.balance !== undefined) {
+      const numBalance = Number(formData.balance)
+      if (isNaN(numBalance) || numBalance < 0) {
+        return 'Opening balance must be 0 or a positive number.'
+      }
     }
 
     return null
@@ -196,9 +187,7 @@ export default function AddBankModal({
 
             {/* 2. IFSC Code */}
             <div className="form-group">
-              <label className="form-label">
-                IFSC Code <span style={{ color: '#EF4444' }}>*</span>
-              </label>
+              <label className="form-label">IFSC Code</label>
               <input
                 type="text"
                 name="ifscCode"
@@ -213,9 +202,7 @@ export default function AddBankModal({
 
             {/* 3. Account Holder Name */}
             <div className="form-group">
-              <label className="form-label">
-                Account Holder Name <span style={{ color: '#EF4444' }}>*</span>
-              </label>
+              <label className="form-label">Account Holder Name</label>
               <input
                 type="text"
                 name="accountHolderName"
@@ -228,9 +215,7 @@ export default function AddBankModal({
 
             {/* 4. Account Number */}
             <div className="form-group">
-              <label className="form-label">
-                Account Number <span style={{ color: '#EF4444' }}>*</span>
-              </label>
+              <label className="form-label">Account Number</label>
               <input
                 type="text"
                 name="accountNumber"
@@ -243,9 +228,7 @@ export default function AddBankModal({
 
             {/* 5. Initial Deposit / Opening Balance */}
             <div className="form-group">
-              <label className="form-label">
-                Initial Deposit / Opening Balance (₹) <span style={{ color: '#EF4444' }}>*</span>
-              </label>
+              <label className="form-label">Initial Deposit / Opening Balance (₹)</label>
               <input
                 type="number"
                 name="balance"

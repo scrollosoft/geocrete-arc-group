@@ -12,6 +12,7 @@ import { supplierService } from '../services/supplierService.js'
 import { expenseService } from '../services/expenseService.js'
 import { siteService } from '../services/siteService.js'
 import { labourService } from '../services/labourService.js'
+import TablePagination from './TablePagination.jsx'
 
 export default function SiteDetailPage({
   site,
@@ -24,7 +25,27 @@ export default function SiteDetailPage({
 }) {
   const [activeSubTab, setActiveSubTab] = useState('Overview')
   const [activeLabourTab, setActiveLabourTab] = useState('Worker List')
+
+  // Pagination states for sub-tabs
+  const [expensesPage, setExpensesPage] = useState(1)
+  const [expensesPageSize, setExpensesPageSize] = useState(10)
+
+  const [matPage, setMatPage] = useState(1)
+  const [matPageSize, setMatPageSize] = useState(10)
+
+  const [labourPage, setLabourPage] = useState(1)
+  const [labourPageSize, setLabourPageSize] = useState(10)
+
+  const [suppPage, setSuppPage] = useState(1)
+  const [suppPageSize, setSuppPageSize] = useState(10)
+
+  const [clientPayPage, setClientPayPage] = useState(1)
+  const [clientPayPageSize, setClientPayPageSize] = useState(10)
   const [materialFilter, setMaterialFilter] = useState('All Materials')
+
+  useEffect(() => {
+    setMatPage(1)
+  }, [materialFilter])
   const [siteMaterials, setSiteMaterials] = useState([])
   const [allSuppliers, setAllSuppliers] = useState([])
   const [siteExpensesData, setSiteExpensesData] = useState([])
@@ -52,11 +73,18 @@ export default function SiteDetailPage({
     ])
       .then(([matRes, supRes, expRes, payRes, labRes]) => {
         if (!active) return
-        setSiteMaterials(matRes?.materials || (Array.isArray(matRes) ? matRes : []))
+        const isRejectedRecord = (item) => {
+          if (!item) return false
+          const status = String(item.approvalStatus || item.approval_status || '').trim().toLowerCase()
+          return status === 'rejected'
+        }
+        const loadedMaterials = matRes?.materials || (Array.isArray(matRes) ? matRes : [])
+        setSiteMaterials(loadedMaterials.filter((m) => !isRejectedRecord(m)))
         setAllSuppliers(Array.isArray(supRes) ? supRes : (supRes?.suppliers || []))
         const loadedExpenses = expRes?.expenses || (Array.isArray(expRes) ? expRes : [])
-        if (loadedExpenses.length > 0) {
-          setSiteExpensesData(loadedExpenses)
+        const nonRejectedExpenses = loadedExpenses.filter((e) => !isRejectedRecord(e))
+        if (nonRejectedExpenses.length > 0) {
+          setSiteExpensesData(nonRejectedExpenses)
         }
         setClientPayments(Array.isArray(payRes) ? payRes : [])
 
@@ -104,27 +132,35 @@ export default function SiteDetailPage({
   }, [expenses, site?._id, site?.id, site?.name])
 
   // Filter site-specific expenses (uses fresh siteExpensesData if loaded)
+  const isRejectedRecord = (item) => {
+    if (!item) return false
+    const status = String(item.approvalStatus || item.approval_status || '').trim().toLowerCase()
+    return status === 'rejected'
+  }
+
   const baseExpenses = siteExpensesData.length > 0 ? siteExpensesData : expenses
   const siteExpenses = baseExpenses.filter((e) => {
     if (!site || !e) return false
-    const eSiteId = e.site?._id || e.site
-    if (site._id && (eSiteId === site._id || String(eSiteId) === String(site._id))) {
+    if (isRejectedRecord(e)) return false
+    const eSiteId = e.site?._id || e.site?.id || (typeof e.site === 'object' ? null : e.site) || e.siteId
+    if (site._id && (String(eSiteId) === String(site._id) || String(eSiteId) === String(site.id))) {
       return true
     }
-    const eSiteName = (e.site?.name || '').trim().toLowerCase()
+    const eSiteName = (e.site?.name || e.siteName || '').trim().toLowerCase()
     const targetName = (site.name || '').trim().toLowerCase()
-    return eSiteName && targetName && eSiteName === targetName
+    return Boolean(eSiteName && targetName && eSiteName === targetName)
   })
 
   // Material purchase records for the Materials tab — use individual expense records
   // so that multiple purchases of the same material on different dates show as separate rows.
   // siteMaterials (grouped API data) is still used for the Suppliers tab aggregation below.
+  const validSiteMaterials = siteMaterials.filter((m) => !isRejectedRecord(m))
   const materialExpenseRecords = siteExpenses.filter(
-    (e) => e.category && !['labour', 'equipment', 'transport', 'fuel', 'utilities'].includes(e.category.toLowerCase())
+    (e) => !isRejectedRecord(e) && e.category && !['labour', 'equipment', 'transport', 'fuel', 'utilities'].includes(e.category.toLowerCase())
   )
   const materialRecords = materialExpenseRecords.length > 0
     ? materialExpenseRecords
-    : siteMaterials
+    : validSiteMaterials
 
   // Unique material names for the Materials filter dropdown
   const uniqueMaterialNames = useMemo(() => {
@@ -148,6 +184,36 @@ export default function SiteDetailPage({
       return name === materialFilter.toLowerCase()
     })
   }, [materialRecords, materialFilter])
+
+  // Material summary cards — grouped by material name across all records (not filtered)
+  const materialSummaryCards = useMemo(() => {
+    const map = new Map()
+    materialRecords.forEach((item) => {
+      const name = (item.category || item.materialName || '').trim()
+      if (!name) return
+      const key = name.toLowerCase()
+      const total = Number(item.totalCost !== undefined ? item.totalCost : item.amount) || 0
+      const paid = Number(item.paidAmount) || 0
+      if (map.has(key)) {
+        const existing = map.get(key)
+        existing.totalAmount += total
+        existing.paidAmount += paid
+      } else {
+        map.set(key, { name, totalAmount: total, paidAmount: paid })
+      }
+    })
+    return Array.from(map.values())
+      .map((entry) => ({
+        name: entry.name,
+        totalAmount: entry.totalAmount,
+        paidAmount: entry.paidAmount,
+        pendingAmount: Math.max(0, entry.totalAmount - entry.paidAmount),
+        remainingPercent: entry.totalAmount > 0
+          ? Math.round(((entry.totalAmount - entry.paidAmount) / entry.totalAmount) * 100)
+          : 0,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [materialRecords])
 
   // Aggregate supplier records for this site across materials & expenses
   const siteSuppliers = useMemo(() => {
@@ -265,13 +331,14 @@ export default function SiteDetailPage({
 
   if (!site) return null
 
-  // Indian Currency Formatter (Cr, L, or formatted string)
+  // Full Indian Currency Formatter (without L / Cr abbreviations)
   const formatIndianCurrency = (amount) => {
     if (!amount && amount !== 0) return '₹0'
     const num = Number(amount)
-    if (num >= 10000000) return `₹${(num / 10000000).toFixed(2)} Cr`
-    if (num >= 100000) return `₹${(num / 100000).toFixed(1)} L`
-    return `₹${num.toLocaleString('en-IN')}`
+    const isNegative = num < 0
+    const absNum = Math.abs(num)
+    const formatted = `₹${absNum.toLocaleString('en-IN')}`
+    return isNegative ? `-${formatted}` : formatted
   }
 
   // Exact number formatter like ₹4,80,000
@@ -297,7 +364,10 @@ export default function SiteDetailPage({
 
   // Dynamic calculations based on actual site & expenses
   const projectBudget = Number(site.totalBudget !== undefined ? site.totalBudget : (site.projectValue || 0))
-  const totalSpent = site.totalSpent !== undefined && site.totalSpent !== null ? Number(site.totalSpent) : siteExpenses.reduce((s, e) => s + (e.amount || 0), 0)
+  const calculatedExpensesSpent = siteExpenses.reduce((s, e) => s + Number(e.amount || 0), 0)
+  const calculatedMaterialsSpent = materialRecords.reduce((s, m) => s + Number(m.totalCost || m.amount || 0), 0)
+  const dynamicTotalSpent = Math.max(calculatedExpensesSpent, calculatedMaterialsSpent)
+  const totalSpent = dynamicTotalSpent > 0 ? dynamicTotalSpent : Number(site.totalSpent || 0)
 
   const spentPercent = projectBudget > 0 ? Math.min(100, Math.round((totalSpent / projectBudget) * 100)) : 0
 
@@ -311,9 +381,11 @@ export default function SiteDetailPage({
 
   const paidPercent = totalSpent > 0 ? Math.min(100, Math.round((totalSitePaid / totalSpent) * 100)) : 0
 
-  // Client Received & Balance Receivable calculations
-  const clientReceived = Number(site.totalReceived || 0) // default ~1.35 Cr (73% collected)
-  const balanceReceivable = Math.max(0, projectBudget - clientReceived)
+  // Client Received & Pending calculations
+  const clientPaymentsSum = clientPayments.reduce((acc, p) => acc + Number(p.amount || 0), 0)
+  const clientReceived = clientPayments.length > 0 ? clientPaymentsSum : Number(site.totalReceived || 0)
+  const pendingAmount = clientReceived - totalSitePaid
+  const projectPending = Math.max(0, projectBudget - clientReceived)
 
   // Real site transactions only
 
@@ -469,23 +541,17 @@ export default function SiteDetailPage({
         </div>
       </div>
 
-      {/* 3. Top Summary Metric Cards (5 Cards in a Row) */}
+      {/* 3. Top Summary Metric Cards */}
       <div className="site-detail-stat-grid">
-        {/* Card 1: Project Budget */}
-        <div className="site-detail-card">
-          <span className="site-card-label">Project Budget</span>
-          <div className="site-card-val">{formatIndianCurrency(projectBudget)}</div>
-          <span className="site-card-desc">Total contract value</span>
-        </div>
 
-        {/* Card 2: Total Spent */}
+        {/* Card 1: Total Spent */}
         <div className="site-detail-card">
           <span className="site-card-label">Total Spent</span>
           <div className="site-card-val">{formatIndianCurrency(totalSpent)}</div>
           <span className="site-card-desc">{spentPercent}% utilized</span>
         </div>
 
-        {/* Card 3: Paid Amount */}
+        {/* Card 2: Paid Amount */}
         <div className="site-detail-card">
           <span className="site-card-label">Paid Amount</span>
           <div className="site-card-val">{formatIndianCurrency(totalSitePaid)}</div>
@@ -494,18 +560,25 @@ export default function SiteDetailPage({
           </span>
         </div>
 
-        {/* Card 4: Client Received */}
+        {/* Card 3: Client Received */}
         <div className="site-detail-card">
           <span className="site-card-label">Client Received</span>
           <div className="site-card-val">{formatIndianCurrency(clientReceived)}</div>
           <span className="site-card-desc">73% collected</span>
         </div>
 
-        {/* Card 5: Pending (Highlighted in Teal/Blue) */}
+        {/* Card 4: Pending */}
         <div className="site-detail-card site-card-highlight">
           <span className="site-card-label">Pending</span>
-          <div className="site-card-val site-card-val-cyan">{formatIndianCurrency(balanceReceivable)}</div>
-          <span className="site-card-desc">Next due 06 Jun</span>
+          <div className="site-card-val site-card-val-red">{formatIndianCurrency(pendingAmount)}</div>
+          <span className="site-card-desc">Client Receive − Paid Amount</span>
+        </div>
+
+        {/* Card 5: Client Pending (Project Budget - Client Received) */}
+        <div className="site-detail-card site-card-highlight">
+          <span className="site-card-label">Client Pending</span>
+          <div className="site-card-val site-card-val-cyan">{formatIndianCurrency(projectPending)}</div>
+          <span className="site-card-desc">Project Budget − Client Received</span>
         </div>
       </div>
 
@@ -615,7 +688,9 @@ export default function SiteDetailPage({
               </thead>
               <tbody>
                 {siteExpenses.length > 0 ? (
-                  siteExpenses.map((item) => (
+                  siteExpenses
+                    .slice((expensesPage - 1) * expensesPageSize, expensesPage * expensesPageSize)
+                    .map((item) => (
                     <tr key={item._id} className="expense-row">
                       <td className="td-date">
                         {item.date ? new Date(item.date).toLocaleDateString('en-GB') : '-'}
@@ -647,11 +722,25 @@ export default function SiteDetailPage({
               </tbody>
             </table>
           </div>
+          {siteExpenses.length > 0 && (
+            <TablePagination
+              currentPage={expensesPage}
+              pageSize={expensesPageSize}
+              totalRecords={siteExpenses.length}
+              onPageChange={setExpensesPage}
+              onPageSizeChange={(newSize) => {
+                setExpensesPageSize(newSize)
+                setExpensesPage(1)
+              }}
+              style={{ padding: '14px 20px', borderTop: '1px solid #E5EAF1', margin: 0 }}
+            />
+          )}
         </div>
       )}
 
       {/* Materials Tab */}
       {activeSubTab === 'Materials' && (
+        <>
         <div className="site-detail-box" style={{ padding: '0', overflow: 'hidden' }}>
 
           {/* Material Filter Row */}
@@ -699,7 +788,9 @@ export default function SiteDetailPage({
               </thead>
               <tbody>
                 {filteredMaterialRecords.length > 0 ? (
-                  filteredMaterialRecords.map((item) => (
+                  filteredMaterialRecords
+                    .slice((matPage - 1) * matPageSize, matPage * matPageSize)
+                    .map((item) => (
                     <tr key={item._id || item.id} className="expense-row">
                       <td className="td-date">
                         {item.purchaseDate || item.date
@@ -733,7 +824,86 @@ export default function SiteDetailPage({
               </tbody>
             </table>
           </div>
+          {filteredMaterialRecords.length > 0 && (
+            <TablePagination
+              currentPage={matPage}
+              pageSize={matPageSize}
+              totalRecords={filteredMaterialRecords.length}
+              onPageChange={setMatPage}
+              onPageSizeChange={(newSize) => {
+                setMatPageSize(newSize)
+                setMatPage(1)
+              }}
+              style={{ padding: '14px 20px', borderTop: '1px solid #E5EAF1', margin: 0 }}
+            />
+          )}
         </div>
+
+        {/* Material Summary Cards – below the Materials table */}
+        {materialSummaryCards.length > 0 && (
+          <div style={{ marginTop: '20px' }}>
+            <div style={{
+              fontSize: '13.5px',
+              fontWeight: 700,
+              color: '#172033',
+              marginBottom: '12px',
+              letterSpacing: '0.1px',
+            }}>
+              Material-wise Summary
+            </div>
+            <div className="mat-summary-cards-grid">
+              {materialSummaryCards.map((card) => (
+                <div key={card.name} className="mat-summary-card">
+                  {/* Card Header */}
+                  <div className="mat-summary-card-header">
+                    <div className="mat-summary-card-name" title={card.name}>
+                      {card.name}
+                    </div>
+                    <div className="mat-summary-card-pct-badge" style={{
+                      backgroundColor: card.remainingPercent === 0 ? '#ECFDF5' : '#FFF7ED',
+                      color: card.remainingPercent === 0 ? '#16A34A' : '#D97706',
+                    }}>
+                      {card.remainingPercent}% pending
+                    </div>
+                  </div>
+
+                  {/* Total Amount */}
+                  <div style={{ marginTop: '12px' }}>
+                    <div className="mat-summary-card-label">Total Amount</div>
+                    <div className="mat-summary-card-total">{formatExactCurrency(card.totalAmount)}</div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="mat-summary-progress-bg">
+                    <div
+                      className="mat-summary-progress-fill"
+                      style={{
+                        width: `${Math.min(100, card.totalAmount > 0 ? Math.round((card.paidAmount / card.totalAmount) * 100) : 0)}%`,
+                      }}
+                    />
+                  </div>
+
+                  {/* Paid / Pending row */}
+                  <div className="mat-summary-card-row">
+                    <div>
+                      <div className="mat-summary-card-label">Paid</div>
+                      <div className="mat-summary-card-paid">{formatExactCurrency(card.paidAmount)}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div className="mat-summary-card-label">Pending</div>
+                      <div className="mat-summary-card-pending" style={{
+                        color: card.pendingAmount === 0 ? '#16A34A' : '#DC2626',
+                      }}>
+                        {formatExactCurrency(card.pendingAmount)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        </>
       )}
 
       {/* Labour Tab */}
@@ -798,7 +968,9 @@ export default function SiteDetailPage({
                     </td>
                   </tr>
                 ) : workersWithMetrics.length > 0 ? (
-                  workersWithMetrics.map((w) => (
+                  workersWithMetrics
+                    .slice((labourPage - 1) * labourPageSize, labourPage * labourPageSize)
+                    .map((w) => (
                     <tr key={w._id || w.id} className="expense-row">
                       <td className="td-date" style={{ padding: '14px 20px' }}>
                         {w.joiningDate || w.createdAt
@@ -851,6 +1023,19 @@ export default function SiteDetailPage({
               </tbody>
             </table>
           </div>
+          {workersWithMetrics.length > 0 && (
+            <TablePagination
+              currentPage={labourPage}
+              pageSize={labourPageSize}
+              totalRecords={workersWithMetrics.length}
+              onPageChange={setLabourPage}
+              onPageSizeChange={(newSize) => {
+                setLabourPageSize(newSize)
+                setLabourPage(1)
+              }}
+              style={{ padding: '14px 20px', borderTop: '1px solid #E5EAF1', margin: 0 }}
+            />
+          )}
         </div>
       )}
 
@@ -878,7 +1063,9 @@ export default function SiteDetailPage({
                     </td>
                   </tr>
                 ) : siteSuppliers.length > 0 ? (
-                  siteSuppliers.map((item, idx) => (
+                  siteSuppliers
+                    .slice((suppPage - 1) * suppPageSize, suppPage * suppPageSize)
+                    .map((item, idx) => (
                     <tr key={item.id || idx} className="expense-row">
                       <td className="td-description" style={{ padding: '16px 20px', fontWeight: 600, color: '#172033' }}>
                         <div>{item.name}</div>
@@ -925,6 +1112,19 @@ export default function SiteDetailPage({
               </tbody>
             </table>
           </div>
+          {siteSuppliers.length > 0 && (
+            <TablePagination
+              currentPage={suppPage}
+              pageSize={suppPageSize}
+              totalRecords={siteSuppliers.length}
+              onPageChange={setSuppPage}
+              onPageSizeChange={(newSize) => {
+                setSuppPageSize(newSize)
+                setSuppPage(1)
+              }}
+              style={{ padding: '14px 20px', borderTop: '1px solid #E5EAF1', margin: 0 }}
+            />
+          )}
         </div>
       )}
 
@@ -951,7 +1151,9 @@ export default function SiteDetailPage({
                     </td>
                   </tr>
                 ) : clientPayments.length > 0 ? (
-                  clientPayments.map((payment) => (
+                  clientPayments
+                    .slice((clientPayPage - 1) * clientPayPageSize, clientPayPage * clientPayPageSize)
+                    .map((payment) => (
                     <tr key={payment.id || payment._id} className="expense-row">
                       <td className="td-date" style={{ padding: '16px 20px' }}>
                         {payment.paymentDate ? formatTransactionDate(payment.paymentDate) : '—'}
@@ -988,6 +1190,19 @@ export default function SiteDetailPage({
               </tbody>
             </table>
           </div>
+          {clientPayments.length > 0 && (
+            <TablePagination
+              currentPage={clientPayPage}
+              pageSize={clientPayPageSize}
+              totalRecords={clientPayments.length}
+              onPageChange={setClientPayPage}
+              onPageSizeChange={(newSize) => {
+                setClientPayPageSize(newSize)
+                setClientPayPage(1)
+              }}
+              style={{ padding: '14px 20px', borderTop: '1px solid #E5EAF1', margin: 0 }}
+            />
+          )}
         </div>
       )}
     </div>

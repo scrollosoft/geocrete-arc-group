@@ -218,12 +218,17 @@ export const getBankTransactions = async (req, res, next) => {
         s.name AS site_name,
         s.location AS site_location,
         cp.client_id,
-        COALESCE(so.name, s.site_owner) AS client_name,
-        so.phone AS client_phone
+        COALESCE(c.owner_name, so.name, s.site_owner) AS client_name,
+        COALESCE(c.mobile_number, so.phone) AS client_phone,
+        cp.consulting_id,
+        c.owner_name AS consulting_owner_name,
+        c.mobile_number AS consulting_mobile_number,
+        c.remark AS consulting_remark
       FROM client_payments cp
       LEFT JOIN bank_accounts ba ON ba.id = cp.bank_account_id AND ba.is_active = 1
       LEFT JOIN sites s ON s.id = cp.site_id
       LEFT JOIN site_owners so ON so.id = cp.client_id
+      LEFT JOIN consultings c ON c.id = cp.consulting_id
       WHERE cp.amount > 0 AND (ba.id IS NOT NULL OR LOWER(cp.payment_method) LIKE '%cash%' OR cp.bank_account_id IS NULL)
     `)
 
@@ -349,8 +354,11 @@ export const getBankTransactions = async (req, res, next) => {
       const isAdvance = cp.title && (cp.title.toLowerCase().includes('initial') || cp.title.toLowerCase().includes('advance'))
       const isRefund = cp.title && (cp.title.toLowerCase().includes('refund') || cp.title.toLowerCase().includes('credit'))
       const isDebit = cp.txn_type === 'debit' || cp.type === 'debit'
-      const isConsulting = cp.title && cp.title.toLowerCase().includes('consulting')
-      const isOther = cp.title && cp.title.toLowerCase().includes('other')
+      const isConsulting = Boolean(cp.consulting_id) || (cp.title && cp.title.toLowerCase().includes('consulting'))
+      const isOther = cp.title && cp.title.toLowerCase().includes('other') && !cp.title.toLowerCase().includes('bank transfer')
+      const isTransfer = cp.title && cp.title.toLowerCase().includes('bank transfer')
+      const isInternalTransfer = isTransfer && Boolean(cp.reference && cp.reference.includes('[TRANSFER-INTERNAL]'))
+      const isOtherTransfer = isTransfer && Boolean(cp.reference && (cp.reference.includes('[TRANSFER-OTHER]') || cp.title.includes('Other Account')))
 
       let title = isAdvance ? 'Site Advance Received' : (cp.title || 'Client Payment Received')
       let category = isRefund ? 'Credit / Refund' : (isAdvance ? 'Site Advance' : (isDebit ? 'Debit / Expense' : 'Credit / Incoming'))
@@ -361,11 +369,20 @@ export const getBankTransactions = async (req, res, next) => {
       }
 
       if (isConsulting) {
-        title = cp.title || 'Consulting Payment Received'
+        title = 'Consulting Payment Received'
         category = 'Consulting'
       } else if (isOther) {
         title = cp.title || (isDebit ? 'Other - Send' : 'Other - Receive')
         category = 'Other'
+      } else if (isTransfer) {
+        category = 'Bank Transfer'
+        if (isInternalTransfer) {
+          title = isDebit ? 'Bank Transfer (Sent)' : 'Bank Transfer (Received)'
+        } else if (isOtherTransfer) {
+          title = 'Bank Transfer (Other Account)'
+        } else {
+          title = cp.title || 'Bank Transfer'
+        }
       }
 
       const isCash = !cp.bank_account_id || String(cp.bank_account_id) === 'cash' || String(cp.payment_method || '').toLowerCase() === 'cash'
@@ -378,7 +395,8 @@ export const getBankTransactions = async (req, res, next) => {
       if (isOther) {
         subtitle = `${bankName} · Other Transaction`
       } else if (isConsulting) {
-        subtitle = `${cp.site_name || 'Consulting'} · ${bankName}`
+        const owner = cp.consulting_owner_name || cp.client_name || (cp.title ? cp.title.replace(/^Consulting\s*-\s*/i, '').trim() : '') || 'Consulting'
+        subtitle = `${owner} · ${bankName}`
       }
 
       const numAmount = Number(cp.amount || 0)
@@ -386,12 +404,44 @@ export const getBankTransactions = async (req, res, next) => {
 
       let partyName = isRefund ? 'Material Purchase Refund' : (cp.client_name || 'Site Owner')
       let partyType = isRefund ? 'Supplier' : (isDebit ? 'Site Owner' : 'Client')
+      let displayRemark = cp.reference || cp.title || ''
+
       if (isConsulting) {
-        partyName = cp.client_name || cp.site_name || 'Consulting Client'
+        const owner = cp.consulting_owner_name || cp.client_name || (cp.title ? cp.title.replace(/^Consulting\s*-\s*/i, '').trim() : '') || 'Consulting Client'
+        partyName = owner
         partyType = 'Consulting'
+        displayRemark = cp.reference || cp.consulting_remark || cp.title || 'Consulting Payment'
       } else if (isOther) {
         partyName = cp.reference || (isDebit ? 'Other Payment' : 'Other Receipt')
         partyType = 'Other'
+      } else if (isTransfer) {
+        if (isInternalTransfer) {
+          const cleanRef = (cp.reference || '').replace('[TRANSFER-INTERNAL]', '').trim()
+          if (cleanRef.includes(' · ')) {
+            const parts = cleanRef.split(' · ')
+            subtitle = `${bankName} · ${parts[0]}`
+            partyName = parts[0]
+            displayRemark = parts.slice(1).join(' · ')
+          } else {
+            subtitle = `${bankName} · ${cleanRef}`
+            partyName = cleanRef
+            displayRemark = cleanRef
+          }
+          partyType = 'Bank Transfer'
+        } else if (isOtherTransfer) {
+          const cleanRef = (cp.reference || '').replace('[TRANSFER-OTHER]', '').trim()
+          if (cleanRef.includes(' · ')) {
+            const parts = cleanRef.split(' · ')
+            subtitle = `${bankName} · ${parts[0]}`
+            partyName = parts[0].replace(/^To:\s*/i, '')
+            displayRemark = parts.slice(1).join(' · ')
+          } else {
+            subtitle = `${bankName} · ${cleanRef}`
+            partyName = cleanRef.replace(/^To:\s*/i, '')
+            displayRemark = cleanRef
+          }
+          partyType = 'Personal Account'
+        }
       }
 
       return {
@@ -416,8 +466,9 @@ export const getBankTransactions = async (req, res, next) => {
         partyName,
         partyType,
         paymentMethod: cp.payment_method || (isCash ? 'Cash' : 'Bank Transfer'),
-        referenceId: cp.reference || `TXN-CP-${String(cp.id).padStart(4, '0')}`,
-        remark: cp.reference || cp.title || '',
+        referenceId: cp.reference || (cp.consulting_id ? `CONSULTING-REF-${String(cp.consulting_id).padStart(4, '0')}` : `TXN-CP-${String(cp.id).padStart(4, '0')}`),
+        remark: displayRemark || cp.reference || cp.title || '',
+        isInternalTransfer: Boolean(isInternalTransfer),
         balanceAfter: null,
       }
     })
@@ -704,9 +755,9 @@ export const getBankTransactions = async (req, res, next) => {
       filtered = filtered.slice(0, Number(limit))
     }
 
-    // Calculate totals for quick summary
-    const totalReceived = filtered.filter((t) => t.type === 'credit').reduce((sum, t) => sum + t.amount, 0)
-    const totalSent = filtered.filter((t) => t.type === 'debit').reduce((sum, t) => sum + t.amount, 0)
+    // Calculate totals for quick summary (Internal bank-to-bank transfers do not inflate income or expenses)
+    const totalReceived = filtered.filter((t) => t.type === 'credit' && !t.isInternalTransfer).reduce((sum, t) => sum + t.amount, 0)
+    const totalSent = filtered.filter((t) => t.type === 'debit' && !t.isInternalTransfer).reduce((sum, t) => sum + t.amount, 0)
 
     res.json({
       success: true,
@@ -720,5 +771,172 @@ export const getBankTransactions = async (req, res, next) => {
     })
   } catch (error) {
     next(error)
+  }
+}
+
+/**
+ * POST /api/bank-accounts/transfer
+ * Execute bank transfer:
+ * Case 1: Bank-to-Bank Transfer (Deduct From, Credit To, log both debit & credit)
+ * Case 2: Transfer to Other Account / Personal (Deduct From, log single debit)
+ */
+export const transferFunds = async (req, res, next) => {
+  const pool = getPool()
+  const conn = await pool.getConnection()
+  try {
+    const {
+      date,
+      fromBankId,
+      toBankId,
+      otherAccount,
+      amount,
+      remark,
+    } = req.body
+
+    const cleanDate = date ? new Date(date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
+    const numAmount = Number(amount)
+
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ error: 'Please enter a valid transfer amount greater than zero.' })
+    }
+
+    if (!fromBankId) {
+      return res.status(400).json({ error: 'Please select a From bank account.' })
+    }
+
+    const cleanOther = (otherAccount || '').trim()
+    const hasToBank = Boolean(toBankId)
+    const hasOther = Boolean(cleanOther)
+
+    if (!hasToBank && !hasOther) {
+      return res.status(400).json({ error: 'Please select a destination To bank or enter an Other Account.' })
+    }
+
+    if (hasToBank && hasOther) {
+      return res.status(400).json({ error: 'Please select either a destination To bank or an Other Account, not both.' })
+    }
+
+    const isFromCash = String(fromBankId || '').toLowerCase() === 'cash'
+    const isToCash = hasToBank && String(toBankId || '').toLowerCase() === 'cash'
+
+    if (hasToBank && String(fromBankId).toLowerCase() === String(toBankId).toLowerCase()) {
+      return res.status(400).json({ error: 'From and To bank accounts cannot be the same.' })
+    }
+
+    await conn.beginTransaction()
+
+    let fromBankName = 'Cash'
+    let fromBankMasked = ''
+    let fromBankIdVal = null
+
+    if (isFromCash) {
+      const cashSummary = await calculateLiveCashSummary(conn)
+      const cashBalance = Number(cashSummary.balance || 0)
+      if (cashBalance < numAmount) {
+        await conn.rollback()
+        return res.status(400).json({
+          error: `Insufficient cash balance. Available: ₹${Math.round(cashBalance).toLocaleString('en-IN')}, Requested: ₹${Math.round(numAmount).toLocaleString('en-IN')}.`,
+        })
+      }
+    } else {
+      const [fromRows] = await conn.query(
+        'SELECT id, bank_name, account_number, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+        [fromBankId]
+      )
+      if (fromRows.length === 0) {
+        await conn.rollback()
+        return res.status(404).json({ error: 'From bank account not found or is inactive.' })
+      }
+      const fromBank = fromRows[0]
+      fromBankName = fromBank.bank_name
+      fromBankMasked = fromBank.account_number ? ` (•••• ${String(fromBank.account_number).slice(-4)})` : ''
+      fromBankIdVal = fromBank.id
+      const fromBalance = Number(fromBank.balance || 0)
+
+      if (fromBalance < numAmount) {
+        await conn.rollback()
+        return res.status(400).json({
+          error: `Insufficient balance in ${fromBank.bank_name}. Available: ₹${Math.round(fromBalance).toLocaleString('en-IN')}, Requested: ₹${Math.round(numAmount).toLocaleString('en-IN')}.`,
+        })
+      }
+
+      // Deduct from From Bank
+      await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [numAmount, fromBank.id])
+    }
+
+    const cleanRemark = (remark || '').trim()
+
+    if (hasToBank) {
+      // ── Case 1: Internal Account Transfer (Bank-to-Bank, Bank-to-Cash, Cash-to-Bank) ──
+      let toBankName = 'Cash'
+      let toBankMasked = ''
+      let toBankIdVal = null
+
+      if (isToCash) {
+        // No bank_accounts row update needed for Cash; client_payments record handles cash ledger atomically
+      } else {
+        const [toRows] = await conn.query(
+          'SELECT id, bank_name, account_number, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+          [toBankId]
+        )
+        if (toRows.length === 0) {
+          await conn.rollback()
+          return res.status(404).json({ error: 'To bank account not found or is inactive.' })
+        }
+        const toBank = toRows[0]
+        toBankName = toBank.bank_name
+        toBankMasked = toBank.account_number ? ` (•••• ${String(toBank.account_number).slice(-4)})` : ''
+        toBankIdVal = toBank.id
+
+        // Credit to To Bank
+        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [numAmount, toBank.id])
+      }
+
+      const fromRef = `[TRANSFER-INTERNAL] To: ${toBankName}${toBankMasked}${cleanRemark ? ` · ${cleanRemark}` : ''}`
+      const toRef = `[TRANSFER-INTERNAL] From: ${fromBankName}${fromBankMasked}${cleanRemark ? ` · ${cleanRemark}` : ''}`
+
+      // Insert Debit record for From Account (bank_account_id is null if cash)
+      await conn.query(`
+        INSERT INTO client_payments
+          (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
+        VALUES (NULL, NULL, ?, ?, ?, 'Bank Transfer - Sent', ?, ?, 'Completed', 'debit')
+      `, [fromBankIdVal, numAmount, cleanDate, isFromCash ? 'Cash' : 'Bank Transfer', fromRef])
+
+      // Insert Credit record for To Account (bank_account_id is null if cash)
+      await conn.query(`
+        INSERT INTO client_payments
+          (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
+        VALUES (NULL, NULL, ?, ?, ?, 'Bank Transfer - Received', ?, ?, 'Completed', 'credit')
+      `, [toBankIdVal, numAmount, cleanDate, isToCash ? 'Cash' : 'Bank Transfer', toRef])
+
+      await conn.commit()
+
+      res.status(201).json({
+        success: true,
+        message: `Successfully transferred ₹${numAmount.toLocaleString('en-IN')} from ${fromBankName} to ${toBankName}.`,
+      })
+    } else {
+      // ── Case 2: Transfer to Other Account (Personal Account) ──
+      const otherRef = `[TRANSFER-OTHER] To: ${cleanOther}${cleanRemark ? ` · ${cleanRemark}` : ''}`
+
+      // Insert Debit record for From Account
+      await conn.query(`
+        INSERT INTO client_payments
+          (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
+        VALUES (NULL, NULL, ?, ?, ?, 'Bank Transfer - Other Account', ?, ?, 'Completed', 'debit')
+      `, [fromBankIdVal, numAmount, cleanDate, isFromCash ? 'Cash' : 'Bank Transfer', otherRef])
+
+      await conn.commit()
+
+      res.status(201).json({
+        success: true,
+        message: `Successfully transferred ₹${numAmount.toLocaleString('en-IN')} from ${fromBankName} to ${cleanOther}.`,
+      })
+    }
+  } catch (error) {
+    await conn.rollback()
+    next(error)
+  } finally {
+    conn.release()
   }
 }

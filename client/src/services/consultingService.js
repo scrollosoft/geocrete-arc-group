@@ -7,5 +7,6 @@ export const consultingService = {
   update: (id, data) => request(`/consulting/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/consulting/${id}`, { method: 'DELETE' }),
   recordPayment: (id, data) => request(`/consulting/${id}/payments`, { method: 'POST', body: JSON.stringify(data) }),
+  getPayments: (id) => request(`/consulting/${id}/payments`),
 }
 

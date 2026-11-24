@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { siteOwnerService } from '../services/siteOwnerService.js'
 import { bankAccountService } from '../services/bankAccountService.js'
+import TablePagination from './TablePagination.jsx'
 
 export default function SiteOwnerDetailPage({
   clientId,
@@ -22,6 +23,8 @@ export default function SiteOwnerDetailPage({
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [bankAccounts, setBankAccounts] = useState(propBankAccounts || [])
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   // Record Payment Modal State
   const [payModal, setPayModal] = useState(false)
@@ -157,12 +160,10 @@ export default function SiteOwnerDetailPage({
     }
   }
 
-  // Format compact currency (Cr, L, or formatted)
+  // Format currency using proper Indian format (no L/Cr abbreviations)
   const formatCompact = (val) => {
     const num = Number(val || 0)
-    if (num >= 10000000) return `₹${(num / 10000000).toFixed(2).replace(/\.00$/, '')} Cr`
-    if (num >= 100000) return `₹${(num / 100000).toFixed(1).replace(/\.0$/, '')} L`
-    return `₹${num.toLocaleString('en-IN')}`
+    return `₹${Math.round(num).toLocaleString('en-IN')}`
   }
 
   // Format exact currency
@@ -306,7 +307,9 @@ export default function SiteOwnerDetailPage({
               No payments recorded yet for this client.
             </div>
           ) : (
-            payments.map((p, idx) => (
+            payments
+              .slice((page - 1) * pageSize, page * pageSize)
+              .map((p, idx) => (
               <div key={p.id || idx} className="sod-timeline-row">
                 {/* Date with bullet */}
                 <div className="sod-timeline-date-col">
@@ -335,6 +338,19 @@ export default function SiteOwnerDetailPage({
             ))
           )}
         </div>
+        {payments.length > 0 && (
+          <TablePagination
+            currentPage={page}
+            pageSize={pageSize}
+            totalRecords={payments.length}
+            onPageChange={setPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize)
+              setPage(1)
+            }}
+            style={{ padding: '14px 20px', borderTop: '1px solid #E5EAF1', margin: 0 }}
+          />
+        )}
       </div>
 
       {/* 5. Record Payment Modal */}

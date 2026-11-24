@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Eye, Pencil, Trash2, Search, X, Loader2, AlertCircle, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
 import { otherTransactionService } from '../services/otherTransactionService.js'
+import TablePagination from './TablePagination.jsx'
 
 const formatCurrency = (amt) => {
   if (amt === undefined || amt === null || isNaN(Number(amt))) return '₹0'
@@ -16,7 +17,7 @@ export default function OtherTable({
 }) {
   const [search, setSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
-  const pageSize = 10
+  const [pageSize, setPageSize] = useState(10)
 
   // Modal states
   const [viewingRecord, setViewingRecord] = useState(null)
@@ -64,11 +65,12 @@ export default function OtherTable({
 
   const handleOpenEdit = (record) => {
     setEditError('')
+    const isCashTxn = !record.bankAccountId || record.isCash || String(record.bankAccountId).toLowerCase() === 'cash' || String(record.paymentMethod).toLowerCase() === 'cash'
     setEditForm({
       date: record.date || '',
       amount: String(record.amount || ''),
-      bankAccountId: record.bankAccountId ? String(record.bankAccountId) : '',
-      paymentMethod: record.paymentMethod || 'UPI',
+      bankAccountId: isCashTxn ? 'cash' : (record.bankAccountId ? String(record.bankAccountId) : ''),
+      paymentMethod: record.paymentMethod || (isCashTxn ? 'Cash' : 'UPI'),
       paymentType: record.paymentType || (record.type === 'debit' ? 'Send' : 'Receive'),
       note: record.note || '',
     })
@@ -95,13 +97,15 @@ export default function OtherTable({
       return
     }
 
+    const isCash = String(editForm.bankAccountId || '').toLowerCase() === 'cash' || editForm.paymentMethod === 'Cash'
+
     setIsUpdating(true)
     try {
       await otherTransactionService.update(editingRecord.id, {
         date: editForm.date,
         amount: numAmount,
-        bankAccountId: Number(editForm.bankAccountId),
-        paymentMethod: editForm.paymentMethod || 'UPI',
+        bankAccountId: isCash ? 'cash' : Number(editForm.bankAccountId),
+        paymentMethod: isCash ? 'Cash' : (editForm.paymentMethod || 'UPI'),
         paymentType: editForm.paymentType,
         note: editForm.note.trim(),
       })
@@ -301,31 +305,17 @@ export default function OtherTable({
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', padding: '12px 16px', borderTop: '1px solid #E5EAF1' }}>
-          <button
-            type="button"
-            className="btn btn-secondary-action"
-            style={{ height: '30px', padding: '0 10px', fontSize: '12px' }}
-            disabled={currentPage <= 1}
-            onClick={() => setCurrentPage((p) => p - 1)}
-          >
-            Previous
-          </button>
-          <span style={{ fontSize: '12px', color: '#64748B' }}>
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            type="button"
-            className="btn btn-secondary-action"
-            style={{ height: '30px', padding: '0 10px', fontSize: '12px' }}
-            disabled={currentPage >= totalPages}
-            onClick={() => setCurrentPage((p) => p + 1)}
-          >
-            Next
-          </button>
-        </div>
-      )}
+      <TablePagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalRecords={filteredList.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize)
+          setCurrentPage(1)
+        }}
+        style={{ padding: '12px 16px', borderTop: '1px solid #E5EAF1', margin: 0 }}
+      />
 
       {/* ── View Modal ── */}
       {viewingRecord && (
@@ -465,7 +455,15 @@ export default function OtherTable({
                     <select
                       className="form-select"
                       value={editForm.bankAccountId}
-                      onChange={(e) => setEditForm({ ...editForm, bankAccountId: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        const isCashSelected = String(val).toLowerCase() === 'cash'
+                        setEditForm({
+                          ...editForm,
+                          bankAccountId: val,
+                          paymentMethod: isCashSelected ? 'Cash' : (editForm.paymentMethod === 'Cash' ? 'UPI' : editForm.paymentMethod),
+                        })
+                      }}
                       required
                     >
                       <option value="">Select Bank Account...</option>

@@ -151,6 +151,42 @@ export async function ensureSchema() {
     console.log('Added expenses.bank_account_id column')
   }
 
+  // Ensure role and approval columns on expenses table
+  if (!(await columnExists(pool, 'expenses', 'created_by'))) {
+    await pool.query(`ALTER TABLE expenses ADD COLUMN created_by VARCHAR(100) NOT NULL DEFAULT 'Admin' AFTER status`)
+    console.log('Added expenses.created_by column')
+  }
+
+  if (!(await columnExists(pool, 'expenses', 'created_by_role'))) {
+    await pool.query(`ALTER TABLE expenses ADD COLUMN created_by_role VARCHAR(50) NOT NULL DEFAULT 'Admin' AFTER created_by`)
+    console.log('Added expenses.created_by_role column')
+  }
+
+  if (!(await columnExists(pool, 'expenses', 'approval_status'))) {
+    await pool.query(`ALTER TABLE expenses ADD COLUMN approval_status VARCHAR(50) NOT NULL DEFAULT 'Approved' AFTER created_by_role`)
+    console.log('Added expenses.approval_status column')
+  }
+
+  if (!(await columnExists(pool, 'expenses', 'approved_by'))) {
+    await pool.query(`ALTER TABLE expenses ADD COLUMN approved_by VARCHAR(100) NULL DEFAULT NULL AFTER approval_status`)
+    console.log('Added expenses.approved_by column')
+  }
+
+  if (!(await columnExists(pool, 'expenses', 'approved_at'))) {
+    await pool.query(`ALTER TABLE expenses ADD COLUMN approved_at DATETIME NULL DEFAULT NULL AFTER approved_by`)
+    console.log('Added expenses.approved_at column')
+  }
+
+  if (!(await columnExists(pool, 'expenses', 'rejected_by'))) {
+    await pool.query(`ALTER TABLE expenses ADD COLUMN rejected_by VARCHAR(100) NULL DEFAULT NULL AFTER approved_at`)
+    console.log('Added expenses.rejected_by column')
+  }
+
+  if (!(await columnExists(pool, 'expenses', 'rejected_at'))) {
+    await pool.query(`ALTER TABLE expenses ADD COLUMN rejected_at DATETIME NULL DEFAULT NULL AFTER rejected_by`)
+    console.log('Added expenses.rejected_at column')
+  }
+
   // Ensure material_id column on expenses table
   if (!(await columnExists(pool, 'expenses', 'material_id'))) {
     await pool.query('ALTER TABLE expenses ADD COLUMN material_id INT UNSIGNED NULL DEFAULT NULL AFTER id, ADD INDEX idx_material_id (material_id)')
@@ -268,5 +304,166 @@ export async function ensureSchema() {
     await pool.query('ALTER TABLE worker_payments MODIFY COLUMN bank_account_id INT UNSIGNED NULL DEFAULT NULL')
   } catch (err) {
     // ignore
+  }
+
+  // Ensure consultings table exists
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS consultings (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        date DATE NOT NULL,
+        owner_name VARCHAR(255) NOT NULL,
+        mobile_number VARCHAR(20) NOT NULL,
+        total_amount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        received_amount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        payment_mode VARCHAR(50) NOT NULL DEFAULT 'UPI',
+        bank_account_id INT UNSIGNED NULL DEFAULT NULL,
+        remark TEXT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_consultings_date (date),
+        INDEX idx_consultings_bank (bank_account_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `)
+    console.log('Ensured consultings table exists')
+  } catch (err) {
+    console.warn('consultings table init skipped:', err.message)
+  }
+
+  // Ensure consulting_payments table exists for tracking multiple partial payments
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS consulting_payments (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        consulting_id INT UNSIGNED NOT NULL,
+        amount DECIMAL(15,2) NOT NULL,
+        payment_date DATE NOT NULL,
+        payment_mode VARCHAR(50) NOT NULL DEFAULT 'UPI',
+        bank_account_id INT UNSIGNED NULL DEFAULT NULL,
+        reference VARCHAR(100) NULL DEFAULT '',
+        remark TEXT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_cp_consulting (consulting_id),
+        INDEX idx_cp_date (payment_date),
+        INDEX idx_cp_bank (bank_account_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `)
+    console.log('Ensured consulting_payments table exists')
+  } catch (err) {
+    console.warn('consulting_payments table init skipped:', err.message)
+  }
+
+  // Ensure consulting_id column on client_payments table
+  if (!(await columnExists(pool, 'client_payments', 'consulting_id'))) {
+    try {
+      await pool.query(`ALTER TABLE client_payments ADD COLUMN consulting_id INT UNSIGNED NULL DEFAULT NULL AFTER site_id, ADD INDEX idx_cp_consulting_id (consulting_id)`)
+      console.log('Added client_payments.consulting_id column')
+    } catch (e) {
+      console.warn('client_payments.consulting_id add skipped:', e.message)
+    }
+  }
+
+  // Migrate legacy consulting records from sites table to consultings table
+  try {
+    const [legacySites] = await pool.query("SELECT * FROM sites WHERE description LIKE '%[CONSULTING]%'")
+    for (const ls of legacySites) {
+      const ownerName = ls.site_owner || ls.name || 'Consulting Client'
+      const [existing] = await pool.query('SELECT id FROM consultings WHERE owner_name = ? LIMIT 1', [ownerName])
+      if (existing.length === 0) {
+        let paymentMethod = 'UPI'
+        let note = ''
+        if (ls.description && ls.description.includes('[CONSULTING]')) {
+          const jsonPart = ls.description.replace('[CONSULTING]', '').trim()
+          try {
+            const parsed = JSON.parse(jsonPart)
+            paymentMethod = parsed.paymentMethod || 'UPI'
+            note = parsed.note || ''
+          } catch {}
+        }
+        const [cRes] = await pool.query(`
+          INSERT INTO consultings
+            (date, owner_name, mobile_number, total_amount, received_amount, payment_mode, bank_account_id, remark, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          ls.start_date ? new Date(ls.start_date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+          ownerName,
+          ls.contact_number && ls.contact_number !== '-' ? ls.contact_number : '9876543210',
+          Number(ls.total_budget || 0),
+          Number(ls.total_received || 0),
+          paymentMethod,
+          ls.bank_account_id || null,
+          note || '',
+          ls.created_at || new Date(),
+        ])
+        const newConsultingId = cRes.insertId
+
+        // Backfill consulting_payments for legacy client payments
+        const [linkedPayments] = await pool.query('SELECT * FROM client_payments WHERE site_id = ?', [ls.id])
+        for (const lp of linkedPayments) {
+          await pool.query(`
+            INSERT INTO consulting_payments (consulting_id, amount, payment_date, payment_mode, bank_account_id, reference, remark, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            newConsultingId,
+            Number(lp.amount || 0),
+            lp.payment_date ? new Date(lp.payment_date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+            lp.payment_method || paymentMethod,
+            lp.bank_account_id || null,
+            lp.reference || `CONSULTING-REF-${newConsultingId}`,
+            lp.title || '',
+            lp.created_at || new Date(),
+          ])
+          // Link client_payments row to consulting_id
+          await pool.query('UPDATE client_payments SET consulting_id = ?, site_id = NULL WHERE id = ?', [newConsultingId, lp.id])
+        }
+
+        // Clean up legacy consulting record from sites if not referenced by expenses
+        try {
+          await pool.query('DELETE FROM sites WHERE id = ?', [ls.id])
+          console.log(`Cleaned up legacy site #${ls.id}`)
+        } catch {
+          // Keep site if referenced by foreign keys (e.g. expenses)
+        }
+        console.log(`Migrated legacy consulting site #${ls.id} to consultings #${newConsultingId}`)
+      }
+    }
+  } catch (err) {
+    console.warn('Legacy consulting migration check skipped:', err.message)
+  }
+
+  // ── Files Table ───────────────────────────────────────────────────────────
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS files (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        file_name VARCHAR(255) NOT NULL,
+        original_name VARCHAR(255) NOT NULL,
+        file_path VARCHAR(500) NOT NULL,
+        file_type VARCHAR(100) NOT NULL,
+        file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+        uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_files_uploaded_at (uploaded_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `)
+  } catch (err) {
+    console.warn('Failed to ensure files table:', err.message)
+  }
+
+  // ── Sync Manager-Approved Material Purchases ──────────────────────────────
+  try {
+    await pool.query(`
+      UPDATE expenses e
+      JOIN materials m ON (
+        m.site_id = e.site_id 
+        AND (m.supplier_id = e.supplier_id OR (m.supplier_id IS NULL AND e.supplier_id IS NULL))
+        AND LOWER(TRIM(m.category)) = LOWER(TRIM(e.category))
+        AND DATE(m.purchase_date) = DATE(e.date)
+      )
+      SET e.applied_to_material = 1, e.material_id = m.id
+      WHERE e.approval_status = 'Approved'
+        AND e.applied_to_material = 0
+    `)
+  } catch (err) {
+    console.warn('Syncing applied_to_material skipped:', err.message)
   }
 }

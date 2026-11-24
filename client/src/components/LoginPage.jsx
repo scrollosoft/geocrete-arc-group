@@ -24,8 +24,8 @@ export default function LoginPage({ onLoginSuccess }) {
 
     setLoading(true)
     try {
-      await authService.login(username.trim(), password)
-      onLoginSuccess()
+      const res = await authService.login(username.trim(), password)
+      onLoginSuccess(res)
     } catch (err) {
       setError(err.message || 'Invalid username or password.')
     } finally {

@@ -129,9 +129,12 @@ export default function AddWorkerModal({
       ? formData.totalAmount
       : formData.dailyRate
 
-    if (!amountVal || Number(amountVal) <= 0) {
-      newErrors.totalAmount = 'Total Amount must be greater than zero.'
-      newErrors.dailyRate = 'Total Amount must be greater than zero.'
+    if (amountVal !== '' && amountVal !== undefined && amountVal !== null) {
+      const parsedAmount = Number(amountVal)
+      if (isNaN(parsedAmount) || parsedAmount < 0) {
+        newErrors.totalAmount = 'Total Amount cannot be negative.'
+        newErrors.dailyRate = 'Total Amount cannot be negative.'
+      }
     }
 
     // Validate Advance Payment and Bank Selection
@@ -143,14 +146,16 @@ export default function AddWorkerModal({
         if (!formData.bankAccountId) {
           newErrors.bankAccountId = 'Please select a bank account for advance payment.'
         } else {
+          const isCash = String(formData.bankAccountId).toLowerCase() === 'cash'
           const selectedBank = bankAccounts.find(
-            (b) => String(b.id || b._id) === String(formData.bankAccountId),
+            (b) => String(b.id || b._id).toLowerCase() === String(formData.bankAccountId).toLowerCase(),
           )
           if (selectedBank) {
             const bal = Number(selectedBank.balance || 0)
             if (bal < adv) {
+              const accountType = isCash || selectedBank.isCash ? 'cash' : 'bank'
               newErrors.bankAccountId =
-                'Insufficient bank balance. Please select another account or reduce the advance amount.'
+                `Insufficient ${accountType} balance. Please select another account or reduce the advance amount.`
             }
           }
         }
@@ -174,6 +179,11 @@ export default function AddWorkerModal({
       const amountVal = formData.totalAmount !== undefined && formData.totalAmount !== ''
         ? formData.totalAmount
         : formData.dailyRate
+      const parsedAmount = amountVal !== '' && amountVal !== undefined && !isNaN(Number(amountVal))
+        ? Number(amountVal)
+        : 0
+
+      const isCash = String(formData.bankAccountId || '').toLowerCase() === 'cash'
 
       const payload = {
         name: formData.name.trim(),
@@ -182,10 +192,10 @@ export default function AddWorkerModal({
         otherTrade: formData.trade === 'Other' ? formData.otherTrade.trim() : undefined,
         site: formData.site,
         joiningDate: formData.joiningDate || getTodayString(),
-        dailyRate: Number(amountVal),
-        totalAmount: Number(amountVal),
+        dailyRate: parsedAmount,
+        totalAmount: parsedAmount,
         advanceAmount: formData.advanceAmount !== '' ? Number(formData.advanceAmount) : 0,
-        bankAccountId: formData.bankAccountId ? Number(formData.bankAccountId) : null,
+        bankAccountId: isCash ? 'cash' : (formData.bankAccountId ? Number(formData.bankAccountId) : null),
         address: formData.address ? formData.address.trim() : '',
       }
 
@@ -336,7 +346,7 @@ export default function AddWorkerModal({
             )}
 
             <div className="form-group">
-              <label className="form-label labour-form-label">Total Amount (₹) *</label>
+              <label className="form-label labour-form-label">Total Amount (₹)</label>
               <div className="input-with-currency-wrap">
                 <span className="input-currency-prefix">₹</span>
                 <input
@@ -344,7 +354,7 @@ export default function AddWorkerModal({
                   name="totalAmount"
                   className={`form-input input-with-prefix ${errors.totalAmount ? 'input-error' : ''}`}
                   placeholder="1000"
-                  min="1"
+                  min="0"
                   step="any"
                   value={formData.totalAmount}
                   onChange={handleChange}
@@ -551,9 +561,9 @@ export default function AddWorkerModal({
                 {errors.joiningDate && <span className="field-error-msg">{errors.joiningDate}</span>}
               </div>
 
-              {/* 6. Daily Wage * with ₹ prefix */}
+              {/* 6. Daily Wage with ₹ prefix */}
               <div className="form-group">
-                <label className="form-label labour-form-label">Total Amount *</label>
+                <label className="form-label labour-form-label">Total Amount</label>
                 <div className="input-with-currency-wrap">
                   <span className="input-currency-prefix">₹</span>
                   <input
@@ -561,7 +571,7 @@ export default function AddWorkerModal({
                     name="dailyRate"
                     className={`form-input input-with-prefix ${errors.dailyRate ? 'input-error' : ''}`}
                     placeholder="1000"
-                    min="1"
+                    min="0"
                     step="any"
                     value={formData.dailyRate}
                     onChange={handleChange}

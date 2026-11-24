@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react'
 import {
   User,
   Building2,
-  CreditCard,
-  Bell,
+  Lock,
   ChevronRight,
   Settings,
   Save,
@@ -11,14 +10,17 @@ import {
   CheckCircle2,
   AlertCircle,
   Building,
+  Eye,
+  EyeOff,
+  Loader2,
 } from 'lucide-react'
 import { settingService } from '../services/settingService.js'
+import { authService } from '../services/authService.js'
 
 const SECTIONS = [
   { id: 'ownerProfile',         label: 'Owner Profile',         icon: User       },
   { id: 'businessDetails',      label: 'Business Details',      icon: Building2  },
-  { id: 'financialPreferences', label: 'Financial Preferences', icon: CreditCard },
-  { id: 'notifications',        label: 'Notifications',         icon: Bell       },
+  { id: 'changePassword',       label: 'Change Password',       icon: Lock       },
 ]
 
 export default function SettingsPage({ showNotification, onProfileUpdated }) {
@@ -136,46 +138,46 @@ export default function SettingsPage({ showNotification, onProfileUpdated }) {
         <div className="settings-content-panel">
           {activeSection === 'ownerProfile'         && draft && <OwnerProfileSection draft={draft} updateDraft={updateDraft} />}
           {activeSection === 'businessDetails'      && draft && <BusinessDetailsSection draft={draft} updateDraft={updateDraft} />}
-          {activeSection === 'financialPreferences' && draft && <FinancialPreferencesSection draft={draft} updateDraft={updateDraft} />}
-          {activeSection === 'notifications'        && draft && <NotificationsSection draft={draft} updateDraft={updateDraft} />}
+          {activeSection === 'changePassword'       && <ChangePasswordSection showNotification={showNotification} />}
 
-          {/* Footer */}
-          <div className="settings-footer">
-            <div className="settings-save-status">
-              {saveStatus === 'saved' && !isDirty && (
-                <><CheckCircle2 size={14} className="save-status-icon success" /><span>All changes saved</span></>
-              )}
-              {saveStatus === 'error' && (
-                <><AlertCircle size={14} className="save-status-icon error" /><span>Failed to save</span></>
-              )}
-              {!saveStatus && !isDirty && (
-                <span className="save-status-hint">
-                  Preferences are stored on this device. Notification delivery and report configuration require a backend
-                  integration; changing these preferences does not send messages or alter existing reports.
-                </span>
-              )}
+          {/* Footer for profile and business details */}
+          {activeSection !== 'changePassword' && (
+            <div className="settings-footer">
+              <div className="settings-save-status">
+                {saveStatus === 'saved' && !isDirty && (
+                  <><CheckCircle2 size={14} className="save-status-icon success" /><span>All changes saved</span></>
+                )}
+                {saveStatus === 'error' && (
+                  <><AlertCircle size={14} className="save-status-icon error" /><span>Failed to save</span></>
+                )}
+                {!saveStatus && !isDirty && (
+                  <span className="save-status-hint">
+                    Settings are saved to your workspace profile and synced across your account.
+                  </span>
+                )}
+              </div>
+              <div className="settings-footer-actions">
+                <button
+                  type="button"
+                  className="btn btn-settings-discard"
+                  onClick={handleDiscard}
+                  disabled={!isDirty || saving}
+                >
+                  <RotateCcw size={14} />
+                  Discard Changes
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-settings-save"
+                  onClick={handleSave}
+                  disabled={!isDirty || saving}
+                >
+                  <Save size={14} />
+                  {saving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
             </div>
-            <div className="settings-footer-actions">
-              <button
-                type="button"
-                className="btn btn-settings-discard"
-                onClick={handleDiscard}
-                disabled={!isDirty || saving}
-              >
-                <RotateCcw size={14} />
-                Discard Changes
-              </button>
-              <button
-                type="button"
-                className="btn btn-settings-save"
-                onClick={handleSave}
-                disabled={!isDirty || saving}
-              >
-                <Save size={14} />
-                {saving ? 'Saving…' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
@@ -294,82 +296,374 @@ function BusinessDetailsSection({ draft, updateDraft }) {
   )
 }
 
-function FinancialPreferencesSection({ draft, updateDraft }) {
-  const f = draft.financialPreferences || {}
+function PasswordInputField({ value, onChange, placeholder, disabled, autoComplete }) {
+  const [show, setShow] = useState(false)
   return (
-    <div className="settings-section">
-      <SectionHeader title="Financial Preferences" subtitle="Configure payment terms and currency settings." />
-      <div className="settings-form-grid">
-        <Field label="Default Payment Terms">
-          <select
-            className="settings-input settings-select"
-            value={f.defaultPaymentTerms || 'Immediate'}
-            onChange={e => updateDraft('financialPreferences', 'defaultPaymentTerms', e.target.value)}
-          >
-            {['Immediate', 'Net 7', 'Net 15', 'Net 30', 'Net 60'].map(o => <option key={o}>{o}</option>)}
-          </select>
-        </Field>
-        <Field label="Fiscal Year">
-          <select
-            className="settings-input settings-select"
-            value={f.fiscalYear || 'April - March'}
-            onChange={e => updateDraft('financialPreferences', 'fiscalYear', e.target.value)}
-          >
-            {['April - March', 'January - December', 'July - June'].map(o => <option key={o}>{o}</option>)}
-          </select>
-        </Field>
-        <Field label="Currency Symbol">
-          <TextInput value={f.currencySymbol} onChange={v => updateDraft('financialPreferences', 'currencySymbol', v)} placeholder="₹" />
-        </Field>
-      </div>
-    </div>
-  )
-}
-
-function ToggleRow({ label, description, checked, onChange }) {
-  return (
-    <div className="settings-toggle-row">
-      <div className="settings-toggle-info">
-        <div className="settings-toggle-label">{label}</div>
-        {description && <div className="settings-toggle-desc">{description}</div>}
-      </div>
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
+      <input
+        type={show ? 'text' : 'password'}
+        className="settings-input"
+        style={{ width: '100%', paddingRight: '42px', boxSizing: 'border-box' }}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoComplete={autoComplete || 'new-password'}
+      />
       <button
         type="button"
-        className={'settings-toggle' + (checked ? ' on' : '')}
-        onClick={() => onChange(!checked)}
-        aria-pressed={checked}
+        onClick={() => setShow((v) => !v)}
+        style={{
+          position: 'absolute',
+          right: '8px',
+          background: 'none',
+          border: 'none',
+          color: '#70829F',
+          cursor: 'pointer',
+          padding: '6px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: '4px',
+        }}
+        tabIndex={-1}
+        aria-label={show ? 'Hide password' : 'Show password'}
       >
-        <span className="settings-toggle-thumb" />
+        {show ? <EyeOff size={16} /> : <Eye size={16} />}
       </button>
     </div>
   )
 }
 
-function NotificationsSection({ draft, updateDraft }) {
-  const n = draft.notifications || {}
+function ChangePasswordSection({ showNotification }) {
+  const [passwordTarget, setPasswordTarget] = useState('admin') // 'admin' | 'manager'
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [managerNewPassword, setManagerNewPassword] = useState('')
+  const [managerConfirmPassword, setManagerConfirmPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+
+  const handleAdminSubmit = async (e) => {
+    e.preventDefault()
+    setErrorMsg('')
+    setSuccessMsg('')
+
+    if (!currentPassword) {
+      setErrorMsg('Please enter your current password.')
+      return
+    }
+    if (!newPassword) {
+      setErrorMsg('Please enter a new password.')
+      return
+    }
+    if (newPassword.length < 6) {
+      setErrorMsg('New password must be at least 6 characters long.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setErrorMsg('New password and Confirm password do not match.')
+      return
+    }
+    if (currentPassword === newPassword) {
+      setErrorMsg('New password cannot be the same as the current password.')
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      const res = await authService.changePassword({
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      })
+
+      const msg = res?.message || 'Password changed successfully! Please use your new password for future sign-ins.'
+      setSuccessMsg(msg)
+      if (showNotification) {
+        showNotification({ type: 'success', message: msg })
+      }
+
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to update password. Please check your current password.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleManagerSubmit = async (e) => {
+    e.preventDefault()
+    setErrorMsg('')
+    setSuccessMsg('')
+
+    if (!managerNewPassword) {
+      setErrorMsg('Please enter a new password for Manager.')
+      return
+    }
+    if (managerNewPassword.length < 6) {
+      setErrorMsg('New password must be at least 6 characters long.')
+      return
+    }
+    if (managerNewPassword !== managerConfirmPassword) {
+      setErrorMsg('New password and Confirm password do not match.')
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      const res = await authService.updateManagerPassword({
+        newPassword: managerNewPassword,
+        confirmPassword: managerConfirmPassword,
+      })
+
+      const msg = res?.message || "Manager's password updated successfully!"
+      setSuccessMsg(msg)
+      if (showNotification) {
+        showNotification({ type: 'success', message: msg })
+      }
+
+      setManagerNewPassword('')
+      setManagerConfirmPassword('')
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to update manager password.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="settings-section">
-      <SectionHeader title="Notifications" subtitle="Configure how and when you receive alerts." />
-      <div className="settings-toggles">
-        <ToggleRow
-          label="Daily Email Summary"
-          description="Receive a daily summary of expenses and site activity."
-          checked={!!n.emailDailySummary}
-          onChange={v => updateDraft('notifications', 'emailDailySummary', v)}
-        />
-        <ToggleRow
-          label="Low Balance Alerts"
-          description="Get notified when a bank account balance falls below the threshold."
-          checked={!!n.lowBalanceAlerts}
-          onChange={v => updateDraft('notifications', 'lowBalanceAlerts', v)}
-        />
-        <ToggleRow
-          label="Payment Reminders"
-          description="Reminders for pending supplier or labour payments."
-          checked={!!n.paymentReminders}
-          onChange={v => updateDraft('notifications', 'paymentReminders', v)}
-        />
+      <SectionHeader
+        title="Change Password"
+        subtitle="Update credentials to keep your business workspace secure."
+      />
+
+      {/* Target Selector Tabs: Admin Password vs Manager Password */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+        <button
+          type="button"
+          onClick={() => {
+            setPasswordTarget('admin')
+            setErrorMsg('')
+            setSuccessMsg('')
+          }}
+          style={{
+            padding: '8px 18px',
+            borderRadius: '6px',
+            border: 'none',
+            fontSize: '13.5px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            backgroundColor: passwordTarget === 'admin' ? '#0284C7' : '#F1F5F9',
+            color: passwordTarget === 'admin' ? '#FFFFFF' : '#475569',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          Admin Password
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setPasswordTarget('manager')
+            setErrorMsg('')
+            setSuccessMsg('')
+          }}
+          style={{
+            padding: '8px 18px',
+            borderRadius: '6px',
+            border: 'none',
+            fontSize: '13.5px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            backgroundColor: passwordTarget === 'manager' ? '#0284C7' : '#F1F5F9',
+            color: passwordTarget === 'manager' ? '#FFFFFF' : '#475569',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          Manager Password
+        </button>
       </div>
+
+      {errorMsg && (
+        <div
+          className="form-alert form-alert-error"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '20px',
+            padding: '12px 16px',
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FCA5A5',
+            borderRadius: '8px',
+            color: '#B91C1C',
+            fontSize: '13.5px',
+          }}
+        >
+          <AlertCircle size={16} style={{ flexShrink: 0 }} />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      {successMsg && (
+        <div
+          className="form-alert form-alert-success"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '20px',
+            padding: '12px 16px',
+            backgroundColor: '#F0FDF4',
+            border: '1px solid #86EFAC',
+            borderRadius: '8px',
+            color: '#15803D',
+            fontSize: '13.5px',
+          }}
+        >
+          <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
+      {passwordTarget === 'admin' ? (
+        <form onSubmit={handleAdminSubmit} style={{ maxWidth: '480px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <Field label="Current Password">
+              <PasswordInputField
+                value={currentPassword}
+                onChange={(val) => {
+                  setCurrentPassword(val)
+                  if (errorMsg) setErrorMsg('')
+                }}
+                placeholder="Enter current password"
+                disabled={submitting}
+                autoComplete="current-password"
+              />
+            </Field>
+
+            <Field label="New Password">
+              <PasswordInputField
+                value={newPassword}
+                onChange={(val) => {
+                  setNewPassword(val)
+                  if (errorMsg) setErrorMsg('')
+                }}
+                placeholder="Enter at least 6 characters"
+                disabled={submitting}
+                autoComplete="new-password"
+              />
+            </Field>
+
+            <Field label="Confirm New Password">
+              <PasswordInputField
+                value={confirmPassword}
+                onChange={(val) => {
+                  setConfirmPassword(val)
+                  if (errorMsg) setErrorMsg('')
+                }}
+                placeholder="Re-enter new password"
+                disabled={submitting}
+                autoComplete="new-password"
+              />
+            </Field>
+          </div>
+
+          <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-start' }}>
+            <button
+              type="submit"
+              className="btn-settings-save"
+              disabled={submitting}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 22px',
+                fontWeight: 600,
+              }}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 size={16} className="spin-animate" />
+                  <span>Updating Password…</span>
+                </>
+              ) : (
+                <>
+                  <Lock size={15} />
+                  <span>Change Password</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={handleManagerSubmit} style={{ maxWidth: '480px' }}>
+          <div style={{ marginBottom: '16px', fontSize: '13px', color: '#64748B' }}>
+            Set a new password for the Manager account (username: <strong>manager</strong>).
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <Field label="New Manager Password">
+              <PasswordInputField
+                value={managerNewPassword}
+                onChange={(val) => {
+                  setManagerNewPassword(val)
+                  if (errorMsg) setErrorMsg('')
+                }}
+                placeholder="Enter at least 6 characters"
+                disabled={submitting}
+                autoComplete="new-password"
+              />
+            </Field>
+
+            <Field label="Confirm Manager Password">
+              <PasswordInputField
+                value={managerConfirmPassword}
+                onChange={(val) => {
+                  setManagerConfirmPassword(val)
+                  if (errorMsg) setErrorMsg('')
+                }}
+                placeholder="Re-enter new password"
+                disabled={submitting}
+                autoComplete="new-password"
+              />
+            </Field>
+          </div>
+
+          <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-start' }}>
+            <button
+              type="submit"
+              className="btn-settings-save"
+              disabled={submitting}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 22px',
+                fontWeight: 600,
+              }}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 size={16} className="spin-animate" />
+                  <span>Updating Manager Password…</span>
+                </>
+              ) : (
+                <>
+                  <Lock size={15} />
+                  <span>Update Manager Password</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   )
 }
+
+

@@ -13,11 +13,14 @@ import {
   Trash2,
   X,
   CreditCard,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react'
 import { siteService } from '../services/siteService.js'
 import { bankAccountService } from '../services/bankAccountService.js'
 import SiteDetailPage from './SiteDetailPage.jsx'
 import MakeSitePaymentModal from './MakeSitePaymentModal.jsx'
+import TablePagination from './TablePagination.jsx'
 
 export default function SitesPage({
   sites = [],
@@ -189,6 +192,7 @@ export default function SitesPage({
   const [editLoadingBanks, setEditLoadingBanks] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [deleteConfirmSite, setDeleteConfirmSite] = useState(null)
 
   // View handler - opens full Site Details Page matching reference design
   const handleView = (row) => {
@@ -313,12 +317,16 @@ export default function SitesPage({
     }
   }
 
-  // Delete handler
-  const handleDelete = async (row) => {
+  // Delete click opens popup box instead of browser alert
+  const handleDelete = (row) => {
+    setDeleteConfirmSite(row)
+  }
+
+  // Confirmed delete execution
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmSite) return
+    const row = deleteConfirmSite
     const siteName = row.name || 'this site'
-    if (!window.confirm(`Are you sure you want to delete "${siteName}"?`)) {
-      return
-    }
 
     try {
       setDeletingId(row._id)
@@ -331,6 +339,7 @@ export default function SitesPage({
           message: `Site "${siteName}" deleted successfully!`,
         })
       }
+      setDeleteConfirmSite(null)
       if (onSitesChanged) onSitesChanged()
       if (onRefreshAccounts) onRefreshAccounts()
     } catch (err) {
@@ -547,12 +556,12 @@ export default function SitesPage({
                         <button
                           type="button"
                           className="site-action-btn-pay"
-                          title={(row.rawPending || 0) <= 0 ? 'Fully Paid' : 'Make Payment'}
+                          title={(row.rawPending || 0) <= 0 ? 'Fully Paid' : 'Make Receive'}
                           disabled={(row.rawPending || 0) <= 0}
                           onClick={() => setPayingSite(row.raw || row)}
                         >
                           <CreditCard size={13} />
-                          <span>Make Payment</span>
+                          <span>Make Receive</span>
                         </button>
                         <button
                           type="button"
@@ -595,73 +604,13 @@ export default function SitesPage({
         </div>
 
         {/* 5. Dynamic Pagination Footer */}
-        <div className="sites-pagination-row">
-          <div className="pagination-left">
-            <span className="pagination-show-label">Show</span>
-            <div className="pagination-page-size-select-wrap">
-              <select
-                className="pagination-page-size-select"
-                value={pageSize}
-                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-              >
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </select>
-              <ChevronDown size={12} className="pagination-select-arrow" />
-            </div>
-            <span className="pagination-range-text">
-              {totalRecords === 0
-                ? '0—0 of 0'
-                : `${startIndex + 1}—${endIndex} of ${totalRecords.toLocaleString('en-IN')}`}
-            </span>
-          </div>
-
-          <div className="pagination-right">
-            <button
-              type="button"
-              className="pagination-nav-btn"
-              disabled={activePage <= 1 || totalRecords === 0}
-              onClick={() => handlePageChange(activePage - 1)}
-            >
-              <ChevronLeft size={14} strokeWidth={1.75} />
-              <span>Back</span>
-            </button>
-
-            {totalPages > 1 &&
-              getPaginationItems().map((item, index) => {
-                if (item === '...') {
-                  return (
-                    <span key={`dots-${index}`} className="pagination-dots">
-                      ...
-                    </span>
-                  )
-                }
-                const isSelected = item === activePage
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`pagination-num-btn ${isSelected ? 'pagination-num-active' : ''}`}
-                    onClick={() => handlePageChange(item)}
-                  >
-                    {item}
-                  </button>
-                )
-              })}
-
-            <button
-              type="button"
-              className="pagination-nav-btn"
-              disabled={activePage >= totalPages || totalRecords === 0}
-              onClick={() => handlePageChange(activePage + 1)}
-            >
-              <span>Next</span>
-              <ChevronRight size={14} strokeWidth={1.75} />
-            </button>
-          </div>
-        </div>
+        <TablePagination
+          currentPage={activePage}
+          pageSize={pageSize}
+          totalRecords={totalRecords}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
       </div>
 
       {/* Make Site Client Payment Modal */}
@@ -1008,6 +957,99 @@ export default function SitesPage({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal Popup */}
+      {deleteConfirmSite && (
+        <div className="modal-overlay" onClick={() => !deletingId && setDeleteConfirmSite(null)}>
+          <div
+            className="modal-container"
+            style={{ maxWidth: '440px', padding: '24px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '50%',
+                  backgroundColor: '#FEE2E2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#DC2626',
+                  flexShrink: 0,
+                }}
+              >
+                <AlertTriangle size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#172033' }}>
+                  Delete Site?
+                </h3>
+                <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#64748B' }}>
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13.5px', color: '#334155', lineHeight: '1.5', margin: '0 0 20px' }}>
+              Are you sure you want to delete site{' '}
+              <strong style={{ color: '#0F172A' }}>"{deleteConfirmSite.name || 'this site'}"</strong>?
+              Please ensure it has no attached expenses or active records.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmSite(null)}
+                disabled={Boolean(deletingId)}
+                style={{
+                  backgroundColor: '#F1F5F9',
+                  color: '#475569',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: '1.5px solid #CBD5E1',
+                  fontWeight: 600,
+                  fontSize: '13.5px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={Boolean(deletingId)}
+                style={{
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  padding: '8px 18px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: '13.5px',
+                  cursor: deletingId ? 'default' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                {deletingId ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    <span>Delete Site</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

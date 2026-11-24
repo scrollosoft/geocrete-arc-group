@@ -15,6 +15,16 @@ export const authService = {
 
   verify: () => request('/auth/verify'),
 
+  changePassword: (data) => request('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+
+  updateManagerPassword: (data) => request('/auth/update-manager-password', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+
   logout: () => {
     authStorage.removeToken()
   },

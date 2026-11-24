@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { siteOwnerService } from '../services/siteOwnerService.js'
 import SiteOwnerDetailPage from './SiteOwnerDetailPage.jsx'
+import TablePagination from './TablePagination.jsx'
 
 export default function SiteOwnersPage({
   sites = [],
@@ -33,7 +34,7 @@ export default function SiteOwnersPage({
   const [sortFilter, setSortFilter] = useState('Newest First')
 
   // Pagination
-  const pageSize = 5
+  const [pageSize, setPageSize] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
 
   // View modal state
@@ -138,35 +139,21 @@ export default function SiteOwnersPage({
     }
   }
 
-  // Format large values into Indian currency (Cr, L)
+  // Format amounts using proper Indian currency format (no L/Cr abbreviations)
   const formatCostValue = (amount, fallback) => {
     if (amount === undefined || amount === null || isNaN(amount) || amount === 0) {
       return fallback || '₹0'
     }
     const num = Number(amount)
-    if (num >= 10000000) {
-      return `₹${(num / 10000000).toFixed(2).replace(/\.00$/, '')} Cr`
-    }
-    if (num >= 100000) {
-      return `₹${(num / 100000).toFixed(1).replace(/\.0$/, '')} L`
-    }
-    return `₹${num.toLocaleString('en-IN')}`
+    return `₹${Math.round(num).toLocaleString('en-IN')}`
   }
 
-  // Format table amounts to match screenshot style: ₹8.5 cr, ₹65.0 L, etc.
+  // Format table amounts using proper Indian currency format (no L/Cr abbreviations)
   const formatTableAmount = (amount) => {
     if (amount === undefined || amount === null || isNaN(amount)) return '₹0'
     const num = Number(amount)
     if (num === 0) return '₹0'
-    if (num >= 10000000) {
-      const val = (num / 10000000).toFixed(1)
-      return `₹${val} cr`
-    }
-    if (num >= 100000) {
-      const val = (num / 100000).toFixed(1)
-      return `₹${val} L`
-    }
-    return `₹${num.toLocaleString('en-IN')}`
+    return `₹${Math.round(num).toLocaleString('en-IN')}`
   }
 
   // If a client was selected for detailed view, show the full details page matching screenshot
@@ -488,89 +475,17 @@ export default function SiteOwnersPage({
         </div>
 
         {/* 5. Pagination Footer */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '16px 20px 0 20px',
-            fontSize: '13px',
-            color: '#70829F',
+        <TablePagination
+          currentPage={activePage}
+          pageSize={pageSize}
+          totalRecords={totalRecords}
+          onPageChange={handlePageChange}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize)
+            setCurrentPage(1)
           }}
-        >
-          <div>
-            Showing {totalRecords === 0 ? 0 : startIndex + 1}-{endIndex} of {totalRecords} records
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <button
-              type="button"
-              disabled={activePage <= 1}
-              onClick={() => handlePageChange(activePage - 1)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '6px 10px',
-                borderRadius: '6px',
-                border: '1px solid #E5EAF1',
-                background: '#FFFFFF',
-                color: activePage <= 1 ? '#94A3B8' : '#172033',
-                cursor: activePage <= 1 ? 'not-allowed' : 'pointer',
-                fontSize: '12px',
-              }}
-            >
-              <ChevronLeft size={14} />
-              <span>Back</span>
-            </button>
-
-            {[...Array(totalPages)].map((_, idx) => {
-              const p = idx + 1
-              const isSelected = p === activePage
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => handlePageChange(p)}
-                  style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '6px',
-                    border: isSelected ? 'none' : '1px solid #E5EAF1',
-                    background: isSelected ? '#172033' : '#FFFFFF',
-                    color: isSelected ? '#FFFFFF' : '#172033',
-                    fontSize: '12px',
-                    fontWeight: isSelected ? 600 : 400,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {p}
-                </button>
-              )
-            })}
-
-            <button
-              type="button"
-              disabled={activePage >= totalPages}
-              onClick={() => handlePageChange(activePage + 1)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '6px 10px',
-                borderRadius: '6px',
-                border: '1px solid #E5EAF1',
-                background: '#FFFFFF',
-                color: activePage >= totalPages ? '#94A3B8' : '#172033',
-                cursor: activePage >= totalPages ? 'not-allowed' : 'pointer',
-                fontSize: '12px',
-              }}
-            >
-              <span>Next</span>
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
+          style={{ padding: '16px 20px 0 20px', margin: 0 }}
+        />
       </div>
 
     </div>

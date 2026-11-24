@@ -24,6 +24,8 @@ export default function TopHeader({
   onNavigateOwnerProfile,
   setActiveTab,
   ownerProfile,
+  userRole,
+  loggedInUsername,
   onLogout,
 }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -37,7 +39,7 @@ export default function TopHeader({
   }, [ownerProfile])
 
   useEffect(() => {
-    if (!ownerProfile) {
+    if (!ownerProfile && userRole !== 'Manager') {
       let isMounted = true
       settingService
         .getSettings()
@@ -51,7 +53,7 @@ export default function TopHeader({
         isMounted = false
       }
     }
-  }, [ownerProfile])
+  }, [ownerProfile, userRole])
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -77,9 +79,11 @@ export default function TopHeader({
     }
   }
 
-  const displayName = profile?.fullName?.trim() || ''
-  const displayRole = profile?.role?.trim() || 'Business Owner'
-  const initials = getInitials(displayName)
+  const displayName = userRole === 'Manager'
+    ? (loggedInUsername || 'Manager')
+    : (profile?.fullName?.trim() || '')
+  const displayRole = userRole === 'Manager' ? 'Manager' : (profile?.role?.trim() || 'Business Owner')
+  const initials = getInitials(displayName || (userRole === 'Manager' ? 'M' : 'U'))
 
   return (
     <header className="top-header">
@@ -97,23 +101,28 @@ export default function TopHeader({
 
       {/* Action Buttons & Profile */}
       <div className="header-actions">
-        <button
-          type="button"
-          className="btn btn-secondary-action"
-          onClick={onOpenAddExpense}
-        >
-          <Plus size={16} />
-          <span>Add Expense</span>
-        </button>
+        {onOpenAddExpense && (
+          <button
+            type="button"
+            className="btn btn-secondary-action"
+            onClick={onOpenAddExpense}
+          >
+            <Plus size={16} />
+            <span>Add Expense</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          className="btn btn-primary-action"
-          onClick={onOpenAddSite}
-        >
-          <Plus size={16} />
-          <span>Add Site</span>
-        </button>
+        {/* Add Site is only for Business Owner / Admin */}
+        {userRole !== 'Manager' && onOpenAddSite && (
+          <button
+            type="button"
+            className="btn btn-primary-action"
+            onClick={onOpenAddSite}
+          >
+            <Plus size={16} />
+            <span>Add Site</span>
+          </button>
+        )}
 
         <div className="header-divider" />
 
@@ -150,14 +159,17 @@ export default function TopHeader({
               className="profile-dropdown-menu"
               onClick={(e) => e.stopPropagation()}
             >
-              <button
-                type="button"
-                className="profile-dropdown-item"
-                onClick={handleOwnerProfileClick}
-              >
-                <User size={15} />
-                <span>Owner Profile</span>
-              </button>
+              {/* Only Admin sees Owner Profile link */}
+              {userRole !== 'Manager' && (
+                <button
+                  type="button"
+                  className="profile-dropdown-item"
+                  onClick={handleOwnerProfileClick}
+                >
+                  <User size={15} />
+                  <span>Owner Profile</span>
+                </button>
+              )}
               {onLogout && (
                 <button
                   type="button"

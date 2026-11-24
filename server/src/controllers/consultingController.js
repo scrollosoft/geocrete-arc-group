@@ -1,81 +1,71 @@
 import { getPool } from '../config/db.js'
 
 /**
- * Format a database row into a standardized Consulting record object
+ * Format a database row from the consultings table
  */
-const formatConsultingRow = (row) => {
-  let paymentMethod = 'UPI'
-  let note = ''
-  if (row.description) {
-    if (row.description.includes('[CONSULTING]')) {
-      const jsonPart = row.description.replace('[CONSULTING]', '').trim()
-      try {
-        const parsed = JSON.parse(jsonPart)
-        paymentMethod = parsed.paymentMethod || 'UPI'
-        note = parsed.note || ''
-      } catch {
-        note = jsonPart
-      }
-    } else if (row.description.startsWith('{')) {
-      try {
-        const parsed = JSON.parse(row.description)
-        paymentMethod = parsed.paymentMethod || 'UPI'
-        note = parsed.note || ''
-      } catch {
-        note = row.description
-      }
-    } else {
-      note = row.description
-    }
-  }
+export const formatConsultingRow = (row) => {
+  const totalAmount = Number(row.total_amount || 0)
+  const receivedAmount = Number(row.received_amount || 0)
+  const pendingAmount = Math.max(0, Number((totalAmount - receivedAmount).toFixed(2)))
+  const dateVal = row.date_str || (row.date ? String(row.date).slice(0, 10) : '')
 
-  const totalBudget = Number(row.total_budget || 0)
-  const advanceAmount = Number(row.advance_amount || 0)
-  const totalReceived = Number(row.total_received || 0)
-  const pendingAmount = Math.max(0, totalBudget - totalReceived)
-
-  const dateVal = row.start_date_str || (row.start_date ? String(row.start_date).slice(0, 10) : (row.created_at ? String(row.created_at).slice(0, 10) : ''))
+  const isCash = !row.bank_account_id || String(row.bank_account_id) === 'cash' || String(row.payment_mode || '').toLowerCase() === 'cash'
+  const bankAccountId = isCash ? 'cash' : (row.bank_account_id ? String(row.bank_account_id) : null)
+  const bankName = isCash ? 'Cash' : (row.bank_name || '-')
 
   return {
     id: row.id,
     _id: String(row.id),
-    siteName: row.name,
-    siteOwner: row.site_owner,
-    location: row.location,
-    city: row.location,
-    totalBudget,
-    advanceAmount,
-    receivedAmount: totalReceived,
-    pendingAmount,
-    bankAccountId: row.bank_account_id ? String(row.bank_account_id) : null,
-    bankName: row.bank_name || '-',
-    paymentMethod,
-    note,
     date: dateVal,
-    startDate: dateVal,
+    ownerName: row.owner_name || '',
+    mobileNumber: row.mobile_number || '',
+    totalAmount,
+    receivedAmount,
+    pendingAmount,
+    paymentMode: row.payment_mode || 'UPI',
+    bankAccountId,
+    bankName,
+    remark: row.remark || '',
     createdAt: row.created_at,
-    status: row.status || 'Active',
+    updatedAt: row.updated_at,
   }
 }
 
 /**
+ * Clean and validate a 10-digit Indian mobile number
+ */
+export const validateIndianMobile = (phone) => {
+  if (!phone) return null
+  const cleaned = String(phone).replace(/\D/g, '')
+  if (cleaned.length === 10 && /^[6-9]\d{9}$/.test(cleaned)) {
+    return cleaned
+  }
+  if (cleaned.length === 11 && cleaned.startsWith('0') && /^[6-9]\d{9}$/.test(cleaned.slice(1))) {
+    return cleaned.slice(1)
+  }
+  if (cleaned.length === 12 && cleaned.startsWith('91') && /^[6-9]\d{9}$/.test(cleaned.slice(2))) {
+    return cleaned.slice(2)
+  }
+  return null
+}
+
+/**
  * GET /api/consulting
- * Fetch all consulting records
+ * Fetch all consulting records from the separate consultings table
  */
 export const getConsultingList = async (req, res, next) => {
   try {
     const pool = getPool()
     const [rows] = await pool.query(`
       SELECT 
-        s.*,
-        CAST(s.start_date AS CHAR) AS start_date_str,
-        CAST(s.created_at AS CHAR) AS created_at_str,
+        c.*,
+        CAST(c.date AS CHAR) AS date_str,
+        CAST(c.created_at AS CHAR) AS created_at_str,
         ba.bank_name,
         ba.account_number
-      FROM sites s
-      LEFT JOIN bank_accounts ba ON ba.id = s.bank_account_id
-      WHERE s.description LIKE '%[CONSULTING]%'
-      ORDER BY s.id DESC
+      FROM consultings c
+      LEFT JOIN bank_accounts ba ON ba.id = c.bank_account_id
+      ORDER BY c.date DESC, c.id DESC
     `)
 
     const list = rows.map(formatConsultingRow)
@@ -87,21 +77,21 @@ export const getConsultingList = async (req, res, next) => {
 
 /**
  * GET /api/consulting/:id
- * Fetch single consulting record
+ * Fetch single consulting record with payment history
  */
 export const getConsultingById = async (req, res, next) => {
   try {
     const pool = getPool()
     const [rows] = await pool.query(`
       SELECT 
-        s.*,
-        CAST(s.start_date AS CHAR) AS start_date_str,
-        CAST(s.created_at AS CHAR) AS created_at_str,
+        c.*,
+        CAST(c.date AS CHAR) AS date_str,
+        CAST(c.created_at AS CHAR) AS created_at_str,
         ba.bank_name,
         ba.account_number
-      FROM sites s
-      LEFT JOIN bank_accounts ba ON ba.id = s.bank_account_id
-      WHERE s.id = ? AND s.description LIKE '%[CONSULTING]%'
+      FROM consultings c
+      LEFT JOIN bank_accounts ba ON ba.id = c.bank_account_id
+      WHERE c.id = ?
       LIMIT 1
     `, [req.params.id])
 
@@ -109,7 +99,35 @@ export const getConsultingById = async (req, res, next) => {
       return res.status(404).json({ error: 'Consulting record not found' })
     }
 
-    res.json(formatConsultingRow(rows[0]))
+    const record = formatConsultingRow(rows[0])
+
+    const [payments] = await pool.query(`
+      SELECT 
+        cp.*,
+        CAST(cp.payment_date AS CHAR) AS payment_date_str,
+        CAST(cp.created_at AS CHAR) AS created_at_str,
+        ba.bank_name,
+        ba.account_number
+      FROM consulting_payments cp
+      LEFT JOIN bank_accounts ba ON ba.id = cp.bank_account_id
+      WHERE cp.consulting_id = ?
+      ORDER BY cp.payment_date DESC, cp.id DESC
+    `, [req.params.id])
+
+    record.payments = payments.map((p) => ({
+      id: p.id,
+      consultingId: p.consulting_id,
+      amount: Number(p.amount || 0),
+      paymentDate: p.payment_date_str || (p.payment_date ? String(p.payment_date).slice(0, 10) : ''),
+      paymentMode: p.payment_mode,
+      bankAccountId: p.bank_account_id ? String(p.bank_account_id) : (p.payment_mode === 'Cash' ? 'cash' : null),
+      bankName: p.payment_mode === 'Cash' || !p.bank_account_id ? 'Cash' : (p.bank_name || '-'),
+      reference: p.reference || '',
+      remark: p.remark || '',
+      createdAt: p.created_at,
+    }))
+
+    res.json(record)
   } catch (error) {
     next(error)
   }
@@ -117,156 +135,145 @@ export const getConsultingById = async (req, res, next) => {
 
 /**
  * POST /api/consulting
- * Create a new consulting record + credit bank balance atomically
+ * Create a new consulting record + credit bank/cash account atomically
  */
 export const createConsulting = async (req, res, next) => {
   const pool = getPool()
   const conn = await pool.getConnection()
   try {
     const {
-      siteName,
-      siteOwner,
-      location,
-      city,
-      totalBudget,
-      advanceAmount,
+      date,
+      ownerName,
+      mobileNumber,
+      totalAmount,
       receivedAmount,
       bankAccountId,
-      paymentMethod,
-      note,
+      paymentMode,
+      remark,
     } = req.body
 
-    // 1. Validation
-    const cleanSiteName = (siteName || '').trim()
-    if (!cleanSiteName) {
-      return res.status(400).json({ error: 'Site Name is required' })
+    // 1. Validations
+    const cleanDate = date
+      ? new Date(date).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10)
+
+    const cleanOwnerName = (ownerName || '').trim()
+    if (!cleanOwnerName) {
+      return res.status(400).json({ error: 'Owner Name is required' })
     }
 
-    const cleanSiteOwner = (siteOwner || '').trim()
-    if (!cleanSiteOwner) {
-      return res.status(400).json({ error: 'Site Owner is required' })
+    const validMobile = validateIndianMobile(mobileNumber)
+    if (!validMobile) {
+      return res.status(400).json({ error: 'Please enter a valid 10-digit Indian mobile number' })
     }
 
-    const cleanLocation = (location || city || '').trim()
-    if (!cleanLocation) {
-      return res.status(400).json({ error: 'City / Location is required' })
+    const numTotal = Number(totalAmount)
+    if (isNaN(numTotal) || numTotal <= 0) {
+      return res.status(400).json({ error: 'Total Amount must be greater than zero' })
     }
 
-    const numBudget = Number(totalBudget)
-    if (isNaN(numBudget) || numBudget <= 0) {
-      return res.status(400).json({ error: 'Total Budget must be greater than zero' })
-    }
-
-    const numAdvance = advanceAmount !== '' && advanceAmount !== undefined ? Number(advanceAmount) : 0
-    if (isNaN(numAdvance) || numAdvance < 0) {
-      return res.status(400).json({ error: 'Advance Amount must be a non-negative number' })
-    }
-    if (numAdvance > numBudget) {
-      return res.status(400).json({ error: 'Advance Amount cannot exceed Total Budget' })
-    }
-
-    const numReceived = receivedAmount !== '' && receivedAmount !== undefined ? Number(receivedAmount) : numAdvance
+    const numReceived = receivedAmount !== '' && receivedAmount !== undefined ? Number(receivedAmount) : 0
     if (isNaN(numReceived) || numReceived < 0) {
-      return res.status(400).json({ error: 'Received Amount must be a non-negative number' })
+      return res.status(400).json({ error: 'Received Amount must be a valid non-negative number' })
     }
-    if (numReceived > numBudget) {
-      return res.status(400).json({ error: 'Received Amount cannot exceed Total Budget' })
+    if (numReceived > numTotal) {
+      return res.status(400).json({ error: 'Received Amount cannot exceed Total Amount' })
     }
+
+    const validPaymentMode = paymentMode || 'UPI'
+    const isCashAccount = validPaymentMode === 'Cash' || String(bankAccountId || '').toLowerCase() === 'cash'
 
     let validBankId = null
-    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash'
-
-    if (bankAccountId && !isCashAccount) {
+    if (!isCashAccount && bankAccountId) {
       const [bankRows] = await conn.query(
         'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 LIMIT 1',
         [bankAccountId]
       )
       if (bankRows.length === 0) {
-        return res.status(400).json({ error: 'Selected bank account was not found or is inactive' })
+        return res.status(400).json({ error: 'Selected bank account not found or inactive' })
       }
       validBankId = Number(bankAccountId)
     }
 
-    if (numReceived > 0 && !validBankId && !isCashAccount) {
-      return res.status(400).json({ error: 'Please select an Account for the received amount' })
+    if (numReceived > 0 && !isCashAccount && !validBankId) {
+      return res.status(400).json({ error: 'Please select a Bank Account for the received payment' })
     }
 
-    const validPaymentMethod = isCashAccount
-      ? 'Cash'
-      : (['UPI', 'Cheque', 'Cash'].includes(paymentMethod) ? paymentMethod : (paymentMethod || 'UPI'))
-
-    const cleanNote = (note || '').trim()
-    const consultingDesc = `[CONSULTING] ${JSON.stringify({
-      paymentMethod: validPaymentMethod,
-      note: cleanNote,
-    })}`
-
-    const today = new Date().toISOString().slice(0, 10)
+    const cleanRemark = (remark || '').trim()
 
     // 2. Atomic Database Transaction
     await conn.beginTransaction()
 
-    // Insert site
-    const [siteResult] = await conn.query(`
-      INSERT INTO sites
-        (name, location, site_owner, contact_number, email, address,
-         total_budget, advance_amount, total_received, bank_account_id,
-         total_spent, status, start_date, description, budget_alert_count)
-      VALUES (?, ?, ?, '-', '', '', ?, ?, ?, ?, 0, 'Active', ?, ?, 1)
+    // Insert into separate consultings table
+    const [result] = await conn.query(`
+      INSERT INTO consultings
+        (date, owner_name, mobile_number, total_amount, received_amount, payment_mode, bank_account_id, remark)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      cleanSiteName,
-      cleanLocation,
-      cleanSiteOwner,
-      numBudget,
-      numAdvance,
+      cleanDate,
+      cleanOwnerName,
+      validMobile,
+      numTotal,
       numReceived,
+      validPaymentMode,
       validBankId,
-      today,
-      consultingDesc,
+      cleanRemark,
     ])
 
-    const siteId = siteResult.insertId
+    const consultingId = result.insertId
 
-    // If money received, credit bank or record cash, and insert client_payments record
-    if (numReceived > 0 && (validBankId || isCashAccount)) {
+    // If initial received amount > 0, credit bank or cash and create transaction entries
+    if (numReceived > 0) {
+      if (validBankId) {
+        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [numReceived, validBankId])
+      }
+
+      // Record in consulting_payments table
       await conn.query(`
-        INSERT INTO client_payments
-          (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
-        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'Paid', 'credit')
+        INSERT INTO consulting_payments
+          (consulting_id, amount, payment_date, payment_mode, bank_account_id, reference, remark)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `, [
-        siteId,
-        validBankId,
+        consultingId,
         numReceived,
-        today,
-        `Consulting - ${cleanSiteName}`,
-        validPaymentMethod,
-        cleanNote || 'Consulting receipt',
+        cleanDate,
+        validPaymentMode,
+        validBankId,
+        `CONSULTING-REF-${consultingId}`,
+        cleanRemark || 'Initial Consulting Payment',
       ])
 
-      if (validBankId) {
-        await conn.query(`
-          UPDATE bank_accounts
-          SET balance = balance + ?
-          WHERE id = ?
-        `, [numReceived, validBankId])
-      }
+      // Record in client_payments table for universal Transaction History & Cash/Bank ledger
+      await conn.query(`
+        INSERT INTO client_payments
+          (consulting_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
+        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'Paid', 'credit')
+      `, [
+        consultingId,
+        validBankId,
+        numReceived,
+        cleanDate,
+        `Consulting - ${cleanOwnerName}`,
+        validPaymentMode,
+        `CONSULTING-REF-${consultingId}`,
+      ])
     }
 
     await conn.commit()
 
-    // Fetch and return the newly created record
+    // Fetch and return created record
     const [newRows] = await pool.query(`
       SELECT 
-        s.*,
-        CAST(s.start_date AS CHAR) AS start_date_str,
-        CAST(s.created_at AS CHAR) AS created_at_str,
+        c.*,
+        CAST(c.date AS CHAR) AS date_str,
+        CAST(c.created_at AS CHAR) AS created_at_str,
         ba.bank_name,
         ba.account_number
-      FROM sites s
-      LEFT JOIN bank_accounts ba ON ba.id = s.bank_account_id
-      WHERE s.id = ?
+      FROM consultings c
+      LEFT JOIN bank_accounts ba ON ba.id = c.bank_account_id
+      WHERE c.id = ?
       LIMIT 1
-    `, [siteId])
+    `, [consultingId])
 
     res.status(201).json(formatConsultingRow(newRows[0]))
   } catch (error) {
@@ -279,7 +286,7 @@ export const createConsulting = async (req, res, next) => {
 
 /**
  * PUT /api/consulting/:id
- * Update an existing consulting record + adjust bank balance atomically
+ * Update an existing consulting record
  */
 export const updateConsulting = async (req, res, next) => {
   const pool = getPool()
@@ -287,155 +294,151 @@ export const updateConsulting = async (req, res, next) => {
   try {
     const id = req.params.id
 
-    const [existingRows] = await conn.query(
-      'SELECT * FROM sites WHERE id = ? AND description LIKE "%[CONSULTING]%" LIMIT 1',
-      [id]
-    )
+    const [existingRows] = await conn.query('SELECT * FROM consultings WHERE id = ? LIMIT 1', [id])
     if (existingRows.length === 0) {
       return res.status(404).json({ error: 'Consulting record not found' })
     }
     const existing = existingRows[0]
 
     const {
-      siteName,
-      siteOwner,
-      location,
-      city,
-      totalBudget,
-      advanceAmount,
+      date,
+      ownerName,
+      mobileNumber,
+      totalAmount,
       receivedAmount,
+      paymentMode,
       bankAccountId,
-      paymentMethod,
-      note,
+      remark,
     } = req.body
 
-    const cleanSiteName = (siteName || existing.name || '').trim()
-    if (!cleanSiteName) return res.status(400).json({ error: 'Site Name is required' })
+    const cleanDate = date ? new Date(date).toISOString().slice(0, 10) : existing.date
+    const cleanOwnerName = ownerName !== undefined ? (ownerName || '').trim() : existing.owner_name
+    if (!cleanOwnerName) {
+      return res.status(400).json({ error: 'Owner Name is required' })
+    }
 
-    const cleanSiteOwner = (siteOwner || existing.site_owner || '').trim()
-    if (!cleanSiteOwner) return res.status(400).json({ error: 'Site Owner is required' })
+    let cleanMobile = existing.mobile_number
+    if (mobileNumber !== undefined) {
+      const validMob = validateIndianMobile(mobileNumber)
+      if (!validMob) {
+        return res.status(400).json({ error: 'Please enter a valid 10-digit Indian mobile number' })
+      }
+      cleanMobile = validMob
+    }
 
-    const cleanLocation = (location || city || existing.location || '').trim()
-    if (!cleanLocation) return res.status(400).json({ error: 'City / Location is required' })
+    const numTotal = totalAmount !== undefined ? Number(totalAmount) : Number(existing.total_amount)
+    if (isNaN(numTotal) || numTotal <= 0) {
+      return res.status(400).json({ error: 'Total Amount must be greater than zero' })
+    }
 
-    const numBudget = totalBudget !== undefined ? Number(totalBudget) : Number(existing.total_budget || 0)
-    if (isNaN(numBudget) || numBudget <= 0) return res.status(400).json({ error: 'Total Budget must be greater than zero' })
+    const numReceived = receivedAmount !== undefined && receivedAmount !== ''
+      ? Number(receivedAmount)
+      : Number(existing.received_amount || 0)
+    if (isNaN(numReceived) || numReceived < 0) {
+      return res.status(400).json({ error: 'Received Amount must be a valid non-negative number' })
+    }
+    if (numReceived > numTotal) {
+      return res.status(400).json({
+        error: `Received Amount cannot exceed Total Amount (₹${numTotal.toLocaleString('en-IN')})`,
+      })
+    }
 
-    const numAdvance = advanceAmount !== undefined && advanceAmount !== '' ? Number(advanceAmount) : Number(existing.advance_amount || 0)
-    if (isNaN(numAdvance) || numAdvance < 0) return res.status(400).json({ error: 'Advance Amount must be a non-negative number' })
-    if (numAdvance > numBudget) return res.status(400).json({ error: 'Advance Amount cannot exceed Total Budget' })
-
-    const numReceived = receivedAmount !== undefined && receivedAmount !== '' ? Number(receivedAmount) : Number(existing.total_received || 0)
-    if (isNaN(numReceived) || numReceived < 0) return res.status(400).json({ error: 'Received Amount must be a non-negative number' })
-    if (numReceived > numBudget) return res.status(400).json({ error: 'Received Amount cannot exceed Total Budget' })
+    const validPaymentMode = paymentMode !== undefined ? paymentMode : existing.payment_mode
+    const isCashAccount = validPaymentMode === 'Cash' || String(bankAccountId || '').toLowerCase() === 'cash'
 
     let validBankId = null
-    if (bankAccountId) {
-      const [bankRows] = await conn.query('SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 LIMIT 1', [bankAccountId])
-      if (bankRows.length === 0) return res.status(400).json({ error: 'Selected bank account was not found' })
-      validBankId = Number(bankAccountId)
+    if (!isCashAccount) {
+      const targetBank = bankAccountId !== undefined ? bankAccountId : existing.bank_account_id
+      if (targetBank) {
+        const [bankRows] = await conn.query(
+          'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 LIMIT 1',
+          [targetBank]
+        )
+        if (bankRows.length === 0) {
+          return res.status(400).json({ error: 'Selected bank account not found or inactive' })
+        }
+        validBankId = Number(targetBank)
+      }
     }
 
-    if (numReceived > 0 && !validBankId) {
-      return res.status(400).json({ error: 'Please select a Bank Account for the received amount' })
+    if (numReceived > 0 && !isCashAccount && !validBankId) {
+      return res.status(400).json({ error: 'Please select a Bank Account for the received payment' })
     }
 
-    const validPaymentMethod = ['UPI', 'Cheque', 'Cash'].includes(paymentMethod) ? paymentMethod : (paymentMethod || 'UPI')
-    const cleanNote = note !== undefined ? (note || '').trim() : ''
-
-    const consultingDesc = `[CONSULTING] ${JSON.stringify({
-      paymentMethod: validPaymentMethod,
-      note: cleanNote,
-    })}`
+    const cleanRemark = remark !== undefined ? (remark || '').trim() : existing.remark
 
     await conn.beginTransaction()
 
-    // Bank balance adjustments
-    const oldBankId = existing.bank_account_id ? Number(existing.bank_account_id) : null
-    const oldReceived = Number(existing.total_received || 0)
-
-    if (oldBankId === validBankId) {
-      // Same bank: adjust by difference only (credit direction, so +diff)
-      const diff = numReceived - oldReceived
-      if (diff !== 0 && validBankId) {
-        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [diff, validBankId])
-      }
-    } else {
-      // Bank changed: reverse old credit from old bank, apply new credit to new bank
-      if (oldBankId && oldReceived > 0) {
-        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [oldReceived, oldBankId])
-      }
-      if (validBankId && numReceived > 0) {
-        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [numReceived, validBankId])
+    // 1. Revert previous bank credits linked to this consulting record
+    const [linkedPayments] = await conn.query(
+      'SELECT * FROM consulting_payments WHERE consulting_id = ?',
+      [id]
+    )
+    for (const p of linkedPayments) {
+      if (p.bank_account_id && Number(p.amount) > 0) {
+        await conn.query(
+          'UPDATE bank_accounts SET balance = balance - ? WHERE id = ?',
+          [p.amount, p.bank_account_id]
+        )
       }
     }
 
-    // Update sites row
+    // 2. Remove old linked payment records from consulting_payments and client_payments
+    await conn.query('DELETE FROM client_payments WHERE consulting_id = ?', [id])
+    await conn.query('DELETE FROM consulting_payments WHERE consulting_id = ?', [id])
+
+    // 3. Update consultings record
     await conn.query(`
-      UPDATE sites SET
-        name = ?,
-        location = ?,
-        site_owner = ?,
-        total_budget = ?,
-        advance_amount = ?,
-        total_received = ?,
-        bank_account_id = ?,
-        description = ?
+      UPDATE consultings
+      SET date = ?, owner_name = ?, mobile_number = ?, total_amount = ?, received_amount = ?, payment_mode = ?, bank_account_id = ?, remark = ?
       WHERE id = ?
     `, [
-      cleanSiteName,
-      cleanLocation,
-      cleanSiteOwner,
-      numBudget,
-      numAdvance,
+      cleanDate,
+      cleanOwnerName,
+      cleanMobile,
+      numTotal,
       numReceived,
+      validPaymentMode,
       validBankId,
-      consultingDesc,
+      cleanRemark,
       id,
     ])
 
-    // Update client_payments record
-    const [existingPayments] = await conn.query(
-      'SELECT id FROM client_payments WHERE site_id = ? LIMIT 1',
-      [id]
-    )
-
-    const today = new Date().toISOString().slice(0, 10)
-
-    if (existingPayments.length > 0) {
-      if (numReceived > 0 && validBankId) {
-        await conn.query(`
-          UPDATE client_payments SET
-            amount = ?,
-            bank_account_id = ?,
-            payment_method = ?,
-            reference = ?,
-            title = ?
-          WHERE id = ?
-        `, [
-          numReceived,
-          validBankId,
-          validPaymentMethod,
-          cleanNote || 'Consulting receipt',
-          `Consulting - ${cleanSiteName}`,
-          existingPayments[0].id,
-        ])
-      } else {
-        await conn.query('DELETE FROM client_payments WHERE id = ?', [existingPayments[0].id])
+    // 4. If numReceived > 0, credit the selected bank (or cash) and insert fresh payment records
+    if (numReceived > 0) {
+      if (validBankId) {
+        await conn.query(
+          'UPDATE bank_accounts SET balance = balance + ? WHERE id = ?',
+          [numReceived, validBankId]
+        )
       }
-    } else if (numReceived > 0 && validBankId) {
+
+      await conn.query(`
+        INSERT INTO consulting_payments
+          (consulting_id, amount, payment_date, payment_mode, bank_account_id, reference, remark)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
+        id,
+        numReceived,
+        cleanDate,
+        validPaymentMode,
+        validBankId,
+        `CONSULTING-REF-${id}`,
+        cleanRemark || 'Consulting Payment Received',
+      ])
+
       await conn.query(`
         INSERT INTO client_payments
-          (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
-        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'Paid', 'credit')
+          (consulting_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
+        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'Paid', 'credit')
       `, [
         id,
         validBankId,
         numReceived,
-        today,
-        `Consulting - ${cleanSiteName}`,
-        validPaymentMethod,
-        cleanNote || 'Consulting receipt',
+        cleanDate,
+        `Consulting - ${cleanOwnerName}`,
+        validPaymentMode,
+        `CONSULTING-REF-${id}`,
       ])
     }
 
@@ -443,14 +446,14 @@ export const updateConsulting = async (req, res, next) => {
 
     const [updatedRows] = await pool.query(`
       SELECT 
-        s.*,
-        CAST(s.start_date AS CHAR) AS start_date_str,
-        CAST(s.created_at AS CHAR) AS created_at_str,
+        c.*,
+        CAST(c.date AS CHAR) AS date_str,
+        CAST(c.created_at AS CHAR) AS created_at_str,
         ba.bank_name,
         ba.account_number
-      FROM sites s
-      LEFT JOIN bank_accounts ba ON ba.id = s.bank_account_id
-      WHERE s.id = ?
+      FROM consultings c
+      LEFT JOIN bank_accounts ba ON ba.id = c.bank_account_id
+      WHERE c.id = ?
       LIMIT 1
     `, [id])
 
@@ -464,29 +467,93 @@ export const updateConsulting = async (req, res, next) => {
 }
 
 /**
+ * DELETE /api/consulting/:id
+ * Delete consulting record and reverse related account credits
+ */
+export const deleteConsulting = async (req, res, next) => {
+  const pool = getPool()
+  const conn = await pool.getConnection()
+  try {
+    const id = req.params.id
+
+    const [existingRows] = await conn.query('SELECT * FROM consultings WHERE id = ? LIMIT 1', [id])
+    if (existingRows.length === 0) {
+      return res.status(404).json({ error: 'Consulting record not found' })
+    }
+
+    await conn.beginTransaction()
+
+    // 1. Fetch all linked payments to reverse bank balance
+    const [linkedPayments] = await conn.query('SELECT * FROM consulting_payments WHERE consulting_id = ?', [id])
+    for (const p of linkedPayments) {
+      if (p.bank_account_id && Number(p.amount) > 0) {
+        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [p.amount, p.bank_account_id])
+      }
+    }
+
+    // 2. Delete linked client_payments and consulting_payments
+    await conn.query('DELETE FROM client_payments WHERE consulting_id = ?', [id])
+    await conn.query('DELETE FROM consulting_payments WHERE consulting_id = ?', [id])
+
+    // 3. Delete consulting record
+    await conn.query('DELETE FROM consultings WHERE id = ?', [id])
+
+    await conn.commit()
+    res.json({ success: true, message: 'Consulting record deleted successfully' })
+  } catch (error) {
+    await conn.rollback()
+    next(error)
+  } finally {
+    conn.release()
+  }
+}
+
+/**
  * POST /api/consulting/:id/payments
- * Record a payment for a consulting project + credit bank or cash balance atomically
+ * Record a partial/remaining payment for a consulting record
  */
 export const recordConsultingPayment = async (req, res, next) => {
   const pool = getPool()
   const conn = await pool.getConnection()
   try {
     const id = req.params.id
-    const { amount, bankAccountId, paymentDate, paymentMethod, remarks } = req.body
 
-    // 1. Validate amount
+    const [existingRows] = await conn.query('SELECT * FROM consultings WHERE id = ? LIMIT 1', [id])
+    if (existingRows.length === 0) {
+      return res.status(404).json({ error: 'Consulting record not found' })
+    }
+    const consulting = existingRows[0]
+
+    const {
+      amount,
+      paymentDate,
+      paymentMode,
+      bankAccountId,
+      remarks,
+    } = req.body
+
     const numAmount = Number(amount)
     if (isNaN(numAmount) || numAmount <= 0) {
       return res.status(400).json({ error: 'Payment amount must be greater than zero' })
     }
 
-    // 2. Validate account
-    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash'
-    let validBankId = null
+    const totalAmount = Number(consulting.total_amount || 0)
+    const currentReceived = Number(consulting.received_amount || 0)
+    const pendingAmount = Math.max(0, Number((totalAmount - currentReceived).toFixed(2)))
 
+    if (numAmount > pendingAmount) {
+      return res.status(400).json({
+        error: `Payment amount cannot exceed pending amount of ₹${pendingAmount.toLocaleString('en-IN')}`,
+      })
+    }
+
+    const validPaymentMode = paymentMode || 'UPI'
+    const isCashAccount = validPaymentMode === 'Cash' || String(bankAccountId || '').toLowerCase() === 'cash'
+
+    let validBankId = null
     if (!isCashAccount) {
       if (!bankAccountId) {
-        return res.status(400).json({ error: 'Please select a Bank Account or Cash' })
+        return res.status(400).json({ error: 'Please select a Bank Account for this payment' })
       }
       const [bankRows] = await conn.query(
         'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 LIMIT 1',
@@ -498,87 +565,87 @@ export const recordConsultingPayment = async (req, res, next) => {
       validBankId = Number(bankAccountId)
     }
 
-    // 3. Begin Transaction
-    await conn.beginTransaction()
-
-    // 4. Fetch site with FOR UPDATE
-    const [siteRows] = await conn.query(
-      'SELECT * FROM sites WHERE id = ? AND description LIKE "%[CONSULTING]%" FOR UPDATE',
-      [id]
-    )
-    if (siteRows.length === 0) {
-      await conn.rollback()
-      return res.status(404).json({ error: 'Consulting record not found' })
-    }
-    const site = siteRows[0]
-
-    const totalBudget = Number(site.total_budget || 0)
-    const totalReceived = Number(site.total_received || 0)
-    const pendingAmount = Math.max(0, totalBudget - totalReceived)
-
-    if (numAmount > pendingAmount) {
-      await conn.rollback()
-      return res.status(400).json({
-        error: `Payment amount (₹${numAmount.toLocaleString('en-IN')}) cannot exceed pending amount of ₹${pendingAmount.toLocaleString('en-IN')}`,
-      })
-    }
-
-    const validPaymentMethod = isCashAccount
-      ? 'Cash'
-      : (paymentMethod || 'UPI')
-
-    const pDate = paymentDate && String(paymentDate).trim()
-      ? String(paymentDate).trim().slice(0, 10)
+    const cleanDate = paymentDate
+      ? new Date(paymentDate).toISOString().slice(0, 10)
       : new Date().toISOString().slice(0, 10)
 
-    const cleanRemarks = (remarks || '').trim() || 'Consulting payment received'
+    const cleanRemarks = (remarks || '').trim()
 
-    // 5. Update site total_received
-    await conn.query(
-      'UPDATE sites SET total_received = total_received + ? WHERE id = ?',
-      [numAmount, id]
-    )
+    // Atomic transaction
+    await conn.beginTransaction()
 
-    // 6. Credit bank account if bank is selected
+    // 1. Update consulting received_amount
+    const newTotalReceived = Number((currentReceived + numAmount).toFixed(2))
+    await conn.query('UPDATE consultings SET received_amount = ? WHERE id = ?', [newTotalReceived, id])
+
+    // 2. Credit bank if bank payment
     if (validBankId) {
-      await conn.query(
-        'UPDATE bank_accounts SET balance = balance + ? WHERE id = ?',
-        [numAmount, validBankId]
-      )
+      await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [numAmount, validBankId])
     }
 
-    // 7. Insert client_payments transaction record
+    // 3. Insert consulting_payments
+    const [cpRes] = await conn.query(`
+      INSERT INTO consulting_payments
+        (consulting_id, amount, payment_date, payment_mode, bank_account_id, reference, remark)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [
+      id,
+      numAmount,
+      cleanDate,
+      validPaymentMode,
+      validBankId,
+      `CONSULTING-REF-${id}`,
+      cleanRemarks || 'Consulting Payment Received',
+    ])
+
+    // 4. Insert into client_payments for universal Transaction History & Cash/Bank ledger
     await conn.query(`
       INSERT INTO client_payments
-        (client_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
-      VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'Paid', 'credit')
+        (consulting_id, site_id, bank_account_id, amount, payment_date, title, payment_method, reference, status, type)
+      VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'Paid', 'credit')
     `, [
       id,
       validBankId,
       numAmount,
-      pDate,
-      `Consulting - ${site.name}`,
-      validPaymentMethod,
-      cleanRemarks,
+      cleanDate,
+      `Consulting - ${consulting.owner_name}`,
+      validPaymentMode,
+      `CONSULTING-REF-${id}`,
     ])
 
     await conn.commit()
 
-    // 8. Return updated consulting record
     const [updatedRows] = await pool.query(`
       SELECT 
-        s.*,
-        CAST(s.start_date AS CHAR) AS start_date_str,
-        CAST(s.created_at AS CHAR) AS created_at_str,
+        c.*,
+        CAST(c.date AS CHAR) AS date_str,
+        CAST(c.created_at AS CHAR) AS created_at_str,
         ba.bank_name,
         ba.account_number
-      FROM sites s
-      LEFT JOIN bank_accounts ba ON ba.id = s.bank_account_id
-      WHERE s.id = ?
+      FROM consultings c
+      LEFT JOIN bank_accounts ba ON ba.id = c.bank_account_id
+      WHERE c.id = ?
       LIMIT 1
     `, [id])
 
-    res.status(200).json(formatConsultingRow(updatedRows[0]))
+    const updatedRecord = formatConsultingRow(updatedRows[0])
+
+    res.json({
+      success: true,
+      message: `Payment of ₹${numAmount.toLocaleString('en-IN')} recorded successfully!`,
+      consulting: updatedRecord,
+      payment: {
+        id: cpRes.insertId,
+        consultingId: Number(id),
+        amount: numAmount,
+        paymentDate: cleanDate,
+        paymentMode: validPaymentMode,
+        bankAccountId: validBankId,
+        previousReceived: currentReceived,
+        newTotalReceived,
+        remainingPending: Math.max(0, Number((totalAmount - newTotalReceived).toFixed(2))),
+      },
+    })
   } catch (error) {
     await conn.rollback()
     next(error)
@@ -588,64 +655,40 @@ export const recordConsultingPayment = async (req, res, next) => {
 }
 
 /**
- * DELETE /api/consulting/:id
- * Delete a consulting record + reverse bank balance effect atomically
+ * GET /api/consulting/:id/payments
+ * Fetch payment transactions for a consulting record
  */
-export const deleteConsulting = async (req, res, next) => {
-  const pool = getPool()
-  const conn = await pool.getConnection()
+export const getConsultingPayments = async (req, res, next) => {
   try {
-    const id = req.params.id
+    const pool = getPool()
+    const [rows] = await pool.query(`
+      SELECT 
+        cp.*,
+        CAST(cp.payment_date AS CHAR) AS payment_date_str,
+        CAST(cp.created_at AS CHAR) AS created_at_str,
+        ba.bank_name,
+        ba.account_number
+      FROM consulting_payments cp
+      LEFT JOIN bank_accounts ba ON ba.id = cp.bank_account_id
+      WHERE cp.consulting_id = ?
+      ORDER BY cp.payment_date DESC, cp.id DESC
+    `, [req.params.id])
 
-    const [existingRows] = await conn.query(
-      'SELECT * FROM sites WHERE id = ? AND description LIKE "%[CONSULTING]%" LIMIT 1',
-      [id]
-    )
-    if (existingRows.length === 0) {
-      return res.status(404).json({ error: 'Consulting record not found' })
-    }
-    const existing = existingRows[0]
+    const payments = rows.map((p) => ({
+      id: p.id,
+      consultingId: p.consulting_id,
+      amount: Number(p.amount || 0),
+      paymentDate: p.payment_date_str || (p.payment_date ? String(p.payment_date).slice(0, 10) : ''),
+      paymentMode: p.payment_mode,
+      bankAccountId: p.bank_account_id ? String(p.bank_account_id) : (p.payment_mode === 'Cash' ? 'cash' : null),
+      bankName: p.payment_mode === 'Cash' || !p.bank_account_id ? 'Cash' : (p.bank_name || '-'),
+      reference: p.reference || '',
+      remark: p.remark || '',
+      createdAt: p.created_at,
+    }))
 
-    await conn.beginTransaction()
-
-    // Fetch all client_payments for this consulting site
-    const [payments] = await conn.query(
-      'SELECT id, bank_account_id, amount FROM client_payments WHERE site_id = ?',
-      [id]
-    )
-
-    if (payments.length > 0) {
-      // Deduct each bank payment from its respective bank account
-      for (const p of payments) {
-        if (p.bank_account_id && Number(p.amount) > 0) {
-          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [
-            Number(p.amount),
-            p.bank_account_id,
-          ])
-        }
-      }
-    } else {
-      // Fallback for legacy rows where no client_payments row was logged
-      const bankId = existing.bank_account_id ? Number(existing.bank_account_id) : null
-      const received = Number(existing.total_received || 0)
-      if (bankId && received > 0) {
-        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [received, bankId])
-      }
-    }
-
-    // Delete linked client_payments
-    await conn.query('DELETE FROM client_payments WHERE site_id = ?', [id])
-
-    // Delete site row
-    await conn.query('DELETE FROM sites WHERE id = ?', [id])
-
-    await conn.commit()
-    res.json({ success: true, message: 'Consulting record deleted and bank balance adjusted successfully' })
+    res.json(payments)
   } catch (error) {
-    await conn.rollback()
     next(error)
-  } finally {
-    conn.release()
   }
 }
-

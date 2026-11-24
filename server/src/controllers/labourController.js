@@ -55,9 +55,12 @@ export const createLabour = async (req, res, next) => {
     }
 
     const rawAmount = totalAmount !== undefined && totalAmount !== '' ? totalAmount : dailyRate
-    const parsedTotalAmount = Number(rawAmount)
-    if (!rawAmount || isNaN(parsedTotalAmount) || parsedTotalAmount <= 0) {
-      return res.status(400).json({ error: 'Total Amount must be greater than zero.' })
+    const parsedTotalAmount = rawAmount !== undefined && rawAmount !== '' && !isNaN(Number(rawAmount))
+      ? Number(rawAmount)
+      : 0
+
+    if (parsedTotalAmount < 0) {
+      return res.status(400).json({ error: 'Total Amount cannot be negative.' })
     }
 
     // Validate Advance Payment
@@ -208,49 +211,66 @@ export const updateLabour = async (req, res, next) => {
       return res.status(400).json({ error: 'Please select a bank account for the additional advance payment.' })
     }
 
+    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash'
+    const finalBankAccountId = isCashAccount ? null : (bankAccountId ? Number(bankAccountId) : null)
+
     conn = await getPool().getConnection()
     await conn.beginTransaction()
 
     // 1. If additional advance entered, validate bank balance and deduct
     if (numAdditionalAdvance > 0) {
-      const [[bankRow]] = await conn.query(
-        'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
-        [bankAccountId],
-      )
+      if (isCashAccount) {
+        const cashSummary = await calculateLiveCashSummary(conn)
+        if (cashSummary.balance < numAdditionalAdvance) {
+          await conn.rollback()
+          conn.release()
+          conn = null
+          return res.status(400).json({
+            error: `Insufficient cash balance. Available: ₹${cashSummary.balance.toLocaleString('en-IN')}, Requested: ₹${numAdditionalAdvance.toLocaleString('en-IN')}. Please select another account or reduce the advance amount.`,
+          })
+        }
+      } else if (finalBankAccountId) {
+        const [[bankRow]] = await conn.query(
+          'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+          [finalBankAccountId],
+        )
 
-      if (!bankRow) {
-        await conn.rollback()
-        conn.release()
-        conn = null
-        return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+        if (!bankRow) {
+          await conn.rollback()
+          conn.release()
+          conn = null
+          return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+        }
+
+        const currentBalance = Number(bankRow.balance || 0)
+        if (currentBalance < numAdditionalAdvance) {
+          await conn.rollback()
+          conn.release()
+          conn = null
+          return res.status(400).json({
+            error: `Insufficient bank balance in ${bankRow.bank_name}. Available: ₹${currentBalance.toLocaleString('en-IN')}, Requested: ₹${numAdditionalAdvance.toLocaleString('en-IN')}. Please select another account or reduce the advance amount.`,
+          })
+        }
+
+        // Deduct from bank
+        await conn.query(
+          'UPDATE bank_accounts SET balance = balance - ? WHERE id = ?',
+          [numAdditionalAdvance, finalBankAccountId],
+        )
       }
-
-      const currentBalance = Number(bankRow.balance || 0)
-      if (currentBalance < numAdditionalAdvance) {
-        await conn.rollback()
-        conn.release()
-        conn = null
-        return res.status(400).json({
-          error: `Insufficient bank balance in ${bankRow.bank_name}. Available: ₹${currentBalance.toLocaleString('en-IN')}, Requested: ₹${numAdditionalAdvance.toLocaleString('en-IN')}. Please select another account or reduce the advance amount.`,
-        })
-      }
-
-      // Deduct from bank
-      await conn.query(
-        'UPDATE bank_accounts SET balance = balance - ? WHERE id = ?',
-        [numAdditionalAdvance, bankAccountId],
-      )
 
       // Create separate new advance payment record in worker_payments
       const formattedDate = new Date().toISOString().slice(0, 10)
       const referenceId = `TXN-WRK-ADV-${Date.now().toString().slice(-6)}`
-      const advRemarks = `Additional Advance Payment of ₹${numAdditionalAdvance.toLocaleString('en-IN')}`
+      const advRemarks = isCashAccount
+        ? `Additional Advance Payment of ₹${numAdditionalAdvance.toLocaleString('en-IN')} (Paid via Cash)`
+        : `Additional Advance Payment of ₹${numAdditionalAdvance.toLocaleString('en-IN')}`
 
       await conn.query(
         `INSERT INTO worker_payments
           (worker_id, site_id, bank_account_id, payment_date, amount, payment_type, payment_method, reference_id, remarks, created_by)
-         VALUES (?, ?, ?, ?, ?, 'Advance Payment', 'Bank Transfer', ?, ?, 'Admin')`,
-        [id, existingWorker.site?._id || existingWorker.site || null, bankAccountId, formattedDate, numAdditionalAdvance, referenceId, advRemarks],
+         VALUES (?, ?, ?, ?, ?, 'Advance Payment', ?, ?, ?, 'Admin')`,
+        [id, existingWorker.site?._id || existingWorker.site || null, finalBankAccountId, formattedDate, numAdditionalAdvance, isCashAccount ? 'Cash' : 'Bank Transfer', referenceId, advRemarks],
       )
     }
 
@@ -258,7 +278,7 @@ export const updateLabour = async (req, res, next) => {
     const oldPaid = Number(existingWorker.totalPaid || 0)
     const oldBankId = existingWorker.bankAccountId ? Number(existingWorker.bankAccountId) : null
     const effectiveBankId = bankAccountId !== undefined
-      ? (bankAccountId ? Number(bankAccountId) : null)
+      ? finalBankAccountId
       : oldBankId
 
     let newTotalPaid = oldPaid
