@@ -62,7 +62,7 @@ export const Supplier = {
       matMap[String(r.supplier_id)] = r
     }
 
-    // Exclude expenses already applied into materials so material purchases are not double-counted
+    // Exclude expenses already applied into materials (avoids double-counting) and exclude rejected Manager expenses
     const [expRows] = await pool.query(`
       SELECT 
         supplier_id,
@@ -74,6 +74,7 @@ export const Supplier = {
       FROM expenses
       WHERE supplier_id IS NOT NULL
         AND COALESCE(applied_to_material, 0) = 0
+        AND (approval_status IS NULL OR TRIM(approval_status) != 'Rejected')
       GROUP BY supplier_id
     `)
     const expMap = {}
