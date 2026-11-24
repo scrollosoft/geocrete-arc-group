@@ -12,12 +12,13 @@ import {
   MoreHorizontal,
   X,
   ChevronRight,
+  FolderClosed,
 } from 'lucide-react'
 
-export default function Sidebar({ activeTab, setActiveTab }) {
+export default function Sidebar({ activeTab, setActiveTab, userRole }) {
   const [isMoreOpen, setIsMoreOpen] = useState(false)
 
-  const menuItems = [
+  const allMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
     { id: 'sites', label: 'Sites', icon: Building2 },
     { id: 'expenses', label: 'Expenses', icon: Receipt },
@@ -26,11 +27,17 @@ export default function Sidebar({ activeTab, setActiveTab }) {
     { id: 'suppliers', label: 'Suppliers', icon: Truck },
     { id: 'site-owners', label: 'Site Owners', icon: UserCheck },
     { id: 'payments', label: 'Payments', icon: Wallet },
+    { id: 'files', label: 'Files', icon: FolderClosed },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
 
-  const primaryItems = menuItems.slice(0, 4)
-  const moreItems = menuItems.slice(4)
+  // Manager can ONLY see Expenses
+  const menuItems = userRole === 'Manager'
+    ? allMenuItems.filter((item) => item.id === 'expenses')
+    : allMenuItems
+
+  const primaryItems = userRole === 'Manager' ? menuItems : menuItems.slice(0, 4)
+  const moreItems = userRole === 'Manager' ? [] : menuItems.slice(4)
 
   const isItemActive = (item) => {
     return (
@@ -95,7 +102,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
         <div className="sidebar-nav-container">
           <div className="sidebar-section-title">WORKSPACE</div>
           <nav className="sidebar-nav">
-            {/* First 4 items: always in navigation */}
+            {/* Primary items: always visible */}
             {primaryItems.map((item) => {
               const Icon = item.icon
               const isActive = isItemActive(item)
@@ -139,19 +146,21 @@ export default function Sidebar({ activeTab, setActiveTab }) {
               )
             })}
 
-            {/* "More" 5th item: hidden on desktop, visible on mobile */}
-            <button
-              type="button"
-              className={`sidebar-nav-item sidebar-nav-item--more ${isMoreActive ? 'active' : ''} ${isMoreOpen ? 'more-open' : ''}`}
-              onClick={() => setIsMoreOpen((prev) => !prev)}
-              aria-label="More navigation options"
-              aria-expanded={isMoreOpen}
-            >
-              <div className="sidebar-nav-icon">
-                <MoreHorizontal size={18} strokeWidth={isMoreActive || isMoreOpen ? 2.3 : 1.8} />
-              </div>
-              <span className="sidebar-nav-label">More</span>
-            </button>
+            {/* "More" 5th item: hidden on desktop, visible on mobile — only for Admin */}
+            {moreItems.length > 0 && (
+              <button
+                type="button"
+                className={`sidebar-nav-item sidebar-nav-item--more ${isMoreActive ? 'active' : ''} ${isMoreOpen ? 'more-open' : ''}`}
+                onClick={() => setIsMoreOpen((prev) => !prev)}
+                aria-label="More navigation options"
+                aria-expanded={isMoreOpen}
+              >
+                <div className="sidebar-nav-icon">
+                  <MoreHorizontal size={18} strokeWidth={isMoreActive || isMoreOpen ? 2.3 : 1.8} />
+                </div>
+                <span className="sidebar-nav-label">More</span>
+              </button>
+            )}
           </nav>
         </div>
       </aside>

@@ -8,20 +8,32 @@ const formatOtherTransactionRow = (row) => {
   const isDebit = row.type === 'debit'
   const dateVal = row.payment_date_str || (row.payment_date ? String(row.payment_date).slice(0, 10) : (row.created_at ? String(row.created_at).slice(0, 10) : ''))
 
+  // Extract ledger name from title: "Other - Send - LedgerName" or "Other - Receive - LedgerName"
+  const rawTitle = row.title || ''
+  const baseTitle = isDebit ? 'Other - Send' : 'Other - Receive'
+  let ledgerName = ''
+  if (rawTitle.startsWith(baseTitle + ' - ')) {
+    ledgerName = rawTitle.slice((baseTitle + ' - ').length).trim()
+  }
+
+  const isCash = !row.bank_account_id || String(row.payment_method || '').toLowerCase() === 'cash'
+
   return {
     id: row.id,
     _id: String(row.id),
     date: dateVal,
     amount: Number(row.amount || 0),
-    bankAccountId: row.bank_account_id ? String(row.bank_account_id) : null,
-    bankName: row.bank_name || '-',
-    accountNumber: row.account_number || '',
-    paymentMethod: row.payment_method || 'UPI',
+    bankAccountId: row.bank_account_id ? String(row.bank_account_id) : (isCash ? 'cash' : null),
+    bankName: row.bank_name || (isCash ? 'Cash' : '-'),
+    accountNumber: row.account_number || (isCash ? 'CASH' : ''),
+    paymentMethod: row.payment_method || (isCash ? 'Cash' : 'UPI'),
     paymentType: isDebit ? 'Send' : 'Receive',
     type: row.type || (isDebit ? 'debit' : 'credit'),
     note: row.reference || '',
-    title: row.title || (isDebit ? 'Other - Send' : 'Other - Receive'),
+    title: rawTitle || baseTitle,
+    ledgerName,
     createdAt: row.created_at,
+    isCash,
   }
 }
 
@@ -65,6 +77,7 @@ export const createOtherTransaction = async (req, res, next) => {
       bankAccountId,
       paymentMethod,
       paymentType,
+      ledgerName,
       note,
     } = req.body
 
@@ -74,11 +87,12 @@ export const createOtherTransaction = async (req, res, next) => {
       return res.status(400).json({ error: 'Please enter a valid amount greater than zero' })
     }
 
-    if (!bankAccountId) {
+    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash' || String(paymentMethod || '').toLowerCase() === 'cash'
+
+    if (!bankAccountId && !isCashAccount) {
       return res.status(400).json({ error: 'Please select an Account' })
     }
 
-    const isCashAccount = String(bankAccountId).toLowerCase() === 'cash'
     let bank = null
     let bankBalance = 0
 
@@ -121,9 +135,11 @@ export const createOtherTransaction = async (req, res, next) => {
       ? 'Cash'
       : (['UPI', 'Cheque', 'Cash'].includes(paymentMethod) ? paymentMethod : (paymentMethod || 'UPI'))
     const cleanNote = (note || '').trim()
+    const cleanLedger = (ledgerName || '').trim()
 
     const txnType = isSend ? 'debit' : 'credit'
-    const txnTitle = isSend ? 'Other - Send' : 'Other - Receive'
+    const baseTxnTitle = isSend ? 'Other - Send' : 'Other - Receive'
+    const txnTitle = cleanLedger ? `${baseTxnTitle} - ${cleanLedger}` : baseTxnTitle
 
     await conn.beginTransaction()
 
@@ -202,6 +218,7 @@ export const updateOtherTransaction = async (req, res, next) => {
       bankAccountId,
       paymentMethod,
       paymentType,
+      ledgerName,
       note,
     } = req.body
 
@@ -211,19 +228,23 @@ export const updateOtherTransaction = async (req, res, next) => {
       return res.status(400).json({ error: 'Please enter a valid amount greater than zero' })
     }
 
-    const targetBankId = bankAccountId || existing.bank_account_id
-    if (!targetBankId) {
+    const isCashAccount = String(bankAccountId || '').toLowerCase() === 'cash' || String(paymentMethod || '').toLowerCase() === 'cash' || (!bankAccountId && !existing.bank_account_id)
+    const targetBankId = isCashAccount ? null : (bankAccountId ? Number(bankAccountId) : existing.bank_account_id)
+    if (!isCashAccount && !targetBankId) {
       return res.status(400).json({ error: 'Please select a Bank Account' })
     }
 
-    const [bankRows] = await conn.query(
-      'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 LIMIT 1',
-      [targetBankId]
-    )
-    if (bankRows.length === 0) {
-      return res.status(400).json({ error: 'Selected bank account was not found' })
+    let targetBank = null
+    if (!isCashAccount) {
+      const [bankRows] = await conn.query(
+        'SELECT id, bank_name, balance FROM bank_accounts WHERE id = ? AND is_active = 1 LIMIT 1',
+        [targetBankId]
+      )
+      if (bankRows.length === 0) {
+        return res.status(400).json({ error: 'Selected bank account was not found' })
+      }
+      targetBank = bankRows[0]
     }
-    const targetBank = bankRows[0]
 
     const newIsSend = paymentType ? paymentType.toLowerCase() === 'send' : existing.type === 'debit'
     const newIsReceive = paymentType ? paymentType.toLowerCase() === 'receive' : existing.type === 'credit'
@@ -236,20 +257,22 @@ export const updateOtherTransaction = async (req, res, next) => {
     const oldBankId = existing.bank_account_id
 
     // Check available balance if new is Send
-    let availableInTarget = Number(targetBank.balance || 0)
-    // If the old transaction was on the same bank, compute balance after reversal:
-    if (Number(oldBankId) === Number(targetBankId)) {
-      availableInTarget = oldIsSend ? (availableInTarget + oldAmount) : (availableInTarget - oldAmount)
-    }
-    if (newIsSend && availableInTarget < numAmount) {
-      return res.status(400).json({
-        error: `Insufficient bank balance in ${targetBank.bank_name}. Available after adjustment: ₹${Math.round(availableInTarget).toLocaleString('en-IN')}, Requested: ₹${Math.round(numAmount).toLocaleString('en-IN')}`,
-      })
+    if (!isCashAccount && targetBank) {
+      let availableInTarget = Number(targetBank.balance || 0)
+      // If the old transaction was on the same bank, compute balance after reversal:
+      if (Number(oldBankId) === Number(targetBankId)) {
+        availableInTarget = oldIsSend ? (availableInTarget + oldAmount) : (availableInTarget - oldAmount)
+      }
+      if (newIsSend && availableInTarget < numAmount) {
+        return res.status(400).json({
+          error: `Insufficient bank balance in ${targetBank.bank_name}. Available after adjustment: ₹${Math.round(availableInTarget).toLocaleString('en-IN')}, Requested: ₹${Math.round(numAmount).toLocaleString('en-IN')}`,
+        })
+      }
     }
 
-    const validPaymentMethod = ['UPI', 'Cheque', 'Cash'].includes(paymentMethod)
-      ? paymentMethod
-      : (paymentMethod || existing.payment_method || 'UPI')
+    const validPaymentMethod = isCashAccount
+      ? 'Cash'
+      : (['UPI', 'Cheque', 'Cash'].includes(paymentMethod) ? paymentMethod : (paymentMethod || existing.payment_method || 'UPI'))
     const cleanNote = note !== undefined ? (note || '').trim() : (existing.reference || '')
 
     const newType = newIsSend ? 'debit' : 'credit'
@@ -257,22 +280,22 @@ export const updateOtherTransaction = async (req, res, next) => {
 
     await conn.beginTransaction()
 
-    // 1. Reverse old transaction effect
-    if (oldIsSend) {
-      // old was debit (money was subtracted), so add it back
-      await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [oldAmount, oldBankId])
-    } else {
-      // old was credit (money was added), so subtract it
-      await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [oldAmount, oldBankId])
+    // 1. Reverse old transaction effect on bank_accounts
+    if (oldBankId) {
+      if (oldIsSend) {
+        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [oldAmount, oldBankId])
+      } else {
+        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [oldAmount, oldBankId])
+      }
     }
 
-    // 2. Apply new transaction effect
-    if (newIsSend) {
-      // new is debit (money is subtracted)
-      await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [numAmount, targetBankId])
-    } else {
-      // new is credit (money is added)
-      await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [numAmount, targetBankId])
+    // 2. Apply new transaction effect on bank_accounts
+    if (!isCashAccount && targetBankId) {
+      if (newIsSend) {
+        await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [numAmount, targetBankId])
+      } else {
+        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [numAmount, targetBankId])
+      }
     }
 
     // 3. Update client_payments record
@@ -288,7 +311,7 @@ export const updateOtherTransaction = async (req, res, next) => {
       WHERE id = ?
     `, [
       numAmount,
-      targetBankId,
+      isCashAccount ? null : targetBankId,
       cleanDate,
       newTitle,
       validPaymentMethod,

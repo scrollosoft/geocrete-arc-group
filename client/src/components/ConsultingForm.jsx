@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Plus, Loader2, AlertCircle } from 'lucide-react'
 import { consultingService } from '../services/consultingService.js'
 
@@ -7,31 +7,70 @@ export default function ConsultingForm({
   onConsultingCreated,
   showNotification,
 }) {
+  const todayStr = new Date().toISOString().slice(0, 10)
+
+  // Ensure all bank accounts + cash account are included in the dropdown list
+  const allAccounts = useMemo(() => {
+    const list = Array.isArray(bankAccounts) ? [...bankAccounts] : []
+    const hasCash = list.some((b) => b.isCash || String(b.id || b._id).toLowerCase() === 'cash')
+    if (!hasCash) {
+      list.push({ id: 'cash', _id: 'cash', bankName: 'Cash', balance: 0, isCash: true })
+    }
+    return list
+  }, [bankAccounts])
+
+  const initialBankId = allAccounts[0]?.id || allAccounts[0]?._id ? String(allAccounts[0].id || allAccounts[0]._id) : ''
+
   const [formData, setFormData] = useState({
-    siteName: '',
-    siteOwner: '',
-    location: '',
-    totalBudget: '',
-    advanceAmount: '',
-    receivedAmount: '',
-    bankAccountId: bankAccounts[0]?.id || bankAccounts[0]?._id ? String(bankAccounts[0].id || bankAccounts[0]._id) : '',
-    paymentMethod: 'UPI',
-    note: '',
+    date: todayStr,
+    ownerName: '',
+    mobileNumber: '',
+    totalAmount: '',
+    receivedAmount: '0',
+    paymentMode: 'UPI',
+    bankAccountId: initialBankId,
+    remark: '',
   })
 
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
+  const isCashMode = formData.paymentMode === 'Cash' || String(formData.bankAccountId || '').toLowerCase() === 'cash'
+
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData((prev) => {
-      const updated = { ...prev, [name]: value }
-      // If user sets advance amount and received is empty or was tracking advance, keep received in sync
-      if (name === 'advanceAmount' && (prev.receivedAmount === '' || prev.receivedAmount === prev.advanceAmount)) {
-        updated.receivedAmount = value
-      }
-      return updated
-    })
+
+    if (name === 'mobileNumber') {
+      // Keep only digits, up to 10 digits
+      const digitsOnly = value.replace(/\D/g, '').slice(0, 10)
+      setFormData((prev) => ({ ...prev, mobileNumber: digitsOnly }))
+      if (errorMessage) setErrorMessage('')
+      return
+    }
+
+    if (name === 'paymentMode') {
+      const isCash = value === 'Cash'
+      setFormData((prev) => ({
+        ...prev,
+        paymentMode: value,
+        bankAccountId: isCash ? 'cash' : (prev.bankAccountId === 'cash' ? initialBankId : prev.bankAccountId),
+      }))
+      if (errorMessage) setErrorMessage('')
+      return
+    }
+
+    if (name === 'bankAccountId') {
+      const isCash = String(value).toLowerCase() === 'cash'
+      setFormData((prev) => ({
+        ...prev,
+        bankAccountId: value,
+        paymentMode: isCash ? 'Cash' : (prev.paymentMode === 'Cash' ? 'UPI' : prev.paymentMode),
+      }))
+      if (errorMessage) setErrorMessage('')
+      return
+    }
+
+    setFormData((prev) => ({ ...prev, [name]: value }))
     if (errorMessage) setErrorMessage('')
   }
 
@@ -39,83 +78,84 @@ export default function ConsultingForm({
     e.preventDefault()
     setErrorMessage('')
 
-    // 1. Validation
-    if (!formData.siteName.trim()) {
-      setErrorMessage('Site Name is required.')
-      return
-    }
-    if (!formData.siteOwner.trim()) {
-      setErrorMessage('Site Owner is required.')
-      return
-    }
-    if (!formData.location.trim()) {
-      setErrorMessage('City / Location is required.')
+    // 1. Validations
+    if (!formData.date) {
+      setErrorMessage('Date is required.')
       return
     }
 
-    const numBudget = Number(formData.totalBudget)
-    if (isNaN(numBudget) || numBudget <= 0) {
-      setErrorMessage('Please enter a valid Total Budget greater than zero.')
+    const cleanOwnerName = formData.ownerName.trim()
+    if (!cleanOwnerName) {
+      setErrorMessage('Owner Name is required.')
       return
     }
 
-    const numAdvance = formData.advanceAmount !== '' ? Number(formData.advanceAmount) : 0
-    if (isNaN(numAdvance) || numAdvance < 0) {
-      setErrorMessage('Advance Amount must be a valid non-negative number.')
+    const cleanMobile = formData.mobileNumber.trim()
+    if (!cleanMobile) {
+      setErrorMessage('Mobile Number is required for WhatsApp sharing.')
       return
     }
-    if (numAdvance > numBudget) {
-      setErrorMessage('Advance Amount cannot exceed Total Budget.')
+    if (cleanMobile.length !== 10 || !/^[6-9]\d{9}$/.test(cleanMobile)) {
+      setErrorMessage('Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).')
       return
     }
 
-    const numReceived = formData.receivedAmount !== '' ? Number(formData.receivedAmount) : numAdvance
+    const numTotal = Number(formData.totalAmount)
+    if (isNaN(numTotal) || numTotal <= 0) {
+      setErrorMessage('Total Amount must be greater than zero.')
+      return
+    }
+
+    const numReceived = formData.receivedAmount !== '' && formData.receivedAmount !== undefined
+      ? Number(formData.receivedAmount)
+      : 0
     if (isNaN(numReceived) || numReceived < 0) {
       setErrorMessage('Received Amount must be a valid non-negative number.')
       return
     }
-    if (numReceived > numBudget) {
-      setErrorMessage('Received Amount cannot exceed Total Budget.')
+    if (numReceived > numTotal) {
+      setErrorMessage(`Received Amount (₹${numReceived.toLocaleString('en-IN')}) cannot exceed Total Amount (₹${numTotal.toLocaleString('en-IN')}).`)
       return
     }
 
-    if (numReceived > 0 && !formData.bankAccountId) {
-      setErrorMessage('Please select a Bank Name for the received payment.')
+    const isCashAccount = formData.paymentMode === 'Cash' || String(formData.bankAccountId || '').toLowerCase() === 'cash'
+    if (numReceived > 0 && !formData.bankAccountId && !isCashAccount) {
+      setErrorMessage('Please select a Bank Name / Account for the received payment.')
       return
     }
 
     setSubmitting(true)
     try {
-      const created = await consultingService.create({
-        siteName: formData.siteName.trim(),
-        siteOwner: formData.siteOwner.trim(),
-        location: formData.location.trim(),
-        totalBudget: numBudget,
-        advanceAmount: numAdvance,
+      const payload = {
+        date: formData.date,
+        ownerName: cleanOwnerName,
+        mobileNumber: cleanMobile,
+        totalAmount: numTotal,
         receivedAmount: numReceived,
-        bankAccountId: formData.bankAccountId ? Number(formData.bankAccountId) : null,
-        paymentMethod: formData.paymentMethod || 'UPI',
-        note: formData.note.trim(),
-      })
+        paymentMode: isCashAccount ? 'Cash' : formData.paymentMode,
+        bankAccountId: isCashAccount ? null : (formData.bankAccountId ? Number(formData.bankAccountId) : null),
+        remark: formData.remark.trim(),
+      }
+
+      const created = await consultingService.create(payload)
 
       if (showNotification) {
         showNotification({
           type: 'success',
-          message: `Consulting entry "${created.siteName}" saved successfully!`,
+          message: `Consulting entry for "${created.ownerName}" added successfully!`,
         })
       }
 
       // Reset form
       setFormData({
-        siteName: '',
-        siteOwner: '',
-        location: '',
-        totalBudget: '',
-        advanceAmount: '',
-        receivedAmount: '',
-        bankAccountId: bankAccounts[0]?.id || bankAccounts[0]?._id ? String(bankAccounts[0].id || bankAccounts[0]._id) : '',
-        paymentMethod: 'UPI',
-        note: '',
+        date: todayStr,
+        ownerName: '',
+        mobileNumber: '',
+        totalAmount: '',
+        receivedAmount: '0',
+        paymentMode: 'UPI',
+        bankAccountId: initialBankId,
+        remark: '',
       })
 
       if (onConsultingCreated) {
@@ -133,7 +173,7 @@ export default function ConsultingForm({
     <section className="daily-expense-section" id="consulting-form">
       <div className="section-header-compact">
         <h2 className="section-title">Add Consulting</h2>
-        <p className="section-subtitle">Record new consulting project details, client, and payment receipt.</p>
+        <p className="section-subtitle">Record new consulting details, owner contact, and payment receipt.</p>
       </div>
 
       {errorMessage && (
@@ -144,96 +184,114 @@ export default function ConsultingForm({
       )}
 
       <form className="daily-expense-form" onSubmit={handleSubmit}>
-        <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-          {/* Site Name */}
+        <div
+          className="form-grid consulting-form-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gap: '16px',
+          }}
+        >
+          {/* 1. Date */}
           <div className="form-group">
             <label className="form-label">
-              Site Name <span style={{ color: '#DC2626' }}>*</span>
+              Date <span style={{ color: '#DC2626' }}>*</span>
             </label>
             <input
-              type="text"
-              name="siteName"
+              type="date"
+              name="date"
               className="form-input"
-              placeholder="e.g. Green Villa Consulting"
-              value={formData.siteName}
+              value={formData.date}
               onChange={handleChange}
               required
             />
           </div>
 
-          {/* Site Owner */}
+          {/* 2. Owner Name */}
           <div className="form-group">
             <label className="form-label">
-              Site Owner <span style={{ color: '#DC2626' }}>*</span>
+              Owner Name <span style={{ color: '#DC2626' }}>*</span>
             </label>
             <input
               type="text"
-              name="siteOwner"
+              name="ownerName"
               className="form-input"
               placeholder="e.g. Rajesh Sharma"
-              value={formData.siteOwner}
+              value={formData.ownerName}
               onChange={handleChange}
               required
             />
           </div>
 
-          {/* City / Location */}
+          {/* 3. Mobile Number */}
           <div className="form-group">
             <label className="form-label">
-              City / Location <span style={{ color: '#DC2626' }}>*</span>
+              Mobile Number <span style={{ color: '#DC2626' }}>*</span>
             </label>
-            <input
-              type="text"
-              name="location"
-              className="form-input"
-              placeholder="e.g. Kothrud, Pune"
-              value={formData.location}
-              onChange={handleChange}
-              required
-            />
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 12px',
+                  height: '42px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRight: 'none',
+                  borderTopLeftRadius: '6px',
+                  borderBottomLeftRadius: '6px',
+                  fontSize: '13.5px',
+                  fontWeight: 600,
+                  color: '#475569',
+                  userSelect: 'none',
+                }}
+              >
+                +91
+              </span>
+              <input
+                type="tel"
+                name="mobileNumber"
+                className="form-input"
+                placeholder="10-digit mobile number"
+                value={formData.mobileNumber}
+                onChange={handleChange}
+                maxLength={10}
+                style={{
+                  borderTopLeftRadius: 0,
+                  borderBottomLeftRadius: 0,
+                }}
+                required
+              />
+            </div>
           </div>
 
-          {/* Total Budget */}
+          {/* 4. Total Amount (₹) */}
           <div className="form-group">
             <label className="form-label">
-              Total Budget (₹) <span style={{ color: '#DC2626' }}>*</span>
+              Total Amount (₹) <span style={{ color: '#DC2626' }}>*</span>
             </label>
             <input
               type="number"
-              name="totalBudget"
+              name="totalAmount"
               className="form-input"
               placeholder="e.g. 50000"
               min="1"
               step="any"
-              value={formData.totalBudget}
+              value={formData.totalAmount}
               onChange={handleChange}
               required
             />
           </div>
 
-          {/* Advance Amount */}
-          <div className="form-group">
-            <label className="form-label">Advance Amount (₹)</label>
-            <input
-              type="number"
-              name="advanceAmount"
-              className="form-input"
-              placeholder="e.g. 15000"
-              min="0"
-              step="any"
-              value={formData.advanceAmount}
-              onChange={handleChange}
-            />
-          </div>
-
-          {/* Received Amount */}
+          {/* 5. Received Amount (₹) */}
           <div className="form-group">
             <label className="form-label">Received Amount (₹)</label>
             <input
               type="number"
               name="receivedAmount"
               className="form-input"
-              placeholder="e.g. 15000"
+              placeholder="e.g. 15000 (0 if none)"
               min="0"
               step="any"
               value={formData.receivedAmount}
@@ -241,10 +299,27 @@ export default function ConsultingForm({
             />
           </div>
 
-          {/* Bank Name */}
+          {/* 6. Payment Mode */}
+          <div className="form-group">
+            <label className="form-label">Payment Mode</label>
+            <select
+              name="paymentMode"
+              className="form-select"
+              value={formData.paymentMode}
+              onChange={handleChange}
+            >
+              <option value="UPI">UPI</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Cheque">Cheque</option>
+              <option value="Cash">Cash</option>
+            </select>
+          </div>
+
+          {/* 7. Bank Name / Account (includes Cash Account with live balance) */}
           <div className="form-group">
             <label className="form-label">
-              Bank Name {Number(formData.receivedAmount) > 0 && <span style={{ color: '#DC2626' }}>*</span>}
+              Bank Name / Account{' '}
+              {Number(formData.receivedAmount) > 0 && <span style={{ color: '#DC2626' }}>*</span>}
             </label>
             <select
               name="bankAccountId"
@@ -254,53 +329,59 @@ export default function ConsultingForm({
               required={Number(formData.receivedAmount) > 0}
             >
               <option value="">Select Bank Name...</option>
-              {bankAccounts.map((b) => (
-                <option key={b.id || b._id} value={b.id || b._id}>
-                  {b.bankName} (Bal: ₹{Number(b.balance || 0).toLocaleString('en-IN')})
-                </option>
-              ))}
+              {allAccounts.map((b) => {
+                const accId = String(b.id || b._id)
+                const isCash = b.isCash || accId.toLowerCase() === 'cash'
+                const name = isCash ? 'Cash' : (b.bankName || b.bank_name || 'Bank')
+                const bal = Number(b.balance || 0).toLocaleString('en-IN')
+                return (
+                  <option key={accId} value={accId}>
+                    {name} (Bal: ₹{bal})
+                  </option>
+                )
+              })}
             </select>
           </div>
 
-          {/* Payment Method */}
-          <div className="form-group">
-            <label className="form-label">Payment Method</label>
-            <select
-              name="paymentMethod"
-              className="form-select"
-              value={formData.paymentMethod}
-              onChange={handleChange}
-            >
-              <option value="UPI">UPI</option>
-              <option value="Cheque">Cheque</option>
-              <option value="Cash">Cash</option>
-            </select>
-          </div>
-
-          {/* Note */}
-          <div className="form-group" style={{ gridColumn: 'span 2' }}>
-            <label className="form-label">Note (Optional)</label>
+          {/* 8. Remark */}
+          <div className="form-group consulting-grid-span-2" style={{ gridColumn: 'span 2' }}>
+            <label className="form-label">Remark (Optional)</label>
             <input
               type="text"
-              name="note"
+              name="remark"
               className="form-input"
-              placeholder="e.g. Architectural consultation & site layout"
-              value={formData.note}
+              placeholder="e.g. Architectural consultation, structural planning"
+              value={formData.remark}
               onChange={handleChange}
             />
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+        <div className="form-actions-right" style={{ marginTop: '20px' }}>
           <button
             type="submit"
-            className="btn btn-primary-action"
+            className="btn btn-primary-action btn-add-consulting-submit"
             disabled={submitting}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '10px 24px',
+              backgroundColor: '#0293DE',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 600,
+              fontSize: '14px',
+              cursor: submitting ? 'not-allowed' : 'pointer',
+              boxShadow: '0 1px 3px rgba(2, 147, 222, 0.3)',
+              transition: 'all 0.15s ease',
+            }}
           >
             {submitting ? (
               <>
-                <Loader2 size={16} className="spin-animate" />
+                <Loader2 size={16} className="animate-spin" />
                 <span>Saving...</span>
               </>
             ) : (
@@ -315,4 +396,3 @@ export default function ConsultingForm({
     </section>
   )
 }
-

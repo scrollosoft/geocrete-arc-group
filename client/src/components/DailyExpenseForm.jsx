@@ -5,6 +5,8 @@ import WhatsAppSharePromptModal from './WhatsAppSharePromptModal.jsx'
 
 const getTodayString = () => new Date().toISOString().split('T')[0]
 
+const STANDARD_UNITS_DAILY = ['Bags', 'Tons', 'Units', 'Kg', 'Days', 'Hours', 'Trips', 'Sq.Ft']
+
 export default function DailyExpenseForm({
   sites = [],
   suppliers = [],
@@ -13,19 +15,22 @@ export default function DailyExpenseForm({
   showNotification,
   initialData,
 }) {
+  const isCustomUnit = (unit) => unit && !STANDARD_UNITS_DAILY.includes(unit)
+
   const [formData, setFormData] = useState(() => ({
     date: initialData?.date || getTodayString(),
     site: initialData?.site?._id || initialData?.site || '',
     supplier: initialData?.supplier?._id || initialData?.supplier || '',
     material: initialData?.material || '',
     quantity: initialData?.quantity ?? '',
-    unit: initialData?.unit || 'Bags',
+    unit: isCustomUnit(initialData?.unit) ? 'Other' : (initialData?.unit || 'Bags'),
     ratePerUnit: initialData?.ratePerUnit ?? '',
     paymentMethod: initialData?.paymentMethod || 'Bank Transfer',
     bankAccountId: initialData?.bankAccountId || initialData?.bankAccount || '',
     paidAmount: initialData?.paidAmount ?? '',
     remark: initialData?.remark || '',
   }))
+  const [customUnit, setCustomUnit] = useState(() => isCustomUnit(initialData?.unit) ? initialData.unit : '')
 
   // Derived: Total Amount = Quantity × Rate Per Unit
   const totalAmount = (() => {
@@ -39,19 +44,21 @@ export default function DailyExpenseForm({
 
   useEffect(() => {
     if (initialData) {
+      const hasCustomUnit = isCustomUnit(initialData.unit)
       setFormData({
         date: initialData.date || getTodayString(),
         site: initialData.site?._id || initialData.site || '',
         supplier: initialData.supplier?._id || initialData.supplier || '',
         material: initialData.material || '',
         quantity: initialData.quantity ?? '',
-        unit: initialData.unit || 'Bags',
+        unit: hasCustomUnit ? 'Other' : (initialData.unit || 'Bags'),
         ratePerUnit: initialData.ratePerUnit ?? '',
         paymentMethod: initialData.paymentMethod || 'Bank Transfer',
         bankAccountId: initialData.bankAccountId || initialData.bankAccount || '',
         paidAmount: initialData.paidAmount ?? '',
         remark: initialData.remark || '',
       })
+      if (hasCustomUnit) setCustomUnit(initialData.unit)
     }
   }, [initialData])
 
@@ -169,7 +176,7 @@ export default function DailyExpenseForm({
         supplier: formData.supplier || undefined,
         category: formData.material,
         quantity: numQuantity,
-        unit: formData.unit,
+        unit: formData.unit === 'Other' ? (customUnit.trim() || 'Other') : formData.unit,
         ratePerUnit: numRate,
         paymentMethod: formData.paymentMethod,
         bankAccountId: numPaid > 0 ? (formData.bankAccountId || undefined) : undefined,
@@ -199,6 +206,7 @@ export default function DailyExpenseForm({
         paidAmount: '',
         remark: '',
       })
+      setCustomUnit('')
 
       if (onExpenseCreated) {
         onExpenseCreated(created)
@@ -337,7 +345,18 @@ export default function DailyExpenseForm({
               <option value="Hours">Hours</option>
               <option value="Trips">Trips</option>
               <option value="Sq.Ft">Sq.Ft</option>
+              <option value="Other">Other</option>
             </select>
+            {formData.unit === 'Other' && (
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Enter custom unit"
+                value={customUnit}
+                onChange={(e) => setCustomUnit(e.target.value)}
+                style={{ marginTop: '6px' }}
+              />
+            )}
           </div>
 
           <div className="form-group">

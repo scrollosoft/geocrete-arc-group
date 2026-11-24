@@ -120,7 +120,7 @@ export default function WhatsAppSharePromptModal({
           >
             <div>
               <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748B', fontWeight: 600, display: 'block' }}>
-                Supplier
+                Contact
               </span>
               <span style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>
                 {details.supplierName}

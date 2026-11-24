@@ -8,7 +8,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'geocrete_arc_jwt_secret_key_2026'
  */
 export function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization || ''
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+  const token = authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7)
+    : (req.query?.token || null)
 
   if (!token) {
     return res.status(401).json({ error: 'Authentication required.' })

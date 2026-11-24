@@ -5,18 +5,15 @@ function formatIndianBudget(amount) {
   if (!amount && amount !== 0) return '₹0'
   const num = Number(amount)
   if (isNaN(num)) return '₹0'
-  if (num >= 10000000) return `₹${(num / 10000000).toFixed(1)} Cr`
-  if (num >= 100000) return `₹${(num / 100000).toFixed(1)} L`
-  if (num >= 1000) return `₹${(num / 1000).toFixed(1)} K`
-  return `₹${num.toLocaleString('en-IN')}`
+  return `₹${Math.round(num).toLocaleString('en-IN')}`
 }
 
 // ── Summary Card ──────────────────────────────────────────────────────────────
-const SummaryCard = ({ icon, iconClass, label, value, desc }) => (
+const SummaryCard = ({ icon, iconClass, label, value, desc, valueColor }) => (
   <div className="site-stat-card dfs-stat-card">
     <div className={`stat-icon-wrap ${iconClass}`}>{icon}</div>
     <div className="stat-label">{label}</div>
-    <div className="stat-value">{value}</div>
+    <div className="stat-value" style={valueColor ? { color: valueColor } : undefined}>{value}</div>
     {desc && <div className="stat-desc">{desc}</div>}
   </div>
 )
@@ -45,37 +42,63 @@ const SkeletonCard = () => (
   </div>
 )
 
-// ── Four Summary Cards (Single Horizontal Row) ────────────────────────────────
+// ── Five Summary Cards (Single Horizontal Row) ────────────────────────────────
 export default function DashboardFinancialSummary({
   sites = [],
   expenses = [],
+  accounts = [],
+  workers = [],
+  labourSummary = {},
   loading = false,
 }) {
-  // Derived values
+  // 1. Active Sites
   const activeSites = sites.filter((s) =>
     ['Active', 'In Progress'].includes(s.status)
   ).length
 
+  // 2. Total Received
   const totalReceived = sites.reduce(
     (sum, s) => sum + (Number(s.totalReceived) || 0),
     0
   )
 
+  // 3. Total Expenses
   const totalExpenses = expenses.reduce(
     (sum, e) => sum + (Number(e.amount) || 0),
     0
   )
 
-  const pending = sites.reduce(
-    (sum, s) =>
-      sum +
-      Math.max(
-        0,
-        (Number(s.totalBudget) || Number(s.projectValue) || 0) -
-          (Number(s.totalReceived) || 0)
-      ),
+  // 4. Balance = Sum of all current bank account balances + Current cash account balance
+  const totalBalance = accounts.reduce(
+    (sum, a) => sum + (Number(a.balance) || 0),
     0
   )
+
+  // 5. Credit = Total Outstanding Payable Amounts to Others (Suppliers, Labour contractors, Consultants, and other applicable payables)
+  const expenseOutstanding = expenses
+    .filter((e) => e.approvalStatus !== 'Rejected')
+    .reduce((sum, e) => {
+      const amt = Number(e.amount) || 0
+      const paid = Number(e.paidAmount) || 0
+      const pending = e.pendingAmount !== undefined && !isNaN(Number(e.pendingAmount))
+        ? Number(e.pendingAmount)
+        : Math.max(0, amt - paid)
+      return sum + Math.max(0, pending)
+    }, 0)
+
+  const labourOutstanding =
+    labourSummary?.outstanding !== undefined && !isNaN(Number(labourSummary.outstanding))
+      ? Number(labourSummary.outstanding)
+      : workers.reduce((sum, w) => {
+          const earned = Number(w.wagesEarned) || 0
+          const paid = Number(w.totalPaid) || 0
+          const pending = w.outstanding !== undefined && !isNaN(Number(w.outstanding))
+            ? Number(w.outstanding)
+            : Math.max(0, earned - paid)
+          return sum + Math.max(0, pending)
+        }, 0)
+
+  const totalCredit = Math.max(0, expenseOutstanding + labourOutstanding)
 
   return (
     <>
@@ -87,10 +110,11 @@ export default function DashboardFinancialSummary({
         }
       `}</style>
 
-      {/* 4 Summary Cards in One Horizontal Row: Active Sites, Total Received, Total Expenses, Pending */}
+      {/* 5 Summary Cards in One Horizontal Row: Active Sites, Total Received, Total Expenses, Balance, Credit */}
       <div className="dashboard-financial-summary">
         {loading ? (
           <>
+            <SkeletonCard />
             <SkeletonCard />
             <SkeletonCard />
             <SkeletonCard />
@@ -101,6 +125,7 @@ export default function DashboardFinancialSummary({
             {/* 1. Active Sites */}
             <SummaryCard
               iconClass="stat-icon-blue"
+              valueColor="#3980FF"
               icon={
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="2" y="7" width="20" height="14" rx="2" />
@@ -115,6 +140,7 @@ export default function DashboardFinancialSummary({
             {/* 2. Total Received */}
             <SummaryCard
               iconClass="stat-icon-green"
+              valueColor="#10B981"
               icon={
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="1" x2="12" y2="23" />
@@ -129,6 +155,7 @@ export default function DashboardFinancialSummary({
             {/* 3. Total Expenses */}
             <SummaryCard
               iconClass="stat-icon-orange"
+              valueColor="#F59E0B"
               icon={
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -139,18 +166,35 @@ export default function DashboardFinancialSummary({
               desc="Spent across all sites"
             />
 
-            {/* 4. Pending */}
+            {/* 4. Balance */}
             <SummaryCard
-              iconClass="stat-icon-rose"
+              iconClass="stat-icon-cyan"
+              valueColor="#0891B2"
               icon={
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
+                  <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+                  <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+                  <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
                 </svg>
               }
-              label="Pending"
-              value={formatIndianBudget(pending)}
-              desc="Outstanding from clients"
+              label="Balance"
+              value={formatIndianBudget(totalBalance)}
+              desc="Total available money"
+            />
+
+            {/* 5. Credit */}
+            <SummaryCard
+              iconClass="stat-icon-rose"
+              valueColor="#F43F5E"
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="5" width="20" height="14" rx="2" />
+                  <line x1="2" y1="10" x2="22" y2="10" />
+                </svg>
+              }
+              label="Credit"
+              value={formatIndianBudget(totalCredit)}
+              desc="Total payable to others"
             />
           </>
         )}

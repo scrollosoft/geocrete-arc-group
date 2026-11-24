@@ -18,6 +18,13 @@ import { labourService } from '../services/labourService.js'
 import { workerPaymentService } from '../services/workerPaymentService.js'
 import { bankAccountService } from '../services/bankAccountService.js'
 import RecordWorkerPaymentModal from './RecordWorkerPaymentModal.jsx'
+import TablePagination from './TablePagination.jsx'
+import {
+  WhatsAppIcon,
+  generateLabourWhatsAppMessage,
+  normalizeIndianPhoneNumber,
+  openWhatsAppClickToChat,
+} from '../utils/whatsappHelper.jsx'
 
 export default function LabourPage({
   workers = [],
@@ -38,6 +45,8 @@ export default function LabourPage({
   const [siteFilter, setSiteFilter] = useState('All Sites')
   const [pageSize, setPageSize] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
+  const [detailPaymentPage, setDetailPaymentPage] = useState(1)
+  const [detailPaymentPageSize, setDetailPaymentPageSize] = useState(10)
 
   // Local list so delete/edit reflects instantly
   const [localWorkers, setLocalWorkers] = useState(null)
@@ -95,6 +104,8 @@ export default function LabourPage({
   const [viewPayment, setViewPayment] = useState(null)
   const [viewPaymentHistory, setViewPaymentHistory] = useState([])
   const [loadingViewHistory, setLoadingViewHistory] = useState(false)
+  const [modalHistoryPage, setModalHistoryPage] = useState(1)
+  const [modalHistoryPageSize, setModalHistoryPageSize] = useState(10)
 
   // Edit Payment modal
   const [editPayment, setEditPayment] = useState(null)
@@ -109,6 +120,26 @@ export default function LabourPage({
   // Delete Worker confirmation
   const [deleteWorkerItem, setDeleteWorkerItem] = useState(null)
   const [deleteWorkerError, setDeleteWorkerError] = useState('')
+
+  // Labour WhatsApp state
+  const [whatsappWorker, setWhatsappWorker] = useState(null)
+  const [whatsappWorkerPayments, setWhatsappWorkerPayments] = useState([])
+
+  // Handle WhatsApp for a labour record: fetch fresh transactions for this worker
+  const handleLabourWhatsApp = (item) => {
+    setWhatsappWorker(item)
+    const wid = item._id || item.id
+    if (wid) {
+      workerPaymentService.getByWorker(wid)
+        .then((res) => {
+          const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+          setWhatsappWorkerPayments(list)
+        })
+        .catch(() => {
+          setWhatsappWorkerPayments([])
+        })
+    }
+  }
 
   // Load real data when viewing a worker's detail
   useEffect(() => {
@@ -475,19 +506,26 @@ export default function LabourPage({
     if (!editForm.name?.trim()) { setEditError('Name is required.'); return }
     if (!editForm.trade?.trim()) { setEditError('Trade is required.'); return }
     const effectiveAmount = editForm.wagesEarned !== undefined && editForm.wagesEarned !== '' ? editForm.wagesEarned : editForm.dailyRate
-    if (!effectiveAmount || Number(effectiveAmount) <= 0) { setEditError('Total Amount must be > 0.'); return }
+    if (effectiveAmount !== '' && effectiveAmount !== undefined && Number(effectiveAmount) < 0) {
+      setEditError('Total Amount cannot be negative.')
+      return
+    }
 
     setEditSaving(true)
     setEditError('')
     try {
+      const parsedAmount = effectiveAmount !== '' && effectiveAmount !== undefined && !isNaN(Number(effectiveAmount))
+        ? Number(effectiveAmount)
+        : 0
+      const isCash = String(editForm.bankAccountId || '').toLowerCase() === 'cash'
       const updated = await labourService.update(workerId, {
         name: editForm.name.trim(),
         phone: editForm.phone.trim(),
         trade: editForm.trade.trim(),
-        dailyRate: Number(effectiveAmount),
-        wagesEarned: Number(effectiveAmount) || 0,
+        dailyRate: parsedAmount,
+        wagesEarned: parsedAmount,
         totalPaid: Number(editForm.totalPaid) || 0,
-        bankAccountId: editForm.bankAccountId ? Number(editForm.bankAccountId) : undefined,
+        bankAccountId: isCash ? 'cash' : (editForm.bankAccountId ? Number(editForm.bankAccountId) : undefined),
         address: editForm.address,
         remarks: editForm.remarks,
       })
@@ -786,40 +824,54 @@ export default function LabourPage({
                   </div>
                 )}
                 {!loadingPayments && workerPaymentHistory.length > 0 && (
-                  <table className="labour-table">
-                    <thead>
-                      <tr>
-                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>DATE</th>
-                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>TYPE</th>
-                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>BANK</th>
-                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>AMOUNT</th>
-                        <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>REMARK</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {workerPaymentHistory.map((p) => {
-                        const typeColors = {
-                          'Advance Payment': { bg: '#FFEDD5', color: '#C2410C' },
-                          'Wage Payment': { bg: '#DCFCE7', color: '#15803D' },
-                          'Final Settlement': { bg: '#E0E7FF', color: '#4338CA' },
-                        }
-                        const tc = typeColors[p.paymentType] || { bg: '#F1F5F9', color: '#64748B' }
-                        return (
-                          <tr key={p.id} className="labour-data-row">
-                            <td style={{ padding: '18px 16px', color: '#70829F', fontSize: '13.5px' }}>{formatDate(p.rawDate || p.paymentDate)}</td>
-                            <td style={{ padding: '18px 16px' }}>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 14px', borderRadius: '999px', fontSize: '11.5px', fontWeight: 600, background: tc.bg, color: tc.color }}>
-                                {p.paymentType}
-                              </span>
-                            </td>
-                            <td style={{ padding: '18px 16px', color: '#475569', fontSize: '13.5px' }}>{p.bankName || '—'}</td>
-                            <td style={{ padding: '18px 16px', fontWeight: 600, color: '#172033', fontSize: '13.5px' }}>{formatExactCurrency(p.amount)}</td>
-                            <td style={{ padding: '18px 16px', color: '#64748B', fontSize: '13.5px' }}>{p.remarks || p.referenceId || '—'}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                  <>
+                    <table className="labour-table">
+                      <thead>
+                        <tr>
+                          <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>DATE</th>
+                          <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>TYPE</th>
+                          <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>BANK</th>
+                          <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>AMOUNT</th>
+                          <th style={{ padding: '14px 16px', color: '#8C9CAB', fontSize: '11px', fontWeight: 700, letterSpacing: '0.5px' }}>REMARK</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workerPaymentHistory
+                          .slice((detailPaymentPage - 1) * detailPaymentPageSize, detailPaymentPage * detailPaymentPageSize)
+                          .map((p) => {
+                            const typeColors = {
+                              'Advance Payment': { bg: '#FFEDD5', color: '#C2410C' },
+                              'Wage Payment': { bg: '#DCFCE7', color: '#15803D' },
+                              'Final Settlement': { bg: '#E0E7FF', color: '#4338CA' },
+                            }
+                            const tc = typeColors[p.paymentType] || { bg: '#F1F5F9', color: '#64748B' }
+                            return (
+                              <tr key={p.id} className="labour-data-row">
+                                <td style={{ padding: '18px 16px', color: '#70829F', fontSize: '13.5px' }}>{formatDate(p.rawDate || p.paymentDate)}</td>
+                                <td style={{ padding: '18px 16px' }}>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 14px', borderRadius: '999px', fontSize: '11.5px', fontWeight: 600, background: tc.bg, color: tc.color }}>
+                                    {p.paymentType}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '18px 16px', color: '#475569', fontSize: '13.5px' }}>{p.bankName || '—'}</td>
+                                <td style={{ padding: '18px 16px', fontWeight: 600, color: '#172033', fontSize: '13.5px' }}>{formatExactCurrency(p.amount)}</td>
+                                <td style={{ padding: '18px 16px', color: '#64748B', fontSize: '13.5px' }}>{p.remarks || p.referenceId || '—'}</td>
+                              </tr>
+                            )
+                          })}
+                      </tbody>
+                    </table>
+                    <TablePagination
+                      currentPage={detailPaymentPage}
+                      pageSize={detailPaymentPageSize}
+                      totalRecords={workerPaymentHistory.length}
+                      onPageChange={setDetailPaymentPage}
+                      onPageSizeChange={(newSize) => {
+                        setDetailPaymentPageSize(newSize)
+                        setDetailPaymentPage(1)
+                      }}
+                    />
+                  </>
                 )}
               </div>
             )}
@@ -1151,6 +1203,9 @@ export default function LabourPage({
                               <button type="button" title="Edit Worker" className="labour-action-btn labour-action-edit" onClick={() => handleEdit(item)}>
                                 <Pencil size={15} />
                               </button>
+                              <button type="button" title="Share via WhatsApp" className="labour-action-btn labour-action-whatsapp" onClick={() => handleLabourWhatsApp(item)}>
+                                <WhatsAppIcon size={15} />
+                              </button>
                               <button type="button" title="Delete Worker" className="labour-action-btn labour-action-delete" disabled={deletingId === item._id} onClick={() => handleDelete(item)}>
                                 <Trash2 size={15} />
                               </button>
@@ -1171,76 +1226,16 @@ export default function LabourPage({
             )}
 
             {/* Dynamic Pagination Footer */}
-            <div className="sites-pagination-row" style={{ marginTop: '16px' }}>
-              <div className="pagination-left">
-                <span className="pagination-show-label">Show</span>
-                <div className="pagination-page-size-select-wrap">
-                  <select
-                    className="pagination-page-size-select"
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value))
-                      setCurrentPage(1)
-                    }}
-                  >
-                    <option value="10">10</option>
-                    <option value="25">25</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                  </select>
-                  <ChevronDown size={12} className="pagination-select-arrow" />
-                </div>
-                <span className="pagination-range-text">
-                  {totalRecords === 0
-                    ? '0–0 of 0'
-                    : `${startIndex + 1}–${endIndex} of ${totalRecords.toLocaleString('en-IN')}`}
-                </span>
-              </div>
-
-              <div className="pagination-right">
-                <button
-                  type="button"
-                  className="pagination-nav-btn"
-                  disabled={activePage <= 1 || totalRecords === 0}
-                  onClick={() => handlePageChange(activePage - 1)}
-                >
-                  <ChevronLeft size={14} strokeWidth={1.75} />
-                  <span>Back</span>
-                </button>
-
-                {totalPages > 1 &&
-                  getPaginationItems().map((item, index) => {
-                    if (item === '...') {
-                      return (
-                        <span key={`dots-${index}`} className="pagination-dots">
-                          ...
-                        </span>
-                      )
-                    }
-                    const isSelected = item === activePage
-                    return (
-                      <button
-                        key={item}
-                        type="button"
-                        className={`pagination-num-btn ${isSelected ? 'pagination-num-active' : ''}`}
-                        onClick={() => handlePageChange(item)}
-                      >
-                        {item}
-                      </button>
-                    )
-                  })}
-
-                <button
-                  type="button"
-                  className="pagination-nav-btn"
-                  disabled={activePage >= totalPages || totalRecords === 0}
-                  onClick={() => handlePageChange(activePage + 1)}
-                >
-                  <span>Next</span>
-                  <ChevronRight size={14} strokeWidth={1.75} />
-                </button>
-              </div>
-            </div>
+            <TablePagination
+              currentPage={activePage}
+              pageSize={pageSize}
+              totalRecords={totalRecords}
+              onPageChange={handlePageChange}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize)
+                setCurrentPage(1)
+              }}
+            />
           </div>
         </div>
       )}
@@ -1337,7 +1332,8 @@ export default function LabourPage({
                   </div>
                 )}
                 {!loadingViewHistory && viewHistoryRecords.length > 0 && (
-                  <div style={{ overflowX: 'auto' }}>
+                  <>
+                    <div style={{ overflowX: 'auto' }}>
                     <table className="labour-table" style={{ fontSize: '13px' }}>
                       <thead>
                         <tr>
@@ -1350,7 +1346,9 @@ export default function LabourPage({
                         </tr>
                       </thead>
                       <tbody>
-                        {viewHistoryRecords.map((row, idx) => (
+                        {viewHistoryRecords
+                          .slice((modalHistoryPage - 1) * modalHistoryPageSize, modalHistoryPage * modalHistoryPageSize)
+                          .map((row, idx) => (
                           <tr key={row.id || idx} className="labour-data-row">
                             <td style={{ padding: '12px', color: '#70829F' }}>{row.displayDate || '—'}</td>
                             <td style={{ padding: '12px' }}>
@@ -1372,6 +1370,18 @@ export default function LabourPage({
                       </tbody>
                     </table>
                   </div>
+                  <TablePagination
+                    currentPage={modalHistoryPage}
+                    pageSize={modalHistoryPageSize}
+                    totalRecords={viewHistoryRecords.length}
+                    onPageChange={setModalHistoryPage}
+                    onPageSizeChange={(newSize) => {
+                      setModalHistoryPageSize(newSize)
+                      setModalHistoryPage(1)
+                    }}
+                    style={{ padding: '10px 0 0', margin: 0 }}
+                  />
+                </>
                 )}
               </div>
             </div>
@@ -1682,6 +1692,229 @@ export default function LabourPage({
           </div>
         </div>
       )}
+
+      {/* Labour WhatsApp Modal */}
+      {whatsappWorker && (() => {
+        const w = whatsappWorker
+        const wid = String(w._id || w.id || '')
+        const wsiteId = String(w.site?._id || w.site?.id || w.siteId || w.site || '')
+
+        // Helper to extract calendar date in milliseconds (midnight date-only in local time)
+        const getPaymentCalendarTime = (p) => {
+          const val = p.payment_date || p.paymentDate || p.rawDate || p.date || p.created_at || p.createdAt
+          if (!val) return 0
+          if (val instanceof Date) {
+            const d = new Date(val)
+            d.setHours(0, 0, 0, 0)
+            return d.getTime()
+          }
+          const str = String(val).trim()
+          const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/)
+          if (dmyMatch) {
+            return new Date(parseInt(dmyMatch[3], 10), parseInt(dmyMatch[2], 10) - 1, parseInt(dmyMatch[1], 10), 0, 0, 0, 0).getTime()
+          }
+          const ymdMatch = str.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})/)
+          if (ymdMatch) {
+            return new Date(parseInt(ymdMatch[1], 10), parseInt(ymdMatch[2], 10) - 1, parseInt(ymdMatch[3], 10), 0, 0, 0, 0).getTime()
+          }
+          const d = new Date(str)
+          if (!isNaN(d.getTime())) {
+            d.setHours(0, 0, 0, 0)
+            return d.getTime()
+          }
+          return 0
+        }
+
+        // Helper to extract creation timestamp
+        const getPaymentCreationTime = (p) => {
+          const val = p.createdAt || p.created_at
+          if (!val) return 0
+          const d = new Date(val)
+          return isNaN(d.getTime()) ? 0 : d.getTime()
+        }
+
+        // Helper to extract numeric ID
+        const getPaymentNumericId = (p) => {
+          const id = p.id || p._id
+          if (typeof id === 'number') return id
+          if (typeof id === 'string') {
+            if (id.startsWith('init-adv')) return 0
+            const num = parseInt(id.replace(/\D/g, ''), 10)
+            return isNaN(num) ? 0 : num
+          }
+          return 0
+        }
+
+        // Use fresh per-worker payments if fetched, otherwise fallback to paymentsList
+        const candidateSource = whatsappWorkerPayments.length > 0 ? whatsappWorkerPayments : paymentsList
+
+        // 1 & 2. Filter using the correct labourer ID and site ID
+        const workerPayments = candidateSource.filter((p) => {
+          const pid = String(p.workerId || p.worker_id || p.worker?._id || p.worker || '')
+          if (pid !== wid) return false
+          const psid = String(p.siteId || p.site_id || p.site?._id || p.site || '')
+          if (wsiteId && psid && psid !== wsiteId) return false
+          return true
+        })
+
+        // 3. Sort payment transactions in descending order (newest first)
+        const sortedPmts = [...workerPayments].sort((a, b) => {
+          const dateA = getPaymentCalendarTime(a)
+          const dateB = getPaymentCalendarTime(b)
+          if (dateA !== dateB) return dateB - dateA // Newer actual payment date first
+
+          // If dates are identical: initial advance was recorded at registration, so regular payments are newer
+          const isAdvA = Boolean(a.isInitialAdvance)
+          const isAdvB = Boolean(b.isInitialAdvance)
+          if (isAdvA && !isAdvB) return 1
+          if (!isAdvA && isAdvB) return -1
+
+          // If both regular payments on same date: check creation timestamp
+          const createA = getPaymentCreationTime(a)
+          const createB = getPaymentCreationTime(b)
+          if (createA !== createB) return createB - createA
+
+          // If creation timestamps same: higher transaction ID comes first
+          const idA = getPaymentNumericId(a)
+          const idB = getPaymentNumericId(b)
+          return idB - idA
+        })
+
+        // 4. Select the first transaction from the sorted results
+        const lastPmt = sortedPmts.length > 0 ? sortedPmts[0] : null
+
+        // 5. Display that transaction's payment amount as Last Paid Amount
+        const lastPaidAmount = lastPmt ? Number(lastPmt.amount !== undefined ? lastPmt.amount : (lastPmt.advance || 0)) : 0
+        const lastPaymentDate = lastPmt
+          ? (() => {
+              const raw = lastPmt.paymentDate || lastPmt.payment_date || lastPmt.rawDate || lastPmt.date || lastPmt.createdAt || ''
+              if (!raw) return '-'
+              if (typeof raw === 'string' && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw.trim())) {
+                return raw.trim()
+              }
+              const d = new Date(raw)
+              return isNaN(d.getTime()) ? String(raw) : d.toLocaleDateString('en-GB')
+            })()
+          : '-'
+
+        const totalAmt = Number(w.totalAmount || w.wagesEarned || 0)
+        const advAmt = Number(w.advanceAmount || w.advancePaid || 0)
+        const totalPaid = Number(w.totalPaid || 0)
+        const pending = Math.max(0, totalAmt - totalPaid)
+
+        const message = generateLabourWhatsAppMessage({
+          labourName: w.name || '-',
+          siteName: w.siteName || (typeof w.site === 'object' ? w.site?.name : '') || '-',
+          totalAmount: totalAmt,
+          advancePayment: advAmt,
+          lastPaidAmount,
+          totalPaidAmount: totalPaid,
+          pendingAmount: pending,
+          paymentDate: lastPaymentDate,
+        })
+
+        const phone = w.phone || ''
+        const normalizedPhone = normalizeIndianPhoneNumber(phone)
+
+        const handleClose = () => {
+          setWhatsappWorker(null)
+          setWhatsappWorkerPayments([])
+        }
+
+        const handleShare = () => {
+          if (!normalizedPhone) {
+            if (showNotification) {
+              showNotification({ type: 'error', message: 'Labour mobile number is not available. Please update the worker details.' })
+            } else {
+              alert('Labour mobile number is not available. Please update the worker details.')
+            }
+            return
+          }
+          openWhatsAppClickToChat({ phone: normalizedPhone, message })
+          handleClose()
+        }
+
+        return (
+          <div className="modal-overlay" onClick={handleClose} style={{ zIndex: 1250 }}>
+            <div
+              className="modal-container"
+              style={{
+                maxWidth: '520px',
+                width: '92%',
+                borderRadius: '12px',
+                background: '#FFFFFF',
+                boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div style={{ padding: '18px 22px', borderBottom: '1px solid #E5EAF1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: '#ECFDF5', color: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <WhatsAppIcon size={22} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#172033' }}>Share Labour Payment Details</h3>
+                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#059669', fontWeight: 600 }}>via WhatsApp</p>
+                  </div>
+                </div>
+                <button type="button" onClick={handleClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748B', padding: '4px' }}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '20px 22px' }}>
+                {/* Worker info bar */}
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748B', fontWeight: 600, display: 'block' }}>Labour</span>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>{w.name}</span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748B', fontWeight: 600, display: 'block' }}>Phone Number</span>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: normalizedPhone ? '#0F172A' : '#DC2626' }}>
+                      {phone || 'Not Available'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Missing phone warning */}
+                {!normalizedPhone && (
+                  <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px', color: '#991B1B', fontSize: '12.5px' }}>
+                    <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+                    <span>Labour mobile number is not available. Please update the worker details.</span>
+                  </div>
+                )}
+
+                {/* Message Preview */}
+                <div>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '6px' }}>Message Preview:</span>
+                  <pre style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', padding: '12px 14px', fontSize: '12.5px', color: '#166534', whiteSpace: 'pre-wrap', fontFamily: 'inherit', lineHeight: '1.5', maxHeight: '220px', overflowY: 'auto', margin: 0 }}>
+                    {message}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: '14px 22px', borderTop: '1px solid #E5EAF1', display: 'flex', justifyContent: 'flex-end', gap: '10px', background: '#FAFCFE', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
+                <button type="button" onClick={handleClose} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#334155', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
+                  Done
+                </button>
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  disabled={!normalizedPhone}
+                  style={{ padding: '8px 18px', borderRadius: '6px', border: 'none', background: normalizedPhone ? '#25D366' : '#94A3B8', color: '#FFFFFF', fontWeight: 600, fontSize: '13px', cursor: normalizedPhone ? 'pointer' : 'not-allowed', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: normalizedPhone ? '0 2px 4px rgba(37,211,102,0.25)' : 'none' }}
+                >
+                  <WhatsAppIcon size={16} />
+                  <span>Share via WhatsApp</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </>
   )
 }

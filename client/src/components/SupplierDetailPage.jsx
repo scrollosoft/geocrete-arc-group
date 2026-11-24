@@ -12,8 +12,7 @@ import {
   X,
 } from 'lucide-react'
 import { supplierService } from '../services/supplierService.js'
-
-const PAGE_SIZE = 5
+import TablePagination from './TablePagination.jsx'
 
 export default function SupplierDetailPage({
   supplierId,
@@ -25,6 +24,7 @@ export default function SupplierDetailPage({
   const [data, setData]           = useState(null)
   const [loading, setLoading]     = useState(true)
   const [currentPage, setPage]    = useState(1)
+  const [pageSize, setPageSize]   = useState(10)
 
   // Record Payment modal state
   const [payModal, setPayModal]       = useState(false)
@@ -101,10 +101,10 @@ export default function SupplierDetailPage({
   }
 
   const { supplier, purchases = [], summary = {} } = data
-  const totalPages = Math.max(1, Math.ceil(purchases.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(purchases.length / pageSize))
   const activePage = Math.min(Math.max(1, currentPage), totalPages)
-  const start = (activePage - 1) * PAGE_SIZE
-  const paginated = purchases.slice(start, start + PAGE_SIZE)
+  const start = (activePage - 1) * pageSize
+  const paginated = purchases.slice(start, start + pageSize)
 
   const statusBadge = (status) => {
     const s = (status || 'Pending').toLowerCase()
@@ -291,49 +291,17 @@ export default function SupplierDetailPage({
         </div>
 
         {/* Pagination */}
-        <div className="sites-pagination-row" style={{ padding: '14px 20px 0', margin: 0 }}>
-          <div className="pagination-left">
-            <span className="pagination-range-text">
-              Showing {purchases.length === 0 ? 0 : start + 1}–{Math.min(start + PAGE_SIZE, purchases.length)} of {purchases.length} records
-            </span>
-          </div>
-          <div className="pagination-right">
-            <button
-              type="button"
-              className="pagination-nav-btn"
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={activePage <= 1}
-            >
-              <ChevronLeft size={14} /> Back
-            </button>
-            {Array.from({ length: Math.min(totalPages, 3) }, (_, i) => i + 1).map(n => (
-              <button
-                key={n}
-                type="button"
-                className="pagination-num-btn"
-                style={{
-                  backgroundColor: activePage === n ? '#0F172A' : '#FFFFFF',
-                  color: activePage === n ? '#FFFFFF' : '#334155',
-                  borderColor: activePage === n ? '#0F172A' : '#E2E8F0',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                }}
-                onClick={() => setPage(n)}
-              >
-                {n}
-              </button>
-            ))}
-            {totalPages > 3 && <span style={{ color: '#94A3B8', padding: '0 4px' }}>…</span>}
-            <button
-              type="button"
-              className="pagination-nav-btn"
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={activePage >= totalPages}
-            >
-              Next <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
+        <TablePagination
+          currentPage={activePage}
+          pageSize={pageSize}
+          totalRecords={purchases.length}
+          onPageChange={setPage}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize)
+            setPage(1)
+          }}
+          style={{ padding: '14px 20px 0', margin: 0 }}
+        />
       </div>
 
       {/* Record Payment Modal */}

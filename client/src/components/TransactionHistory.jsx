@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { bankAccountService } from '../services/bankAccountService.js'
 import TransactionDetailModal from './TransactionDetailModal.jsx'
+import TablePagination from './TablePagination.jsx'
 
 const formatRupee = (amt) => {
   if (amt === undefined || amt === null || isNaN(Number(amt))) return '₹0'
@@ -48,6 +49,10 @@ export default function TransactionHistory({
   const [dateRangeFilter, setDateRangeFilter] = useState('all') // 'all' | 'this_month' | 'last_month' | 'custom'
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   // Selected transaction for Google Pay detail modal
   const [selectedTxn, setSelectedTxn] = useState(null)
@@ -138,23 +143,38 @@ export default function TransactionHistory({
     })
   }, [transactions, typeFilter, selectedBankId, dateRangeFilter, customStartDate, customEndDate, searchQuery, dateBounds])
 
-  // Summary figures
+  // Summary figures (Exclude internal bank-to-bank transfers so they do not inflate income or expenses)
   const totalReceived = useMemo(() => {
     return filteredTransactions
-      .filter((t) => t.type === 'credit')
+      .filter((t) => t.type === 'credit' && !t.isInternalTransfer)
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
   }, [filteredTransactions])
 
   const totalSent = useMemo(() => {
     return filteredTransactions
-      .filter((t) => t.type === 'debit')
+      .filter((t) => t.type === 'debit' && !t.isInternalTransfer)
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
   }, [filteredTransactions])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [typeFilter, selectedBankId, searchQuery, dateRangeFilter, customStartDate, customEndDate])
+
+  const totalRecords = filteredTransactions.length
+  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize))
+  const activePage = Math.min(Math.max(1, currentPage), totalPages)
+  const startIndex = totalRecords === 0 ? 0 : (activePage - 1) * pageSize
+  const endIndex = Math.min(startIndex + pageSize, totalRecords)
+
+  const paginatedTransactions = useMemo(() => {
+    return filteredTransactions.slice(startIndex, endIndex)
+  }, [filteredTransactions, startIndex, endIndex])
 
   // Group by Month/Year in chronological order (newest month first)
   const groupedTransactions = useMemo(() => {
     const groups = new Map()
-    for (const t of filteredTransactions) {
+    for (const t of paginatedTransactions) {
       const groupKey = getMonthYearKey(t.date || t.rawTimestamp)
       if (!groups.has(groupKey)) {
         groups.set(groupKey, [])
@@ -162,7 +182,7 @@ export default function TransactionHistory({
       groups.get(groupKey).push(t)
     }
     return Array.from(groups.entries())
-  }, [filteredTransactions])
+  }, [paginatedTransactions])
 
   const hasActiveFilters = typeFilter !== 'all' || selectedBankId !== 'all' || dateRangeFilter !== 'all' || searchQuery.trim() !== ''
 
@@ -472,6 +492,20 @@ export default function TransactionHistory({
               </div>
             ))}
           </div>
+        )}
+
+        {!loading && !error && filteredTransactions.length > 0 && (
+          <TablePagination
+            currentPage={activePage}
+            pageSize={pageSize}
+            totalRecords={totalRecords}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize)
+              setCurrentPage(1)
+            }}
+            style={{ padding: '16px 20px', borderTop: '1px solid #E5EAF1', margin: 0 }}
+          />
         )}
       </div>
 

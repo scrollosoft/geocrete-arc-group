@@ -147,6 +147,7 @@ export const Material = {
       WHERE e.category IS NOT NULL AND TRIM(e.category) != ''
         AND COALESCE(e.applied_to_material, 0) = 0
         AND LOWER(e.category) NOT IN ('labour', 'equipment', 'transport', 'fuel', 'utilities')
+        AND (e.approval_status IS NULL OR e.approval_status != 'Rejected')
     `
     const expParams = []
     if (siteId && siteId !== 'all') {
@@ -207,6 +208,11 @@ export const Material = {
       const sId = String(e.site_id || '0')
       const supId = String(e.supplier_id || '0')
       const key = makeKey(e.category, sId, supId)
+
+      // Deduplicate: If an approved manager expense is already represented by a material row, skip it
+      if (e.created_by_role === 'Manager' && e.approval_status === 'Approved' && groups.has(key)) {
+        continue
+      }
 
       if (!groups.has(key)) {
         groups.set(key, {
@@ -419,6 +425,7 @@ export const Material = {
       LEFT JOIN suppliers sup ON sup.id = e.supplier_id
       WHERE LOWER(TRIM(e.category)) = LOWER(TRIM(?))
         AND COALESCE(e.applied_to_material, 0) = 0
+        AND (e.approval_status IS NULL OR e.approval_status != 'Rejected')
     `
     const expParams = [targetName]
     if (targetSiteId && targetSiteId !== 'all') {
@@ -475,7 +482,19 @@ export const Material = {
       })
     }
 
+    const existingMatIds = new Set(matRows.map((m) => String(m.id)))
     for (const r of expRows) {
+      // Deduplicate: skip approved manager expenses already represented in materials
+      if (r.material_id && existingMatIds.has(String(r.material_id))) {
+        continue
+      }
+      if (r.created_by_role === 'Manager' && r.approval_status === 'Approved' && matRows.length > 0) {
+        const hasMatch = matRows.some(
+          (m) => String(m.site_id) === String(r.site_id) && String(m.supplier_id || '') === String(r.supplier_id || '')
+        )
+        if (hasMatch) continue
+      }
+
       const qty = Number(r.quantity || 0)
       const totalAmount = Number(r.total_cost || 0)
       const paidAmount = Number(r.paid_amount || 0)

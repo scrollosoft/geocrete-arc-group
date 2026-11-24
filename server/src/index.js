@@ -23,6 +23,7 @@ import workerPaymentRoutes from './routes/workerPaymentRoutes.js'
 import consultingRoutes from './routes/consultingRoutes.js'
 import otherTransactionRoutes from './routes/otherTransactionRoutes.js'
 import cashRoutes from './routes/cashRoutes.js'
+import fileRoutes from './routes/fileRoutes.js'
 
 dotenv.config()
 
@@ -64,6 +65,7 @@ app.use('/api/worker-payments', requireAuth, workerPaymentRoutes)
 app.use('/api/consulting', requireAuth, consultingRoutes)
 app.use('/api/other-transactions', requireAuth, otherTransactionRoutes)
 app.use('/api/cash', requireAuth, cashRoutes)
+app.use('/api/files', requireAuth, fileRoutes)
 
 if (isProduction) {
   app.use(express.static(clientDist))

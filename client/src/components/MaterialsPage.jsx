@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { materialService } from '../services/materialService.js'
 import { bankAccountService } from '../services/bankAccountService.js'
+import TablePagination from './TablePagination.jsx'
 
 
 const UNITS = [
@@ -62,13 +63,15 @@ export default function MaterialsPage({
   const [sortFilter, setSortFilter] = useState('Newest First')
 
   // Pagination
-  const pageSize = 5
+  const [pageSize, setPageSize] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
 
   // Action Modals State
   const [viewingMaterial, setViewingMaterial] = useState(null)
   const [purchaseHistory, setPurchaseHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyPageSize, setHistoryPageSize] = useState(10)
 
   // Load date-wise purchase history whenever viewingMaterial changes
   useEffect(() => {
@@ -82,7 +85,12 @@ export default function MaterialsPage({
       }
       materialService.getHistory(matId, params)
         .then((res) => {
-          setPurchaseHistory(res?.history || [])
+          const raw = res?.history || []
+          const valid = raw.filter((t) => {
+            const st = String(t.approvalStatus || t.approval_status || '').trim().toLowerCase()
+            return st !== 'rejected'
+          })
+          setPurchaseHistory(valid)
         })
         .catch((err) => {
           console.warn('Failed to load purchase history:', err)
@@ -227,7 +235,10 @@ export default function MaterialsPage({
 
       const res = await materialService.getAll(params)
       if (res) {
-        const list = res.materials || (Array.isArray(res) ? res : [])
+        const list = (res.materials || (Array.isArray(res) ? res : [])).filter((m) => {
+          const st = String(m.approvalStatus || m.approval_status || '').trim().toLowerCase()
+          return st !== 'rejected'
+        })
         setMaterials(list)
         if (res.summary) setSummary(res.summary)
       }
@@ -490,6 +501,9 @@ export default function MaterialsPage({
 
   // Filter client-side
   const filteredMaterials = displayList.filter((item) => {
+    const approvalSt = String(item.approvalStatus || item.approval_status || '').trim().toLowerCase()
+    if (approvalSt === 'rejected') return false
+
     if (search.trim()) {
       const q = search.toLowerCase()
       const matName = (item.materialName || '').toLowerCase()
@@ -822,87 +836,16 @@ export default function MaterialsPage({
         </div>
 
         {/* Pagination Footer */}
-        <div className="sites-pagination-row" style={{ padding: '16px 20px 0 20px', margin: '0' }}>
-          <div className="pagination-left">
-            <span className="pagination-range-text">
-              Showing {totalRecords === 0 ? 0 : startIndex + 1}-{endIndex} of {totalRecords} records
-            </span>
-          </div>
-
-          <div className="pagination-right">
-            <button
-              type="button"
-              className="pagination-nav-btn"
-              onClick={() => handlePageChange(activePage - 1)}
-              disabled={activePage <= 1}
-            >
-              <ChevronLeft size={14} /> Back
-            </button>
-
-            {/* Page number 1 */}
-            <button
-              type="button"
-              className="pagination-num-btn"
-              style={{
-                backgroundColor: activePage === 1 ? '#0F172A' : '#FFFFFF',
-                color: activePage === 1 ? '#FFFFFF' : '#334155',
-                borderColor: activePage === 1 ? '#0F172A' : '#E2E8F0',
-                borderRadius: '6px',
-                fontWeight: 600,
-              }}
-              onClick={() => handlePageChange(1)}
-            >
-              1
-            </button>
-
-            {/* Page number 2 if more pages */}
-            {totalPages >= 2 && (
-              <button
-                type="button"
-                className="pagination-num-btn"
-                style={{
-                  backgroundColor: activePage === 2 ? '#0F172A' : '#FFFFFF',
-                  color: activePage === 2 ? '#FFFFFF' : '#334155',
-                  borderColor: activePage === 2 ? '#0F172A' : '#E2E8F0',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                }}
-                onClick={() => handlePageChange(2)}
-              >
-                2
-              </button>
-            )}
-
-            {totalPages > 3 && <span style={{ color: '#94A3B8', padding: '0 4px' }}>...</span>}
-
-            {/* Last Page button if > 2 */}
-            {totalPages > 2 && (
-              <button
-                type="button"
-                className="pagination-num-btn"
-                style={{
-                  backgroundColor: activePage === totalPages ? '#0F172A' : '#FFFFFF',
-                  color: activePage === totalPages ? '#FFFFFF' : '#334155',
-                  borderColor: activePage === totalPages ? '#0F172A' : '#E2E8F0',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                }}
-                onClick={() => handlePageChange(totalPages)}
-              >
-                {totalPages}
-              </button>
-            )}
-
-            <button
-              type="button"
-              className="pagination-nav-btn"
-              onClick={() => handlePageChange(activePage + 1)}
-              disabled={activePage >= totalPages}
-            >
-              Next <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
+        <TablePagination
+          currentPage={activePage}
+          pageSize={pageSize}
+          totalRecords={totalRecords}
+          onPageChange={handlePageChange}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize)
+            setCurrentPage(1)
+          }}
+        />
       </div>
 
       {/* â”€â”€ VIEW MATERIAL MODAL â”€â”€ */}
@@ -1024,7 +967,8 @@ export default function MaterialsPage({
                     No purchase transactions found for this material.
                   </div>
                 ) : (
-                  <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                  <>
+                    <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                       <thead>
                         <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
@@ -1042,7 +986,9 @@ export default function MaterialsPage({
                         </tr>
                       </thead>
                       <tbody>
-                        {purchaseHistory.map((tx, idx) => {
+                        {purchaseHistory
+                          .slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize)
+                          .map((tx, idx) => {
                           const isPaid = tx.paymentStatus === 'Paid'
                           const isPartial = tx.paymentStatus === 'Partial'
                           const statusBg = isPaid ? '#DCFCE7' : isPartial ? '#FEF3C7' : '#FEE2E2'
@@ -1107,6 +1053,17 @@ export default function MaterialsPage({
                       </tbody>
                     </table>
                   </div>
+                  <TablePagination
+                    currentPage={historyPage}
+                    pageSize={historyPageSize}
+                    totalRecords={purchaseHistory.length}
+                    onPageChange={setHistoryPage}
+                    onPageSizeChange={(newSize) => {
+                      setHistoryPageSize(newSize)
+                      setHistoryPage(1)
+                    }}
+                  />
+                </>
                 )}
               </div>
             </div>

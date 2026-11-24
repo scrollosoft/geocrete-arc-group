@@ -1,10 +1,39 @@
-import React, { useState } from 'react'
-import { Eye, Pencil, Trash2, Search, X, Loader2, AlertCircle, CheckCircle2, CreditCard } from 'lucide-react'
+import React, { useState, useEffect, useMemo } from 'react'
+import {
+  Eye,
+  Pencil,
+  Trash2,
+  Search,
+  X,
+  Loader2,
+  AlertCircle,
+  CreditCard,
+  Calendar,
+  Phone,
+  User,
+  CheckCircle,
+} from 'lucide-react'
 import { consultingService } from '../services/consultingService.js'
+import TablePagination from './TablePagination.jsx'
+import {
+  WhatsAppIcon,
+  shareConsultingOnWhatsApp,
+  shareConsultingPaymentConfirmationOnWhatsApp,
+} from '../utils/whatsappHelper.jsx'
 
 const formatCurrency = (amt) => {
   if (amt === undefined || amt === null || isNaN(Number(amt))) return '₹0'
   return `₹${Math.round(Number(amt)).toLocaleString('en-IN')}`
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return '-'
+  const d = new Date(dateString)
+  if (isNaN(d.getTime())) return String(dateString).slice(0, 10)
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const year = d.getFullYear()
+  return `${day}/${month}/${year}`
 }
 
 export default function ConsultingTable({
@@ -16,195 +45,166 @@ export default function ConsultingTable({
 }) {
   const [search, setSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
-  const pageSize = 10
+  const [pageSize, setPageSize] = useState(10)
 
-  // Modal states
+  // Ensure all bank accounts + cash account are available in dropdowns
+  const allAccounts = useMemo(() => {
+    const list = Array.isArray(bankAccounts) ? [...bankAccounts] : []
+    const hasCash = list.some((b) => b.isCash || String(b.id || b._id).toLowerCase() === 'cash')
+    if (!hasCash) {
+      list.push({ id: 'cash', _id: 'cash', bankName: 'Cash', balance: 0, isCash: true })
+    }
+    return list
+  }, [bankAccounts])
+
+  // Modals state
   const [viewingRecord, setViewingRecord] = useState(null)
+  const [viewPayments, setViewPayments] = useState([])
+  const [loadingPayments, setLoadingPayments] = useState(false)
+
   const [editingRecord, setEditingRecord] = useState(null)
+  const [editForm, setEditForm] = useState({
+    date: '',
+    ownerName: '',
+    mobileNumber: '',
+    totalAmount: '',
+    receivedAmount: '',
+    paymentMode: 'UPI',
+    bankAccountId: '',
+    remark: '',
+  })
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [editError, setEditError] = useState('')
+
   const [deletingRecord, setDeletingRecord] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
-  // Make Payment modal state
+  // Make Payment (Record Payment) modal state
   const [payingRecord, setPayingRecord] = useState(null)
   const [payForm, setPayForm] = useState({
     amount: '',
     bankAccountId: '',
     paymentDate: new Date().toISOString().slice(0, 10),
-    paymentMethod: 'UPI',
-    remarks: '',
+    paymentMode: 'UPI',
+    remark: '',
   })
   const [isPaying, setIsPaying] = useState(false)
   const [payError, setPayError] = useState('')
 
-  // Edit form state
-  const [editForm, setEditForm] = useState({
-    siteName: '',
-    siteOwner: '',
-    location: '',
-    totalBudget: '',
-    advanceAmount: '',
-    receivedAmount: '',
-    bankAccountId: '',
-    paymentMethod: 'UPI',
-    note: '',
-  })
-  const [isUpdating, setIsUpdating] = useState(false)
-  const [editError, setEditError] = useState('')
-
-  const handleOpenMakePayment = (record) => {
-    setPayError('')
-    const defaultBank = record.bankAccountId
-      ? String(record.bankAccountId)
-      : (bankAccounts.length > 0 ? String(bankAccounts[0].id || bankAccounts[0]._id) : '')
-
-    setPayForm({
-      amount: '',
-      bankAccountId: defaultBank,
-      paymentDate: new Date().toISOString().slice(0, 10),
-      paymentMethod: record.paymentMethod || 'UPI',
-      remarks: '',
-    })
-    setPayingRecord(record)
-  }
-
-  const handleSavePayment = async (e) => {
-    e.preventDefault()
-    setPayError('')
-
-    if (!payingRecord) return
-
-    const totalBudget = Number(payingRecord.totalBudget || 0)
-    const receivedAmount = Number(payingRecord.receivedAmount || 0)
-    const pendingAmount = payingRecord.pendingAmount !== undefined
-      ? payingRecord.pendingAmount
-      : Math.max(0, totalBudget - receivedAmount)
-
-    const numAmount = Number(payForm.amount)
-    if (isNaN(numAmount) || numAmount <= 0) {
-      setPayError('Payment amount must be greater than zero.')
+  // Fetch payment history when viewing a record
+  useEffect(() => {
+    if (!viewingRecord?.id) {
+      setViewPayments([])
       return
     }
-
-    if (numAmount > pendingAmount) {
-      setPayError(`Payment amount cannot exceed pending amount of ${formatCurrency(pendingAmount)}.`)
-      return
-    }
-
-    if (!payForm.bankAccountId) {
-      setPayError('Please select a Bank Account or Cash.')
-      return
-    }
-
-    setIsPaying(true)
-    try {
-      await consultingService.recordPayment(payingRecord.id, {
-        amount: numAmount,
-        bankAccountId: payForm.bankAccountId,
-        paymentDate: payForm.paymentDate,
-        paymentMethod: payForm.paymentMethod,
-        remarks: payForm.remarks.trim(),
+    let isMounted = true
+    setLoadingPayments(true)
+    consultingService
+      .getPayments(viewingRecord.id)
+      .then((data) => {
+        if (isMounted) {
+          setViewPayments(Array.isArray(data) ? data : [])
+        }
       })
-
-      if (showNotification) {
-        showNotification({
-          type: 'success',
-          message: `Payment of ${formatCurrency(numAmount)} recorded successfully for "${payingRecord.siteName}"!`,
-        })
-      }
-
-      setPayingRecord(null)
-      if (onConsultingChanged) onConsultingChanged()
-    } catch (err) {
-      console.error('Failed to record consulting payment:', err)
-      setPayError(err.message || 'Failed to record payment.')
-    } finally {
-      setIsPaying(false)
+      .catch((err) => {
+        console.error('Failed to load consulting payment history:', err)
+        if (isMounted) setViewPayments([])
+      })
+      .finally(() => {
+        if (isMounted) setLoadingPayments(false)
+      })
+    return () => {
+      isMounted = false
     }
-  }
+  }, [viewingRecord?.id])
 
+  // Open Edit Modal
   const handleOpenEdit = (record) => {
     setEditError('')
+    const isCash = record.paymentMode === 'Cash' || !record.bankAccountId || String(record.bankAccountId) === 'cash'
+    const defaultBank = isCash
+      ? 'cash'
+      : (record.bankAccountId ? String(record.bankAccountId) : (allAccounts[0]?.id ? String(allAccounts[0].id) : ''))
+
     setEditForm({
-      siteName: record.siteName || '',
-      siteOwner: record.siteOwner || '',
-      location: record.location || '',
-      totalBudget: String(record.totalBudget || ''),
-      advanceAmount: String(record.advanceAmount || ''),
-      receivedAmount: String(record.receivedAmount || ''),
-      bankAccountId: record.bankAccountId ? String(record.bankAccountId) : '',
-      paymentMethod: record.paymentMethod || 'UPI',
-      note: record.note || '',
+      date: record.date ? String(record.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      ownerName: record.ownerName || '',
+      mobileNumber: record.mobileNumber || '',
+      totalAmount: String(record.totalAmount || ''),
+      receivedAmount: String(record.receivedAmount !== undefined ? record.receivedAmount : ''),
+      paymentMode: record.paymentMode || 'UPI',
+      bankAccountId: defaultBank,
+      remark: record.remark || '',
     })
     setEditingRecord(record)
   }
 
+  // Save Edit
   const handleSaveEdit = async (e) => {
     e.preventDefault()
     setEditError('')
 
-    if (!editForm.siteName.trim()) {
-      setEditError('Site Name is required.')
-      return
-    }
-    if (!editForm.siteOwner.trim()) {
-      setEditError('Site Owner is required.')
-      return
-    }
-    if (!editForm.location.trim()) {
-      setEditError('City / Location is required.')
+    if (!editingRecord) return
+
+    const cleanOwnerName = editForm.ownerName.trim()
+    if (!cleanOwnerName) {
+      setEditError('Owner Name is required.')
       return
     }
 
-    const numBudget = Number(editForm.totalBudget)
-    if (isNaN(numBudget) || numBudget <= 0) {
-      setEditError('Total Budget must be greater than zero.')
+    const cleanMobile = editForm.mobileNumber.trim().replace(/\D/g, '')
+    if (!cleanMobile || cleanMobile.length !== 10) {
+      setEditError('Please enter a valid 10-digit mobile number.')
       return
     }
 
-    const numAdvance = editForm.advanceAmount !== '' ? Number(editForm.advanceAmount) : 0
-    if (isNaN(numAdvance) || numAdvance < 0) {
-      setEditError('Advance Amount must be non-negative.')
-      return
-    }
-    if (numAdvance > numBudget) {
-      setEditError('Advance Amount cannot exceed Total Budget.')
+    const numTotal = Number(editForm.totalAmount)
+    if (isNaN(numTotal) || numTotal <= 0) {
+      setEditError('Total Amount must be greater than zero.')
       return
     }
 
-    const numReceived = editForm.receivedAmount !== '' ? Number(editForm.receivedAmount) : 0
+    const numReceived = editForm.receivedAmount !== '' && editForm.receivedAmount !== undefined
+      ? Number(editForm.receivedAmount)
+      : 0
     if (isNaN(numReceived) || numReceived < 0) {
-      setEditError('Received Amount must be non-negative.')
-      return
-    }
-    if (numReceived > numBudget) {
-      setEditError('Received Amount cannot exceed Total Budget.')
+      setEditError('Received Amount must be a valid non-negative number.')
       return
     }
 
-    if (numReceived > 0 && !editForm.bankAccountId) {
-      setEditError('Please select a Bank Name for the received payment.')
+    if (numReceived > numTotal) {
+      setEditError(
+        `Received Amount (₹${numReceived.toLocaleString('en-IN')}) cannot exceed Total Amount (₹${numTotal.toLocaleString('en-IN')}).`
+      )
+      return
+    }
+
+    const isCash = editForm.paymentMode === 'Cash' || String(editForm.bankAccountId || '').toLowerCase() === 'cash'
+    const finalBankId = isCash ? null : (editForm.bankAccountId ? Number(editForm.bankAccountId) : null)
+
+    if (numReceived > 0 && !isCash && !finalBankId) {
+      setEditError('Please select a Bank Account for the received payment.')
       return
     }
 
     setIsUpdating(true)
     try {
       await consultingService.update(editingRecord.id, {
-        siteName: editForm.siteName.trim(),
-        siteOwner: editForm.siteOwner.trim(),
-        location: editForm.location.trim(),
-        totalBudget: numBudget,
-        advanceAmount: numAdvance,
+        date: editForm.date,
+        ownerName: cleanOwnerName,
+        mobileNumber: cleanMobile,
+        totalAmount: numTotal,
         receivedAmount: numReceived,
-        bankAccountId: editForm.bankAccountId ? Number(editForm.bankAccountId) : null,
-        paymentMethod: editForm.paymentMethod || 'UPI',
-        note: editForm.note.trim(),
+        paymentMode: isCash ? 'Cash' : editForm.paymentMode,
+        bankAccountId: finalBankId,
+        remark: editForm.remark.trim(),
       })
 
       if (showNotification) {
         showNotification({
           type: 'success',
-          message: `Consulting entry "${editForm.siteName}" updated successfully!`,
+          message: `Consulting entry for "${cleanOwnerName}" updated successfully!`,
         })
       }
 
@@ -218,6 +218,7 @@ export default function ConsultingTable({
     }
   }
 
+  // Delete Confirm
   const handleDeleteConfirm = async () => {
     if (!deletingRecord) return
     setIsDeleting(true)
@@ -227,7 +228,7 @@ export default function ConsultingTable({
       if (showNotification) {
         showNotification({
           type: 'success',
-          message: `Consulting record "${deletingRecord.siteName}" deleted and bank balance adjusted successfully!`,
+          message: `Consulting record for "${deletingRecord.ownerName}" deleted successfully!`,
         })
       }
       setDeletingRecord(null)
@@ -240,28 +241,135 @@ export default function ConsultingTable({
     }
   }
 
-  // Filtered list
-  const filteredList = consultingList.filter((item) => {
-    if (!search.trim()) return true
-    const q = search.toLowerCase()
-    return (
-      (item.siteName && item.siteName.toLowerCase().includes(q)) ||
-      (item.siteOwner && item.siteOwner.toLowerCase().includes(q)) ||
-      (item.location && item.location.toLowerCase().includes(q)) ||
-      (item.bankName && item.bankName.toLowerCase().includes(q)) ||
-      (item.paymentMethod && item.paymentMethod.toLowerCase().includes(q)) ||
-      (item.note && item.note.toLowerCase().includes(q))
-    )
-  })
+  // Open Make Payment Modal
+  const handleOpenMakePayment = (record) => {
+    setPayError('')
+    const isCash = record.paymentMode === 'Cash' || !record.bankAccountId || String(record.bankAccountId) === 'cash'
+    const defaultBank = isCash
+      ? 'cash'
+      : (record.bankAccountId ? String(record.bankAccountId) : (allAccounts[0]?.id ? String(allAccounts[0].id) : ''))
+
+    setPayForm({
+      amount: '',
+      bankAccountId: defaultBank,
+      paymentDate: new Date().toISOString().slice(0, 10),
+      paymentMode: record.paymentMode || 'UPI',
+      remark: '',
+    })
+    setPayingRecord(record)
+  }
+
+  // Save Payment
+  const handleSavePayment = async (e) => {
+    e.preventDefault()
+    setPayError('')
+
+    if (!payingRecord) return
+
+    const pendingAmount = Number(payingRecord.pendingAmount) || 0
+    const numAmount = Number(payForm.amount)
+
+    if (isNaN(numAmount) || numAmount <= 0) {
+      setPayError('Payment amount must be greater than zero.')
+      return
+    }
+
+    if (numAmount > pendingAmount) {
+      setPayError(`Payment amount cannot exceed remaining pending amount of ${formatCurrency(pendingAmount)}.`)
+      return
+    }
+
+    const isCash = payForm.paymentMode === 'Cash' || String(payForm.bankAccountId || '').toLowerCase() === 'cash'
+    if (!isCash && !payForm.bankAccountId) {
+      setPayError('Please select a Bank Account or Cash.')
+      return
+    }
+
+    setIsPaying(true)
+    try {
+      const result = await consultingService.recordPayment(payingRecord.id, {
+        amount: numAmount,
+        bankAccountId: isCash ? null : Number(payForm.bankAccountId),
+        paymentDate: payForm.paymentDate,
+        paymentMode: isCash ? 'Cash' : payForm.paymentMode,
+        remark: payForm.remark.trim(),
+      })
+
+      if (showNotification) {
+        showNotification({
+          type: 'success',
+          message: `Payment of ${formatCurrency(numAmount)} recorded successfully for "${payingRecord.ownerName}"!`,
+        })
+      }
+
+      // Automatically offer WhatsApp Payment Confirmation
+      const prevReceived = Number(payingRecord.receivedAmount) || 0
+      const newTotal = prevReceived + numAmount
+      const remaining = Math.max(0, Number(payingRecord.totalAmount) - newTotal)
+
+      shareConsultingPaymentConfirmationOnWhatsApp({
+        consulting: payingRecord,
+        newPaymentAmount: numAmount,
+        previousReceivedAmount: prevReceived,
+        updatedTotalReceivedAmount: newTotal,
+        remainingPendingAmount: remaining,
+        paymentDate: formatDate(payForm.paymentDate),
+        paymentMode: isCash ? 'Cash' : payForm.paymentMode,
+        showNotification,
+      })
+
+      setPayingRecord(null)
+      if (onConsultingChanged) onConsultingChanged()
+    } catch (err) {
+      console.error('Failed to record consulting payment:', err)
+      setPayError(err.message || 'Failed to record payment.')
+    } finally {
+      setIsPaying(false)
+    }
+  }
+
+  // Filtered search list
+  const filteredList = useMemo(() => {
+    if (!search.trim()) return consultingList
+    const q = search.toLowerCase().trim()
+    return consultingList.filter((item) => {
+      const owner = String(item.ownerName || '').toLowerCase()
+      const mobile = String(item.mobileNumber || '').toLowerCase()
+      const mode = String(item.paymentMode || '').toLowerCase()
+      const bank = String(item.bankName || '').toLowerCase()
+      const rem = String(item.remark || '').toLowerCase()
+      const dt = String(item.date || '').toLowerCase()
+      return (
+        owner.includes(q) ||
+        mobile.includes(q) ||
+        mode.includes(q) ||
+        bank.includes(q) ||
+        rem.includes(q) ||
+        dt.includes(q)
+      )
+    })
+  }, [consultingList, search])
 
   // Pagination
   const totalPages = Math.ceil(filteredList.length / pageSize) || 1
-  const paginatedList = filteredList.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const paginatedList = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return filteredList.slice(start, start + pageSize)
+  }, [filteredList, currentPage, pageSize])
 
   return (
     <div className="sites-table-card" style={{ marginTop: '20px' }}>
       {/* Table Header & Search */}
-      <div className="sites-table-card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+      <div
+        className="sites-table-card-header"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}
+      >
         <div>
           <h2 className="sites-table-title" style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
             Consulting Records ({consultingList.length})
@@ -272,7 +380,16 @@ export default function ConsultingTable({
         </div>
 
         <div style={{ position: 'relative', width: '240px' }}>
-          <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+          <Search
+            size={15}
+            style={{
+              position: 'absolute',
+              left: '10px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: '#94A3B8',
+            }}
+          />
           <input
             type="text"
             className="form-input"
@@ -293,20 +410,18 @@ export default function ConsultingTable({
           <thead>
             <tr>
               <th className="th-date">DATE</th>
-              <th className="th-desc">SITE NAME</th>
-              <th className="th-desc">SITE OWNER</th>
-              <th className="th-desc">CITY / LOCATION</th>
-              <th className="th-amount">TOTAL BUDGET</th>
-              <th className="th-amount">ADVANCE</th>
-              <th className="th-amount">RECEIVED</th>
-              <th className="th-amount">PENDING</th>
-              <th className="th-desc">BANK NAME</th>
-              <th className="th-desc">PAYMENT METHOD</th>
+              <th className="th-desc">OWNER NAME</th>
+              <th className="th-desc">MOBILE NUMBER</th>
+              <th className="th-amount">TOTAL AMOUNT</th>
+              <th className="th-amount">RECEIVED AMOUNT</th>
+              <th className="th-amount">PENDING AMOUNT</th>
+              <th className="th-desc">PAYMENT MODE</th>
+              <th className="th-desc">REMARK</th>
               <th
                 style={{
                   textAlign: 'center',
-                  width: '230px',
-                  minWidth: '230px',
+                  width: '260px',
+                  minWidth: '260px',
                   padding: '14px 16px',
                   whiteSpace: 'nowrap',
                 }}
@@ -318,72 +433,109 @@ export default function ConsultingTable({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={11} style={{ textAlign: 'center', padding: '36px', color: '#64748B' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: '#64748B' }}>
                   Loading consulting records...
                 </td>
               </tr>
             ) : paginatedList.length === 0 ? (
               <tr>
-                <td colSpan={11} style={{ textAlign: 'center', padding: '36px', color: '#94A3B8' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: '#94A3B8' }}>
                   {search ? 'No matching consulting records found.' : 'No consulting records recorded yet.'}
                 </td>
               </tr>
             ) : (
               paginatedList.map((item) => {
-                const pendingAmt = item.pendingAmount !== undefined
-                  ? item.pendingAmount
-                  : Math.max(0, (Number(item.totalBudget) || 0) - (Number(item.receivedAmount) || 0))
+                const pendingAmt = Number(item.pendingAmount) || 0
 
                 return (
                   <tr key={item.id} className="expense-row">
-                    <td className="td-date">{item.date || '-'}</td>
+                    {/* Date */}
+                    <td className="td-date">{formatDate(item.date)}</td>
+
+                    {/* Owner Name */}
                     <td className="td-description" style={{ fontWeight: 600, color: '#0F172A' }}>
-                      {item.siteName}
+                      {item.ownerName || '-'}
                     </td>
-                    <td className="td-description">{item.siteOwner}</td>
-                    <td className="td-description">{item.location}</td>
+
+                    {/* Mobile Number */}
+                    <td className="td-description" style={{ color: '#475569', fontWeight: 500 }}>
+                      {item.mobileNumber ? `+91 ${item.mobileNumber}` : '-'}
+                    </td>
+
+                    {/* Total Amount */}
                     <td className="td-amount" style={{ fontWeight: 600 }}>
-                      {formatCurrency(item.totalBudget)}
+                      {formatCurrency(item.totalAmount)}
                     </td>
-                    <td className="td-amount" style={{ color: '#059669' }}>
-                      {formatCurrency(item.advanceAmount)}
-                    </td>
-                    <td className="td-amount" style={{ fontWeight: 700, color: item.receivedAmount > 0 ? '#0284C7' : '#64748B' }}>
+
+                    {/* Received Amount */}
+                    <td
+                      className="td-amount"
+                      style={{
+                        fontWeight: 700,
+                        color: Number(item.receivedAmount) > 0 ? '#0284C7' : '#64748B',
+                      }}
+                    >
                       {formatCurrency(item.receivedAmount)}
                     </td>
-                    <td className="td-amount" style={{ fontWeight: 700, color: pendingAmt > 0 ? '#EF4444' : '#64748B' }}>
+
+                    {/* Pending Amount */}
+                    <td
+                      className="td-amount"
+                      style={{
+                        fontWeight: 700,
+                        color: pendingAmt > 0 ? '#EF4444' : '#64748B',
+                      }}
+                    >
                       {formatCurrency(pendingAmt)}
                     </td>
-                    <td className="td-description">{item.bankName}</td>
+
+                    {/* Payment Mode */}
                     <td className="td-description">
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        background: '#F1F5F9',
-                        color: '#334155',
-                      }}>
-                        {item.paymentMethod || 'UPI'}
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          background: item.paymentMode === 'Cash' ? '#DCFCE7' : '#F1F5F9',
+                          color: item.paymentMode === 'Cash' ? '#166534' : '#334155',
+                        }}
+                      >
+                        {item.paymentMode || 'UPI'}
                       </span>
                     </td>
+
+                    {/* Remark */}
+                    <td className="td-description" style={{ color: '#64748B', maxWidth: '180px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                      {item.remark || '-'}
+                    </td>
+
+                    {/* Action Column */}
                     <td
                       style={{
                         textAlign: 'center',
-                        width: '230px',
-                        minWidth: '230px',
-                        padding: '14px 16px',
+                        width: '260px',
+                        minWidth: '260px',
+                        padding: '12px 14px',
                         whiteSpace: 'nowrap',
                         verticalAlign: 'middle',
                       }}
                     >
-                      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        {/* Make Payment Button: visible when pending > 0 */}
                         {pendingAmt > 0 && (
                           <button
                             type="button"
                             className="btn-make-payment"
-                            title="Make Payment"
+                            title="Record Payment"
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -398,6 +550,7 @@ export default function ConsultingTable({
                               cursor: 'pointer',
                               whiteSpace: 'nowrap',
                               boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                              transition: 'background-color 0.15s ease',
                             }}
                             onClick={() => handleOpenMakePayment(item)}
                           >
@@ -405,55 +558,93 @@ export default function ConsultingTable({
                             <span>Make Payment</span>
                           </button>
                         )}
+
+                        {/* WhatsApp Share Button */}
                         <button
                           type="button"
-                          className="action-icon-btn action-view-btn"
-                          title="View Details"
+                          className="action-icon-btn site-action-btn-whatsapp"
+                          title="Share on WhatsApp"
                           style={{
-                            background: 'none',
-                            border: 'none',
-                            padding: '2px',
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '6px',
+                            border: '1px solid #E2E8F0',
+                            background: '#FFFFFF',
+                            padding: 0,
                             cursor: 'pointer',
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#1E293B',
+                            color: '#25D366',
+                          }}
+                          onClick={() => shareConsultingOnWhatsApp(item, showNotification)}
+                        >
+                          <WhatsAppIcon size={15} />
+                        </button>
+
+                        {/* View Details Button */}
+                        <button
+                          type="button"
+                          className="action-icon-btn site-action-btn-view"
+                          title="View Details"
+                          style={{
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '6px',
+                            border: '1px solid #E2E8F0',
+                            background: '#FFFFFF',
+                            padding: 0,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#2563EB',
                           }}
                           onClick={() => setViewingRecord(item)}
                         >
                           <Eye size={15} />
                         </button>
+
+                        {/* Edit Record Button */}
                         <button
                           type="button"
-                          className="action-icon-btn action-edit-btn"
+                          className="action-icon-btn site-action-btn-edit"
                           title="Edit Record"
                           style={{
-                            background: 'none',
-                            border: 'none',
-                            padding: '2px',
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '6px',
+                            border: '1px solid #E2E8F0',
+                            background: '#FFFFFF',
+                            padding: 0,
                             cursor: 'pointer',
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#1E293B',
+                            color: '#059669',
                           }}
                           onClick={() => handleOpenEdit(item)}
                         >
                           <Pencil size={15} />
                         </button>
+
+                        {/* Delete Record Button */}
                         <button
                           type="button"
-                          className="action-icon-btn action-delete-btn"
+                          className="action-icon-btn site-action-btn-delete"
                           title="Delete Record"
                           style={{
-                            background: 'none',
-                            border: 'none',
-                            padding: '2px',
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '6px',
+                            border: '1px solid #E2E8F0',
+                            background: '#FFFFFF',
+                            padding: 0,
                             cursor: 'pointer',
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#1E293B',
+                            color: '#DC2626',
                           }}
                           onClick={() => {
                             setDeleteError('')
@@ -472,44 +663,39 @@ export default function ConsultingTable({
         </table>
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', padding: '12px 16px', borderTop: '1px solid #E5EAF1' }}>
-          <button
-            type="button"
-            className="btn btn-secondary-action"
-            style={{ height: '30px', padding: '0 10px', fontSize: '12px' }}
-            disabled={currentPage <= 1}
-            onClick={() => setCurrentPage((p) => p - 1)}
-          >
-            Previous
-          </button>
-          <span style={{ fontSize: '12px', color: '#64748B' }}>
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            type="button"
-            className="btn btn-secondary-action"
-            style={{ height: '30px', padding: '0 10px', fontSize: '12px' }}
-            disabled={currentPage >= totalPages}
-            onClick={() => setCurrentPage((p) => p + 1)}
-          >
-            Next
-          </button>
-        </div>
-      )}
+      {/* Pagination Footer */}
+      <TablePagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalRecords={filteredList.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize)
+          setCurrentPage(1)
+        }}
+        style={{ padding: '12px 16px', borderTop: '1px solid #E5EAF1', margin: 0 }}
+      />
 
-      {/* ── View Consulting Modal ── */}
+      {/* ── View Details Modal ── */}
       {viewingRecord && (
         <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setViewingRecord(null)}>
-          <div className="modal-container" style={{ maxWidth: '520px', width: '92%' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E5EAF1' }}>
+          <div className="modal-container" style={{ maxWidth: '580px', width: '92%' }} onClick={(e) => e.stopPropagation()}>
+            <div
+              className="modal-header"
+              style={{
+                padding: '16px 20px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderBottom: '1px solid #E5EAF1',
+              }}
+            >
               <div>
                 <h3 className="modal-title" style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>
                   Consulting Details
                 </h3>
-                <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>
-                  {viewingRecord.siteName}
+                <p style={{ margin: '2px 0 0 0', fontSize: '12.5px', color: '#64748B' }}>
+                  {viewingRecord.ownerName} • +91 {viewingRecord.mobileNumber}
                 </p>
               </div>
               <button type="button" className="modal-close-btn" onClick={() => setViewingRecord(null)}>
@@ -517,70 +703,212 @@ export default function ConsultingTable({
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', background: '#F8FAFC', padding: '14px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+            <div
+              className="modal-body"
+              style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '75vh', overflowY: 'auto' }}
+            >
+              {/* Particulars Card */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, 1fr)',
+                  gap: '12px',
+                  background: '#F8FAFC',
+                  padding: '14px',
+                  borderRadius: '8px',
+                  border: '1px solid #E2E8F0',
+                }}
+              >
                 <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Site Name</span>
-                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13.5px' }}>{viewingRecord.siteName}</span>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                    Owner Name
+                  </span>
+                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13.5px' }}>
+                    {viewingRecord.ownerName || '-'}
+                  </span>
                 </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Site Owner</span>
-                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13.5px' }}>{viewingRecord.siteOwner}</span>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>City / Location</span>
-                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13.5px' }}>{viewingRecord.location}</span>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Date</span>
-                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13.5px' }}>{viewingRecord.date || '-'}</span>
-                </div>
-              </div>
 
-              <div className="consulting-view-financial-grid">
                 <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Total Budget</span>
-                  <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '14px' }}>{formatCurrency(viewingRecord.totalBudget)}</span>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                    Mobile Number
+                  </span>
+                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13.5px' }}>
+                    {viewingRecord.mobileNumber ? `+91 ${viewingRecord.mobileNumber}` : '-'}
+                  </span>
                 </div>
+
                 <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Advance</span>
-                  <span style={{ fontWeight: 600, color: '#059669', fontSize: '14px' }}>{formatCurrency(viewingRecord.advanceAmount)}</span>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                    Date
+                  </span>
+                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13.5px' }}>
+                    {formatDate(viewingRecord.date)}
+                  </span>
                 </div>
+
                 <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Received</span>
-                  <span style={{ fontWeight: 700, color: '#0284C7', fontSize: '14px' }}>{formatCurrency(viewingRecord.receivedAmount)}</span>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                    Payment Mode
+                  </span>
+                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13.5px' }}>
+                    {viewingRecord.paymentMode || 'UPI'}
+                  </span>
                 </div>
+
                 <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Pending</span>
-                  <span style={{ fontWeight: 700, color: '#EF4444', fontSize: '14px' }}>
-                    {formatCurrency(viewingRecord.pendingAmount !== undefined ? viewingRecord.pendingAmount : Math.max(0, (Number(viewingRecord.totalBudget) || 0) - (Number(viewingRecord.receivedAmount) || 0)))}
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                    Bank / Account
+                  </span>
+                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13.5px' }}>
+                    {viewingRecord.bankName || 'Cash'}
+                  </span>
+                </div>
+
+                <div>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                    Remark
+                  </span>
+                  <span style={{ fontWeight: 500, color: '#334155', fontSize: '13px' }}>
+                    {viewingRecord.remark || '-'}
                   </span>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+              {/* Financial Summary */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '10px',
+                  background: '#F1F5F9',
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #E2E8F0',
+                  textAlign: 'center',
+                }}
+              >
                 <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Bank Account</span>
-                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13px' }}>{viewingRecord.bankName}</span>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                    Total Amount
+                  </span>
+                  <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '15px' }}>
+                    {formatCurrency(viewingRecord.totalAmount)}
+                  </span>
                 </div>
                 <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Payment Method</span>
-                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13px' }}>{viewingRecord.paymentMethod}</span>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                    Received Amount
+                  </span>
+                  <span style={{ fontWeight: 700, color: '#0284C7', fontSize: '15px' }}>
+                    {formatCurrency(viewingRecord.receivedAmount)}
+                  </span>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                    Pending Amount
+                  </span>
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      color: Number(viewingRecord.pendingAmount) > 0 ? '#EF4444' : '#64748B',
+                      fontSize: '15px',
+                    }}
+                  >
+                    {formatCurrency(viewingRecord.pendingAmount)}
+                  </span>
                 </div>
               </div>
 
-              {viewingRecord.note && (
-                <div>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Note / Particulars</span>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#334155', background: '#F1F5F9', padding: '8px 12px', borderRadius: '6px' }}>
-                    {viewingRecord.note}
-                  </p>
-                </div>
-              )}
+              {/* Payment History */}
+              <div>
+                <h4 style={{ margin: '8px 0 8px 0', fontSize: '13.5px', fontWeight: 700, color: '#0F172A' }}>
+                  Payment History ({viewPayments.length})
+                </h4>
+
+                {loadingPayments ? (
+                  <div style={{ textAlign: 'center', padding: '16px', color: '#64748B', fontSize: '12.5px' }}>
+                    Loading payment records...
+                  </div>
+                ) : viewPayments.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '16px', background: '#F8FAFC', borderRadius: '6px', color: '#94A3B8', fontSize: '12.5px' }}>
+                    No payment transactions recorded yet.
+                  </div>
+                ) : (
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '6px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
+                        <tr>
+                          <th style={{ padding: '8px 10px', textAlign: 'left' }}>DATE</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right' }}>AMOUNT</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'left' }}>MODE</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'left' }}>ACCOUNT</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'left' }}>REMARK</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {viewPayments.map((p, idx) => (
+                          <tr key={p.id || idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '8px 10px', color: '#0F172A', fontWeight: 500 }}>
+                              {formatDate(p.paymentDate || p.createdAt)}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                              {formatCurrency(p.amount)}
+                            </td>
+                            <td style={{ padding: '8px 10px', color: '#334155' }}>
+                              {p.paymentMode || 'UPI'}
+                            </td>
+                            <td style={{ padding: '8px 10px', color: '#475569' }}>
+                              {p.bankName || 'Cash'}
+                            </td>
+                            <td style={{ padding: '8px 10px', color: '#64748B' }}>
+                              {p.remark || p.reference || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="modal-footer" style={{ padding: '12px 20px', borderTop: '1px solid #E5EAF1', display: 'flex', justifyContent: 'flex-end' }}>
-              <button type="button" className="btn btn-secondary-action" onClick={() => setViewingRecord(null)}>
+            <div
+              className="modal-footer"
+              style={{
+                padding: '12px 20px',
+                borderTop: '1px solid #E5EAF1',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <button
+                type="button"
+                className="btn"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#25D366',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                }}
+                onClick={() => shareConsultingOnWhatsApp(viewingRecord, showNotification)}
+              >
+                <WhatsAppIcon size={15} />
+                <span>Share Details on WhatsApp</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-secondary-action"
+                onClick={() => setViewingRecord(null)}
+              >
                 Close
               </button>
             </div>
@@ -592,17 +920,34 @@ export default function ConsultingTable({
       {editingRecord && (
         <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setEditingRecord(null)}>
           <div className="modal-container" style={{ maxWidth: '540px', width: '92%' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E5EAF1' }}>
-              <h3 className="modal-title" style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>
-                Edit Consulting Entry
-              </h3>
+            <div
+              className="modal-header"
+              style={{
+                padding: '16px 20px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderBottom: '1px solid #E5EAF1',
+              }}
+            >
+              <div>
+                <h3 className="modal-title" style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>
+                  Edit Consulting Entry
+                </h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                  Update consulting and client particulars.
+                </p>
+              </div>
               <button type="button" className="modal-close-btn" onClick={() => setEditingRecord(null)}>
                 <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleSaveEdit}>
-              <div className="modal-body" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '72vh', overflowY: 'auto' }}>
+              <div
+                className="modal-body"
+                style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '72vh', overflowY: 'auto' }}
+              >
                 {editError && (
                   <div className="form-alert form-alert-error" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px' }}>
                     <AlertCircle size={16} />
@@ -610,65 +955,98 @@ export default function ConsultingTable({
                   </div>
                 )}
 
-                <div className="consulting-edit-grid">
+                {/* Received & Pending Summary */}
+                <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '10px 14px', borderRadius: '6px', fontSize: '12.5px', color: '#1E40AF', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                  <div>
+                    <strong>Total:</strong> {formatCurrency(editForm.totalAmount || 0)} &nbsp;|&nbsp; <strong>Received:</strong> {formatCurrency(editForm.receivedAmount || 0)}
+                  </div>
+                  <div>
+                    <strong>Pending:</strong> <span style={{ color: '#DC2626', fontWeight: 700 }}>{formatCurrency(Math.max(0, (Number(editForm.totalAmount) || 0) - (Number(editForm.receivedAmount) || 0)))}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                  {/* Date */}
                   <div className="form-group">
-                    <label className="form-label">Site Name *</label>
+                    <label className="form-label">Date *</label>
                     <input
-                      type="text"
+                      type="date"
                       className="form-input"
-                      value={editForm.siteName}
-                      onChange={(e) => setEditForm({ ...editForm, siteName: e.target.value })}
+                      value={editForm.date}
+                      onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
                       required
                     />
                   </div>
 
+                  {/* Owner Name */}
                   <div className="form-group">
-                    <label className="form-label">Site Owner *</label>
+                    <label className="form-label">Owner Name *</label>
                     <input
                       type="text"
                       className="form-input"
-                      value={editForm.siteOwner}
-                      onChange={(e) => setEditForm({ ...editForm, siteOwner: e.target.value })}
+                      placeholder="e.g. Rajesh Sharma"
+                      value={editForm.ownerName}
+                      onChange={(e) => setEditForm({ ...editForm, ownerName: e.target.value })}
                       required
                     />
                   </div>
 
+                  {/* Mobile Number */}
                   <div className="form-group">
-                    <label className="form-label">City / Location *</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={editForm.location}
-                      onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                      required
-                    />
+                    <label className="form-label">Mobile Number *</label>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '0 10px',
+                          height: '38px',
+                          backgroundColor: '#F8FAFC',
+                          border: '1px solid #E2E8F0',
+                          borderRight: 'none',
+                          borderTopLeftRadius: '6px',
+                          borderBottomLeftRadius: '6px',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          color: '#475569',
+                          userSelect: 'none',
+                        }}
+                      >
+                        +91
+                      </span>
+                      <input
+                        type="tel"
+                        className="form-input"
+                        placeholder="10-digit mobile number"
+                        value={editForm.mobileNumber}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                          setEditForm({ ...editForm, mobileNumber: val })
+                        }}
+                        maxLength={10}
+                        style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
+                        required
+                      />
+                    </div>
                   </div>
 
+                  {/* Total Amount */}
                   <div className="form-group">
-                    <label className="form-label">Total Budget (₹) *</label>
+                    <label className="form-label">Total Amount (₹) *</label>
                     <input
                       type="number"
                       className="form-input"
                       min="1"
                       step="any"
-                      value={editForm.totalBudget}
-                      onChange={(e) => setEditForm({ ...editForm, totalBudget: e.target.value })}
+                      placeholder="e.g. 50000"
+                      value={editForm.totalAmount}
+                      onChange={(e) => setEditForm({ ...editForm, totalAmount: e.target.value })}
                       required
                     />
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Advance Amount (₹)</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      min="0"
-                      step="any"
-                      value={editForm.advanceAmount}
-                      onChange={(e) => setEditForm({ ...editForm, advanceAmount: e.target.value })}
-                    />
-                  </div>
-
+                  {/* Received Amount */}
                   <div className="form-group">
                     <label className="form-label">Received Amount (₹)</label>
                     <input
@@ -676,53 +1054,93 @@ export default function ConsultingTable({
                       className="form-input"
                       min="0"
                       step="any"
+                      placeholder="e.g. 20000 (0 if none)"
                       value={editForm.receivedAmount}
                       onChange={(e) => setEditForm({ ...editForm, receivedAmount: e.target.value })}
                     />
                   </div>
 
+                  {/* Payment Mode */}
                   <div className="form-group">
-                    <label className="form-label">Bank Name</label>
+                    <label className="form-label">Payment Mode</label>
                     <select
                       className="form-select"
-                      value={editForm.bankAccountId}
-                      onChange={(e) => setEditForm({ ...editForm, bankAccountId: e.target.value })}
-                    >
-                      <option value="">Select Bank Account...</option>
-                      {bankAccounts.map((b) => (
-                        <option key={b.id || b._id} value={b.id || b._id}>
-                          {b.bankName} (Bal: ₹{Number(b.balance || 0).toLocaleString('en-IN')})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Payment Method</label>
-                    <select
-                      className="form-select"
-                      value={editForm.paymentMethod}
-                      onChange={(e) => setEditForm({ ...editForm, paymentMethod: e.target.value })}
+                      value={editForm.paymentMode}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        const isCash = val === 'Cash'
+                        setEditForm({
+                          ...editForm,
+                          paymentMode: val,
+                          bankAccountId: isCash ? 'cash' : editForm.bankAccountId,
+                        })
+                      }}
                     >
                       <option value="UPI">UPI</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
                       <option value="Cheque">Cheque</option>
                       <option value="Cash">Cash</option>
                     </select>
                   </div>
+
+                  {/* Bank Name / Account */}
+                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label className="form-label">
+                      Bank Account / Cash {Number(editForm.receivedAmount) > 0 && <span style={{ color: '#DC2626' }}>*</span>}
+                    </label>
+                    <select
+                      className="form-select"
+                      value={editForm.bankAccountId}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        const isCash = val === 'cash'
+                        setEditForm({
+                          ...editForm,
+                          bankAccountId: val,
+                          paymentMode: isCash ? 'Cash' : (editForm.paymentMode === 'Cash' ? 'UPI' : editForm.paymentMode),
+                        })
+                      }}
+                      required={Number(editForm.receivedAmount) > 0}
+                    >
+                      <option value="">Select Account...</option>
+                      {allAccounts.map((b) => {
+                        const accId = String(b.id || b._id)
+                        const isCash = b.isCash || accId.toLowerCase() === 'cash'
+                        const name = isCash ? 'Cash' : (b.bankName || b.bank_name || 'Bank')
+                        const bal = Number(b.balance || 0).toLocaleString('en-IN')
+                        return (
+                          <option key={accId} value={accId}>
+                            {name} (Bal: ₹{bal})
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
                 </div>
 
+                {/* Remark */}
                 <div className="form-group">
-                  <label className="form-label">Note (Optional)</label>
+                  <label className="form-label">Remark (Optional)</label>
                   <input
                     type="text"
                     className="form-input"
-                    value={editForm.note}
-                    onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
+                    placeholder="e.g. Structural consultation, floor plan"
+                    value={editForm.remark}
+                    onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
                   />
                 </div>
               </div>
 
-              <div className="modal-footer" style={{ padding: '12px 20px', borderTop: '1px solid #E5EAF1', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <div
+                className="modal-footer"
+                style={{
+                  padding: '12px 20px',
+                  borderTop: '1px solid #E5EAF1',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: '10px',
+                }}
+              >
                 <button
                   type="button"
                   className="btn btn-secondary-action"
@@ -735,11 +1153,22 @@ export default function ConsultingTable({
                   type="submit"
                   className="btn btn-primary-action"
                   disabled={isUpdating}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  style={{
+                    backgroundColor: '#0293DE',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 20px',
+                    fontWeight: 600,
+                    cursor: isUpdating ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
                 >
                   {isUpdating ? (
                     <>
-                      <Loader2 size={15} className="spin-animate" />
+                      <Loader2 size={15} className="animate-spin" />
                       <span>Saving...</span>
                     </>
                   ) : (
@@ -768,11 +1197,21 @@ export default function ConsultingTable({
                 </div>
               )}
               <p style={{ margin: 0, fontSize: '14px', color: '#334155', lineHeight: 1.5 }}>
-                Are you sure you want to delete the consulting record for <strong>"{deletingRecord.siteName}"</strong>?
+                Are you sure you want to delete the consulting record for <strong>"{deletingRecord.ownerName}"</strong>?
               </p>
-              {deletingRecord.receivedAmount > 0 && (
-                <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#B45309', background: '#FEF3C7', padding: '8px 12px', borderRadius: '6px' }}>
-                  Note: The previously credited amount of {formatCurrency(deletingRecord.receivedAmount)} will be reversed from {deletingRecord.bankName}.
+              {Number(deletingRecord.receivedAmount) > 0 && (
+                <p
+                  style={{
+                    margin: '10px 0 0 0',
+                    fontSize: '12.5px',
+                    color: '#B45309',
+                    background: '#FEF3C7',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <strong>Note:</strong> The previously credited amount of {formatCurrency(deletingRecord.receivedAmount)} will be reversed from {deletingRecord.bankName || 'Cash'}.
                 </p>
               )}
             </div>
@@ -788,13 +1227,24 @@ export default function ConsultingTable({
               <button
                 type="button"
                 className="btn"
-                style={{ background: '#DC2626', color: '#FFFFFF', borderColor: '#DC2626', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                style={{
+                  background: '#DC2626',
+                  color: '#FFFFFF',
+                  borderColor: '#DC2626',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  borderRadius: '6px',
+                  padding: '8px 18px',
+                  fontWeight: 600,
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                }}
                 onClick={handleDeleteConfirm}
                 disabled={isDeleting}
               >
                 {isDeleting ? (
                   <>
-                    <Loader2 size={15} className="spin-animate" />
+                    <Loader2 size={15} className="animate-spin" />
                     <span>Deleting...</span>
                   </>
                 ) : (
@@ -806,35 +1256,44 @@ export default function ConsultingTable({
         </div>
       )}
 
-      {/* ── Make Payment Modal ── */}
+      {/* ── Record Payment (Make Payment) Modal ── */}
       {payingRecord && (() => {
-        const currentPending = payingRecord.pendingAmount !== undefined
-          ? payingRecord.pendingAmount
-          : Math.max(0, (Number(payingRecord.totalBudget) || 0) - (Number(payingRecord.receivedAmount) || 0))
+        const pendingAmount = Number(payingRecord.pendingAmount) || 0
 
         return (
           <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => !isPaying && setPayingRecord(null)}>
             <div className="modal-container" style={{ maxWidth: '520px', width: '92%' }} onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E5EAF1' }}>
+              <div
+                className="modal-header"
+                style={{
+                  padding: '16px 20px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderBottom: '1px solid #E5EAF1',
+                }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '8px',
-                    backgroundColor: '#DCFCE7',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#16A34A',
-                  }}>
+                  <div
+                    style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '8px',
+                      backgroundColor: '#DCFCE7',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#16A34A',
+                    }}
+                  >
                     <CreditCard size={18} />
                   </div>
                   <div>
                     <h3 className="modal-title" style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>
-                      Make Payment
+                      Record Consulting Payment
                     </h3>
-                    <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>
-                      Payment from {payingRecord.siteOwner || payingRecord.siteName}
+                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                      Payment from {payingRecord.ownerName} (+91 {payingRecord.mobileNumber})
                     </p>
                   </div>
                 </div>
@@ -849,7 +1308,17 @@ export default function ConsultingTable({
               </div>
 
               <form onSubmit={handleSavePayment}>
-                <div className="modal-body" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '72vh', overflowY: 'auto' }}>
+                <div
+                  className="modal-body"
+                  style={{
+                    padding: '18px 20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    maxHeight: '72vh',
+                    overflowY: 'auto',
+                  }}
+                >
                   {payError && (
                     <div className="form-alert form-alert-error" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px' }}>
                       <AlertCircle size={16} />
@@ -857,47 +1326,42 @@ export default function ConsultingTable({
                     </div>
                   )}
 
-                  {/* Read-only Site & Owner Info */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(2, 1fr)',
-                    gap: '10px',
-                    background: '#F8FAFC',
-                    padding: '12px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                  }}>
-                    <div>
-                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Site Name</span>
-                      <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13px' }}>{payingRecord.siteName}</span>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Site Owner / Client</span>
-                      <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '13px' }}>{payingRecord.siteOwner}</span>
-                    </div>
-                  </div>
-
                   {/* Read-only Financial Summary */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(3, 1fr)',
-                    gap: '8px',
-                    background: '#F1F5F9',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                  }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gap: '8px',
+                      background: '#F1F5F9',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid #E2E8F0',
+                      textAlign: 'center',
+                    }}
+                  >
                     <div>
-                      <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Total Budget</span>
-                      <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '13.5px' }}>{formatCurrency(payingRecord.totalBudget)}</span>
+                      <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                        Total Amount
+                      </span>
+                      <span style={{ fontWeight: 700, color: '#1E293B', fontSize: '13.5px' }}>
+                        {formatCurrency(payingRecord.totalAmount)}
+                      </span>
                     </div>
                     <div>
-                      <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Previously Received</span>
-                      <span style={{ fontWeight: 700, color: '#0284C7', fontSize: '13.5px' }}>{formatCurrency(payingRecord.receivedAmount)}</span>
+                      <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                        Previously Received
+                      </span>
+                      <span style={{ fontWeight: 700, color: '#0284C7', fontSize: '13.5px' }}>
+                        {formatCurrency(payingRecord.receivedAmount)}
+                      </span>
                     </div>
                     <div>
-                      <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Pending Amount</span>
-                      <span style={{ fontWeight: 700, color: '#EF4444', fontSize: '13.5px' }}>{formatCurrency(currentPending)}</span>
+                      <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                        Current Pending
+                      </span>
+                      <span style={{ fontWeight: 700, color: '#EF4444', fontSize: '13.5px' }}>
+                        {formatCurrency(pendingAmount)}
+                      </span>
                     </div>
                   </div>
 
@@ -908,16 +1372,16 @@ export default function ConsultingTable({
                       type="number"
                       className="form-input"
                       min="1"
-                      max={currentPending}
+                      max={pendingAmount}
                       step="any"
-                      placeholder="e.g. 50000"
+                      placeholder={`e.g. ${pendingAmount}`}
                       value={payForm.amount}
                       onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
                       required
                     />
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                       <span style={{ fontSize: '11.5px', color: '#64748B' }}>
-                        Outstanding: {formatCurrency(currentPending)}
+                        Outstanding: {formatCurrency(pendingAmount)}
                       </span>
                       <button
                         type="button"
@@ -931,9 +1395,9 @@ export default function ConsultingTable({
                           padding: 0,
                           textDecoration: 'underline',
                         }}
-                        onClick={() => setPayForm((prev) => ({ ...prev, amount: String(currentPending) }))}
+                        onClick={() => setPayForm((prev) => ({ ...prev, amount: String(pendingAmount) }))}
                       >
-                        Pay full pending
+                        Pay full pending ({formatCurrency(pendingAmount)})
                       </button>
                     </div>
                   </div>
@@ -950,15 +1414,15 @@ export default function ConsultingTable({
                         setPayForm((prev) => ({
                           ...prev,
                           bankAccountId: val,
-                          paymentMethod: isCash ? 'Cash' : (prev.paymentMethod === 'Cash' ? 'UPI' : prev.paymentMethod),
+                          paymentMode: isCash ? 'Cash' : (prev.paymentMode === 'Cash' ? 'UPI' : prev.paymentMode),
                         }))
                       }}
                       required
                     >
                       <option value="">Select bank account or cash...</option>
-                      {bankAccounts.map((b) => {
+                      {allAccounts.map((b) => {
                         const accId = String(b.id || b._id)
-                        const isCash = b.isCash || accId === 'cash'
+                        const isCash = b.isCash || accId.toLowerCase() === 'cash'
                         const displayName = isCash
                           ? `Cash in Hand — ₹${Number(b.balance || 0).toLocaleString('en-IN')} available`
                           : `${b.bankName || b.bank_name} — ₹${Number(b.balance || 0).toLocaleString('en-IN')} available`
@@ -971,7 +1435,7 @@ export default function ConsultingTable({
                     </select>
                   </div>
 
-                  {/* Payment Date & Payment Method */}
+                  {/* Payment Date & Payment Mode */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                     <div className="form-group">
                       <label className="form-label">Payment Date *</label>
@@ -985,11 +1449,19 @@ export default function ConsultingTable({
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">Payment Method *</label>
+                      <label className="form-label">Payment Mode *</label>
                       <select
                         className="form-select"
-                        value={payForm.paymentMethod}
-                        onChange={(e) => setPayForm({ ...payForm, paymentMethod: e.target.value })}
+                        value={payForm.paymentMode}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          const isCash = val === 'Cash'
+                          setPayForm((prev) => ({
+                            ...prev,
+                            paymentMode: val,
+                            bankAccountId: isCash ? 'cash' : prev.bankAccountId,
+                          }))
+                        }}
                         required
                       >
                         <option value="UPI">UPI</option>
@@ -1003,18 +1475,27 @@ export default function ConsultingTable({
 
                   {/* Remarks */}
                   <div className="form-group">
-                    <label className="form-label">Remarks (Optional)</label>
+                    <label className="form-label">Remark (Optional)</label>
                     <input
                       type="text"
                       className="form-input"
                       placeholder="e.g. Part payment, Consulting fee installment..."
-                      value={payForm.remarks}
-                      onChange={(e) => setPayForm({ ...payForm, remarks: e.target.value })}
+                      value={payForm.remark}
+                      onChange={(e) => setPayForm({ ...payForm, remark: e.target.value })}
                     />
                   </div>
                 </div>
 
-                <div className="modal-footer" style={{ padding: '12px 20px', borderTop: '1px solid #E5EAF1', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <div
+                  className="modal-footer"
+                  style={{
+                    padding: '12px 20px',
+                    borderTop: '1px solid #E5EAF1',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '10px',
+                  }}
+                >
                   <button
                     type="button"
                     className="btn btn-secondary-action"
@@ -1035,11 +1516,14 @@ export default function ConsultingTable({
                       alignItems: 'center',
                       gap: '6px',
                       fontWeight: 600,
+                      borderRadius: '6px',
+                      padding: '8px 18px',
+                      cursor: isPaying ? 'not-allowed' : 'pointer',
                     }}
                   >
                     {isPaying ? (
                       <>
-                        <Loader2 size={15} className="spin-animate" />
+                        <Loader2 size={15} className="animate-spin" />
                         <span>Recording...</span>
                       </>
                     ) : (
@@ -1058,4 +1542,3 @@ export default function ConsultingTable({
     </div>
   )
 }
-

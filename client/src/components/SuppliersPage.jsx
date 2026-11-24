@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { supplierService } from '../services/supplierService.js'
 import SupplierDetailPage from './SupplierDetailPage.jsx'
+import TablePagination from './TablePagination.jsx'
 
 const AVAILABLE_CATEGORIES = [
   'Cement',
@@ -52,7 +53,7 @@ export default function SuppliersPage({
   const [sortFilter, setSortFilter] = useState('Newest First')
 
   // Pagination
-  const pageSize = 5
+  const [pageSize, setPageSize] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
 
   // Action modals
@@ -599,87 +600,16 @@ export default function SuppliersPage({
         </div>
 
         {/* Pagination Footer */}
-        <div className="sites-pagination-row" style={{ padding: '16px 20px 0 20px', margin: '0' }}>
-          <div className="pagination-left">
-            <span className="pagination-range-text">
-              Showing {totalRecords === 0 ? 0 : startIndex + 1}-{endIndex} of {totalRecords} records
-            </span>
-          </div>
-
-          <div className="pagination-right">
-            <button
-              type="button"
-              className="pagination-nav-btn"
-              onClick={() => handlePageChange(activePage - 1)}
-              disabled={activePage <= 1}
-            >
-              <ChevronLeft size={14} /> Back
-            </button>
-
-            {/* Page number 1 */}
-            <button
-              type="button"
-              className="pagination-num-btn"
-              style={{
-                backgroundColor: activePage === 1 ? '#0F172A' : '#FFFFFF',
-                color: activePage === 1 ? '#FFFFFF' : '#334155',
-                borderColor: activePage === 1 ? '#0F172A' : '#E2E8F0',
-                borderRadius: '6px',
-                fontWeight: 600,
-              }}
-              onClick={() => handlePageChange(1)}
-            >
-              1
-            </button>
-
-            {/* Page number 2 if more pages */}
-            {totalPages >= 2 && (
-              <button
-                type="button"
-                className="pagination-num-btn"
-                style={{
-                  backgroundColor: activePage === 2 ? '#0F172A' : '#FFFFFF',
-                  color: activePage === 2 ? '#FFFFFF' : '#334155',
-                  borderColor: activePage === 2 ? '#0F172A' : '#E2E8F0',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                }}
-                onClick={() => handlePageChange(2)}
-              >
-                2
-              </button>
-            )}
-
-            {totalPages > 3 && <span style={{ color: '#94A3B8', padding: '0 4px' }}>...</span>}
-
-            {/* Last Page button if > 2 */}
-            {totalPages > 2 && (
-              <button
-                type="button"
-                className="pagination-num-btn"
-                style={{
-                  backgroundColor: activePage === totalPages ? '#0F172A' : '#FFFFFF',
-                  color: activePage === totalPages ? '#FFFFFF' : '#334155',
-                  borderColor: activePage === totalPages ? '#0F172A' : '#E2E8F0',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                }}
-                onClick={() => handlePageChange(totalPages)}
-              >
-                {totalPages}
-              </button>
-            )}
-
-            <button
-              type="button"
-              className="pagination-nav-btn"
-              onClick={() => handlePageChange(activePage + 1)}
-              disabled={activePage >= totalPages}
-            >
-              Next <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
+        <TablePagination
+          currentPage={activePage}
+          pageSize={pageSize}
+          totalRecords={totalRecords}
+          onPageChange={handlePageChange}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize)
+            setCurrentPage(1)
+          }}
+        />
       </div>
 
       {/* â”€â”€ EDIT SUPPLIER MODAL â”€â”€ */}

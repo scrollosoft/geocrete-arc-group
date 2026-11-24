@@ -1,5 +1,8 @@
 import { request } from './api.js'
 
+export const approveExpense = (id) => request(`/expenses/${id}/approve`, { method: 'PUT' })
+export const rejectExpense = (id) => request(`/expenses/${id}/reject`, { method: 'PUT' })
+
 export const expenseService = {
   getAll: (params = {}) => {
     const query = new URLSearchParams()
@@ -15,6 +18,10 @@ export const expenseService = {
   create: (data) => request('/expenses', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/expenses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/expenses/${id}`, { method: 'DELETE' }),
+  approveExpense,
+  rejectExpense,
   getPayments: (id) => request(`/expenses/${id}/payments`),
   recordPayment: (id, data) => request(`/expenses/${id}/payments`, { method: 'POST', body: JSON.stringify(data) }),
 }
+
+export default expenseService

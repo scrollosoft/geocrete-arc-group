@@ -15,6 +15,7 @@ export default function OtherForm({
     bankAccountId: bankAccounts[0]?.id || bankAccounts[0]?._id ? String(bankAccounts[0].id || bankAccounts[0]._id) : '',
     paymentMethod: 'UPI',
     paymentType: 'Send', // 'Send' | 'Receive'
+    ledgerName: '',
     note: '',
   })
 
@@ -24,10 +25,32 @@ export default function OtherForm({
   const selectedBank = bankAccounts.find(
     (b) => String(b.id || b._id) === String(formData.bankAccountId)
   )
+  const isCashAccount = String(formData.bankAccountId || '').toLowerCase() === 'cash' || selectedBank?.isCash
   const bankBalance = Number(selectedBank?.balance || 0)
 
   const handleChange = (e) => {
     const { name, value } = e.target
+    if (name === 'bankAccountId') {
+      const isCash = String(value).toLowerCase() === 'cash'
+      setFormData((prev) => ({
+        ...prev,
+        bankAccountId: value,
+        paymentMethod: isCash ? 'Cash' : (prev.paymentMethod === 'Cash' ? 'UPI' : prev.paymentMethod),
+      }))
+      if (errorMessage) setErrorMessage('')
+      return
+    }
+    if (name === 'paymentMethod') {
+      const isCash = value === 'Cash'
+      const cashAcc = bankAccounts.find((b) => b.isCash || String(b.id || b._id).toLowerCase() === 'cash')
+      setFormData((prev) => ({
+        ...prev,
+        paymentMethod: value,
+        bankAccountId: isCash && cashAcc ? String(cashAcc.id || cashAcc._id) : prev.bankAccountId,
+      }))
+      if (errorMessage) setErrorMessage('')
+      return
+    }
     setFormData((prev) => ({ ...prev, [name]: value }))
     if (errorMessage) setErrorMessage('')
   }
@@ -54,19 +77,23 @@ export default function OtherForm({
 
     if (formData.paymentType === 'Send' && selectedBank && bankBalance < numAmount) {
       setErrorMessage(
-        `Insufficient bank balance in ${selectedBank.bankName}. Available: ₹${Math.round(bankBalance).toLocaleString('en-IN')}, Requested: ₹${Math.round(numAmount).toLocaleString('en-IN')}.`
+        `Insufficient ${isCashAccount ? 'cash' : 'bank'} balance in ${selectedBank.bankName}. Available: ₹${Math.round(bankBalance).toLocaleString('en-IN')}, Requested: ₹${Math.round(numAmount).toLocaleString('en-IN')}.`
       )
       return
     }
+
+    const isCash = String(formData.bankAccountId || '').toLowerCase() === 'cash' || selectedBank?.isCash
+    const payloadBankAccountId = isCash ? 'cash' : Number(formData.bankAccountId)
 
     setSubmitting(true)
     try {
       const created = await otherTransactionService.create({
         date: formData.date,
         amount: numAmount,
-        bankAccountId: Number(formData.bankAccountId),
-        paymentMethod: formData.paymentMethod || 'UPI',
+        bankAccountId: payloadBankAccountId,
+        paymentMethod: isCash ? 'Cash' : (formData.paymentMethod || 'UPI'),
         paymentType: formData.paymentType,
+        ledgerName: formData.ledgerName.trim(),
         note: formData.note.trim(),
       })
 
@@ -84,6 +111,7 @@ export default function OtherForm({
         bankAccountId: bankAccounts[0]?.id || bankAccounts[0]?._id ? String(bankAccounts[0].id || bankAccounts[0]._id) : '',
         paymentMethod: 'UPI',
         paymentType: 'Send',
+        ledgerName: '',
         note: '',
       })
 
@@ -209,6 +237,19 @@ export default function OtherForm({
               <option value="Send">Send (Deduct from Bank)</option>
               <option value="Receive">Receive (Credit to Bank)</option>
             </select>
+          </div>
+
+          {/* Ledger Name */}
+          <div className="form-group">
+            <label className="form-label">Ledger Name (Optional)</label>
+            <input
+              type="text"
+              name="ledgerName"
+              className="form-input"
+              placeholder="e.g. Office Expenses, Petty Cash"
+              value={formData.ledgerName}
+              onChange={handleChange}
+            />
           </div>
 
           {/* Note */}

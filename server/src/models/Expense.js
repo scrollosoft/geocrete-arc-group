@@ -57,6 +57,13 @@ const toApi = (row) => {
     status:        row.status,
     paymentStatus: row.status === 'Pending' ? 'Unpaid' : row.status,
     appliedToMaterial: Boolean(row.applied_to_material),
+    createdBy:     row.created_by || 'Admin',
+    createdByRole: row.created_by_role || 'Admin',
+    approvalStatus: row.approval_status || 'Approved',
+    approvedBy:    row.approved_by || null,
+    approvedAt:    row.approved_at ? fmtDate(row.approved_at) : null,
+    rejectedBy:    row.rejected_by || null,
+    rejectedAt:    row.rejected_at ? fmtDate(row.rejected_at) : null,
     createdAt:     fmtDate(row.created_at),
     updatedAt:     fmtDate(row.updated_at),
   }
@@ -79,9 +86,25 @@ const POPULATE_JOIN = `
 `
 
 export const Expense = {
-  async find({ siteId, category, startDate, endDate, search, limit, skip } = {}) {
+  async find({ siteId, category, startDate, endDate, search, limit, skip, createdByRole, createdBy, approvalStatus } = {}) {
     let where = 'WHERE 1=1'
     const params = []
+
+    if (createdByRole === 'Owner') {
+      where += " AND (e.created_by_role IS NULL OR e.created_by_role != 'Manager')"
+    } else if (createdByRole === 'Manager') {
+      where += " AND e.created_by_role = 'Manager'"
+    }
+
+    if (createdBy) {
+      where += ' AND e.created_by = ?'
+      params.push(createdBy)
+    }
+
+    if (approvalStatus) {
+      where += ' AND e.approval_status = ?'
+      params.push(approvalStatus)
+    }
 
     if (siteId && siteId !== 'all') {
       where += ' AND e.site_id = ?'
@@ -158,12 +181,16 @@ export const Expense = {
       else status = rawStatus
     }
 
+    const createdBy = data.createdBy || 'Admin'
+    const createdByRole = data.createdByRole || 'Admin'
+    const approvalStatus = data.approvalStatus || (createdByRole === 'Manager' ? 'Pending' : 'Approved')
+
     const [result] = await getPool().query(
       `INSERT INTO expenses
         (date, site_id, supplier_id, bank_account_id, category,
          quantity, unit, rate_per_unit, amount, paid_amount, pending_amount,
-         payment_method, remark, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         payment_method, remark, status, created_by, created_by_role, approval_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.date ? new Date(data.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
         data.site || data.siteId,
@@ -179,6 +206,9 @@ export const Expense = {
         data.paymentMethod || 'Bank Transfer',
         data.remark || '',
         status,
+        createdBy,
+        createdByRole,
+        approvalStatus,
       ],
     )
     return this.findById(result.insertId)
@@ -205,6 +235,13 @@ export const Expense = {
       remark:        'remark',
       status:        'status',
       paymentStatus: 'status',
+      createdBy:      'created_by',
+      createdByRole:  'created_by_role',
+      approvalStatus: 'approval_status',
+      approvedBy:     'approved_by',
+      approvedAt:     'approved_at',
+      rejectedBy:     'rejected_by',
+      rejectedAt:     'rejected_at',
     }
 
     const sets = []

@@ -5,7 +5,20 @@ import { calculateLiveCashSummary } from './cashController.js'
 
 export const getExpenses = async (req, res, next) => {
   try {
-    const { siteId, category, startDate, endDate, search, limit, skip } = req.query
+    const { siteId, category, startDate, endDate, search, limit, skip, tab, createdByRole, createdBy } = req.query
+
+    let filterRole = createdByRole
+    let filterCreatedBy = createdBy
+
+    if (req.user?.role === 'Manager') {
+      filterRole = 'Manager'
+      filterCreatedBy = req.user.username
+    } else if (tab === 'owner') {
+      filterRole = 'Owner'
+    } else if (tab === 'manager') {
+      filterRole = 'Manager'
+    }
+
     const { expenses, totalCount } = await Expense.find({
       siteId,
       category,
@@ -14,6 +27,8 @@ export const getExpenses = async (req, res, next) => {
       search,
       limit: limit ? Number(limit) : undefined,
       skip:  skip  ? Number(skip)  : undefined,
+      createdByRole: filterRole,
+      createdBy: filterCreatedBy,
     })
     res.json({ expenses, totalCount })
   } catch (error) {
@@ -26,6 +41,9 @@ export const getExpenseById = async (req, res, next) => {
     const expense = await Expense.findById(req.params.id)
     if (!expense) {
       return res.status(404).json({ error: 'Expense not found' })
+    }
+    if (req.user?.role === 'Manager' && expense.createdBy && expense.createdBy !== req.user.username) {
+      return res.status(403).json({ error: 'Access denied.' })
     }
     res.json(expense)
   } catch (error) {
@@ -100,8 +118,13 @@ export const createExpense = async (req, res, next) => {
     try {
       await conn.beginTransaction()
 
-      // Validate and deduct balance (Cash or Bank)
-      if (parsedPaid > 0) {
+      const createdBy = req.user?.username || 'Admin'
+      const createdByRole = req.user?.role || 'Admin'
+      const isPending = createdByRole === 'Manager'
+      const approvalStatus = isPending ? 'Pending' : 'Approved'
+
+      // Only deduct balance immediately if NOT pending (i.e. Owner/Admin submission)
+      if (!isPending && parsedPaid > 0) {
         if (isCashAccount) {
           const cashSummary = await calculateLiveCashSummary(conn)
           if (cashSummary.balance < parsedPaid) {
@@ -142,8 +165,9 @@ export const createExpense = async (req, res, next) => {
         `INSERT INTO expenses
           (date, site_id, supplier_id, category,
            quantity, unit, rate_per_unit, amount, paid_amount, pending_amount,
-           payment_method, remark, status, applied_to_material, bank_account_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           payment_method, remark, status, applied_to_material, bank_account_id,
+           created_by, created_by_role, approval_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           expenseDate,
           site,
@@ -158,49 +182,55 @@ export const createExpense = async (req, res, next) => {
           finalPaymentMethod,
           remark || '',
           expenseStatus,
-          shouldApplyToMaterial ? 1 : 0,
+          (!isPending && shouldApplyToMaterial) ? 1 : 0,
           finalBankAccountId,
+          createdBy,
+          createdByRole,
+          approvalStatus,
         ],
       )
 
-      await conn.query(
-        'UPDATE sites SET total_spent = total_spent + ? WHERE id = ?',
-        [calculatedAmount, site],
-      )
-
-      if (parsedPaid > 0) {
+      // Only record site spending, transactions, and material purchase if NOT pending
+      if (!isPending) {
         await conn.query(
-          `INSERT INTO expense_payments
-            (expense_id, site_id, supplier_id, bank_account_id, amount, payment_date, payment_method, reference, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            result.insertId,
-            site,
-            supplier || null,
-            finalBankAccountId,
-            parsedPaid,
-            expenseDate,
-            finalPaymentMethod,
-            remark || '',
-            'Initial Expense Payment',
-          ],
+          'UPDATE sites SET total_spent = total_spent + ? WHERE id = ?',
+          [calculatedAmount, site],
         )
-      }
 
-      if (shouldApplyToMaterial) {
-        await Material.applyExpensePurchase(conn, {
-          materialName: expenseCategory,
-          siteId: site,
-          supplierId: supplier || null,
-          quantity: numQuantity,
-          unit: unit || 'Units',
-          ratePerUnit: numRate,
-          amount: calculatedAmount,
-          paidAmount: parsedPaid,
-          purchaseDate: expenseDate,
-          category: expenseCategory,
-          notes: remark || '',
-        })
+        if (parsedPaid > 0) {
+          await conn.query(
+            `INSERT INTO expense_payments
+              (expense_id, site_id, supplier_id, bank_account_id, amount, payment_date, payment_method, reference, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              result.insertId,
+              site,
+              supplier || null,
+              finalBankAccountId,
+              parsedPaid,
+              expenseDate,
+              finalPaymentMethod,
+              remark || '',
+              'Initial Expense Payment',
+            ],
+          )
+        }
+
+        if (shouldApplyToMaterial) {
+          await Material.applyExpensePurchase(conn, {
+            materialName: expenseCategory,
+            siteId: site,
+            supplierId: supplier || null,
+            quantity: numQuantity,
+            unit: unit || 'Units',
+            ratePerUnit: numRate,
+            amount: calculatedAmount,
+            paidAmount: parsedPaid,
+            purchaseDate: expenseDate,
+            category: expenseCategory,
+            notes: remark || '',
+          })
+        }
       }
 
       await conn.commit()
@@ -223,6 +253,17 @@ export const updateExpense = async (req, res, next) => {
     const existingExpense = await Expense.findById(req.params.id)
     if (!existingExpense) {
       return res.status(404).json({ error: 'Expense not found' })
+    }
+
+    // Role-based validation: manager cannot edit approved or rejected expenses, or others' expenses
+    if (req.user?.role === 'Manager') {
+      if (existingExpense.createdBy && existingExpense.createdBy !== req.user.username) {
+        return res.status(403).json({ error: 'You can only edit your own expenses.' })
+      }
+      const st = String(existingExpense.approvalStatus || existingExpense.approval_status || '').trim().toLowerCase()
+      if (st === 'approved' || st === 'rejected') {
+        return res.status(403).json({ error: 'Managers cannot edit approved or rejected expenses.' })
+      }
     }
 
     const oldAmount = existingExpense.amount
@@ -272,52 +313,55 @@ export const updateExpense = async (req, res, next) => {
     try {
       await conn.beginTransaction()
 
-      // Handle bank balance adjustments for edit
-      if (String(newBankAccountId || '') !== String(oldBankAccountId || '')) {
-        // Bank account changed — refund old, deduct new
-        if (oldBankAccountId && oldPaid > 0) {
-          await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [oldPaid, oldBankAccountId])
-        }
-        if (newBankAccountId && paidAmount > 0) {
-          const [[bankRow]] = await conn.query(
-            'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
-            [newBankAccountId]
-          )
-          if (!bankRow) {
-            await conn.rollback(); conn.release()
-            return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+      // Handle bank balance adjustments for edit (only for approved or owner expenses that deducted balance)
+      const hasDeductedBalance = !existingExpense.approvalStatus || existingExpense.approvalStatus === 'Approved'
+      if (hasDeductedBalance) {
+        if (String(newBankAccountId || '') !== String(oldBankAccountId || '')) {
+          // Bank account changed — refund old, deduct new
+          if (oldBankAccountId && oldPaid > 0) {
+            await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [oldPaid, oldBankAccountId])
           }
-          const bankBalance = Number(bankRow.balance)
-          if (bankBalance <= 0) {
-            await conn.rollback(); conn.release()
-            return res.status(400).json({ error: 'This bank account has zero balance. Please select another bank account.' })
+          if (newBankAccountId && paidAmount > 0) {
+            const [[bankRow]] = await conn.query(
+              'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+              [newBankAccountId]
+            )
+            if (!bankRow) {
+              await conn.rollback(); conn.release()
+              return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+            }
+            const bankBalance = Number(bankRow.balance)
+            if (bankBalance <= 0) {
+              await conn.rollback(); conn.release()
+              return res.status(400).json({ error: 'This bank account has zero balance. Please select another bank account.' })
+            }
+            if (bankBalance < paidAmount) {
+              await conn.rollback(); conn.release()
+              return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
+            }
+            await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [paidAmount, newBankAccountId])
           }
-          if (bankBalance < paidAmount) {
-            await conn.rollback(); conn.release()
-            return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
+        } else if (newBankAccountId) {
+          // Same bank — adjust only the difference
+          const diff = paidAmount - oldPaid
+          if (diff > 0) {
+            const [[bankRow]] = await conn.query(
+              'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+              [newBankAccountId]
+            )
+            if (!bankRow) {
+              await conn.rollback(); conn.release()
+              return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+            }
+            const bankBalance = Number(bankRow.balance)
+            if (bankBalance < diff) {
+              await conn.rollback(); conn.release()
+              return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
+            }
+            await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [diff, newBankAccountId])
+          } else if (diff < 0) {
+            await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [Math.abs(diff), newBankAccountId])
           }
-          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [paidAmount, newBankAccountId])
-        }
-      } else if (newBankAccountId) {
-        // Same bank — adjust only the difference
-        const diff = paidAmount - oldPaid
-        if (diff > 0) {
-          const [[bankRow]] = await conn.query(
-            'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
-            [newBankAccountId]
-          )
-          if (!bankRow) {
-            await conn.rollback(); conn.release()
-            return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
-          }
-          const bankBalance = Number(bankRow.balance)
-          if (bankBalance < diff) {
-            await conn.rollback(); conn.release()
-            return res.status(400).json({ error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.` })
-          }
-          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [diff, newBankAccountId])
-        } else if (diff < 0) {
-          await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [Math.abs(diff), newBankAccountId])
         }
       }
 
@@ -359,15 +403,17 @@ export const updateExpense = async (req, res, next) => {
         await conn.query(`UPDATE expenses SET ${sets.join(', ')} WHERE id = ?`, params)
       }
 
-      // Adjust site totalSpent
-      if (String(newSiteId) === String(oldSiteId)) {
-        const diff = newAmount - oldAmount
-        if (diff !== 0) {
-          await conn.query('UPDATE sites SET total_spent = total_spent + ? WHERE id = ?', [diff, oldSiteId])
+      // Adjust site totalSpent (only if already approved or owner expense)
+      if (hasDeductedBalance) {
+        if (String(newSiteId) === String(oldSiteId)) {
+          const diff = newAmount - oldAmount
+          if (diff !== 0) {
+            await conn.query('UPDATE sites SET total_spent = total_spent + ? WHERE id = ?', [diff, oldSiteId])
+          }
+        } else {
+          await conn.query('UPDATE sites SET total_spent = total_spent - ? WHERE id = ?', [oldAmount, oldSiteId])
+          await conn.query('UPDATE sites SET total_spent = total_spent + ? WHERE id = ?', [newAmount, newSiteId])
         }
-      } else {
-        await conn.query('UPDATE sites SET total_spent = total_spent - ? WHERE id = ?', [oldAmount, oldSiteId])
-        await conn.query('UPDATE sites SET total_spent = total_spent + ? WHERE id = ?', [newAmount, newSiteId])
       }
 
       if (shouldApply) {
@@ -451,6 +497,17 @@ export const deleteExpense = async (req, res, next) => {
       return res.status(404).json({ error: 'Expense not found' })
     }
 
+    // Role-based validation: manager cannot delete approved or rejected expenses, or others' expenses
+    if (req.user?.role === 'Manager') {
+      if (expense.createdBy && expense.createdBy !== req.user.username) {
+        return res.status(403).json({ error: 'You can only delete your own expenses.' })
+      }
+      const st = String(expense.approvalStatus || expense.approval_status || '').trim().toLowerCase()
+      if (st === 'approved' || st === 'rejected') {
+        return res.status(403).json({ error: 'Managers cannot delete approved or rejected expenses.' })
+      }
+    }
+
     const siteId = expense.site?._id || expense.site
     const supplierId = expense.supplier?._id || expense.supplier || null
 
@@ -471,10 +528,14 @@ export const deleteExpense = async (req, res, next) => {
 
       await conn.query('DELETE FROM expense_payments WHERE expense_id = ?', [req.params.id])
       await conn.query('DELETE FROM expenses WHERE id = ?', [req.params.id])
-      await conn.query('UPDATE sites SET total_spent = total_spent - ? WHERE id = ?', [expense.amount, siteId])
 
-      if (expense.bankAccountId && expense.paidAmount > 0) {
-        await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [expense.paidAmount, expense.bankAccountId])
+      const hasDeductedBalance = !expense.approvalStatus || expense.approvalStatus === 'Approved'
+      if (hasDeductedBalance) {
+        await conn.query('UPDATE sites SET total_spent = total_spent - ? WHERE id = ?', [expense.amount, siteId])
+
+        if (expense.bankAccountId && expense.paidAmount > 0) {
+          await conn.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [expense.paidAmount, expense.bankAccountId])
+        }
       }
       await conn.commit()
       conn.release()
@@ -719,6 +780,207 @@ export const getExpensePayments = async (req, res, next) => {
     })
 
     return res.json(payments)
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
+ * PUT /api/expenses/:id/approve
+ * Admin only: Approves a pending manager-submitted expense,
+ * performs atomic bank/cash balance deduction, records the expense payment transaction,
+ * updates site spending and material purchase, and marks as Approved.
+ */
+export const approveExpense = async (req, res, next) => {
+  try {
+    if (req.user?.role !== 'Admin') {
+      return res.status(403).json({ error: 'Only administrators can approve expenses.' })
+    }
+
+    const existingExpense = await Expense.findById(req.params.id)
+    if (!existingExpense) {
+      return res.status(404).json({ error: 'Expense not found' })
+    }
+
+    if (existingExpense.approvalStatus !== 'Pending') {
+      return res.status(400).json({
+        error: `Only pending expenses can be approved. This expense is already ${existingExpense.approvalStatus}.`,
+      })
+    }
+
+    const parsedPaid = Number(existingExpense.paidAmount) || 0
+    const calculatedAmount = Number(existingExpense.amount) || 0
+    const bankAccountId = existingExpense.bankAccountId
+    const paymentMethod = existingExpense.paymentMethod || 'Bank Transfer'
+    const isCashAccount =
+      String(bankAccountId || '').toLowerCase() === 'cash' ||
+      String(paymentMethod || '').toLowerCase() === 'cash'
+    const finalBankAccountId = isCashAccount ? null : (bankAccountId ? Number(bankAccountId) : null)
+    const finalPaymentMethod = isCashAccount ? 'Cash' : (paymentMethod || 'Bank Transfer')
+    const expenseCategory = existingExpense.category || 'Material'
+    const shouldApplyToMaterial = isQualifyingMaterialPurchase(expenseCategory, expenseCategory)
+    const siteId = existingExpense.site?._id || existingExpense.site
+
+    const conn = await getPool().getConnection()
+    try {
+      await conn.beginTransaction()
+
+      // Validate account and deduct balance if paidAmount > 0
+      if (parsedPaid > 0) {
+        if (isCashAccount) {
+          const cashSummary = await calculateLiveCashSummary(conn)
+          if (cashSummary.balance < parsedPaid) {
+            await conn.rollback()
+            conn.release()
+            return res.status(400).json({
+              error: `Insufficient cash balance. Available cash: ₹${cashSummary.balance.toLocaleString('en-IN')}, Requested: ₹${parsedPaid.toLocaleString('en-IN')}.`,
+            })
+          }
+        } else if (finalBankAccountId) {
+          const [[bankRow]] = await conn.query(
+            'SELECT balance FROM bank_accounts WHERE id = ? AND is_active = 1 FOR UPDATE',
+            [finalBankAccountId]
+          )
+          if (!bankRow) {
+            await conn.rollback()
+            conn.release()
+            return res.status(400).json({ error: 'Selected bank account not found or inactive.' })
+          }
+          const bankBalance = Number(bankRow.balance)
+          if (bankBalance < parsedPaid) {
+            await conn.rollback()
+            conn.release()
+            return res.status(400).json({
+              error: `Insufficient bank balance. Available balance: ₹${bankBalance.toLocaleString('en-IN')}.`,
+            })
+          }
+          await conn.query('UPDATE bank_accounts SET balance = balance - ? WHERE id = ?', [
+            parsedPaid,
+            finalBankAccountId,
+          ])
+        }
+
+        // Record transaction in expense_payments (prevent duplicates)
+        const [existingPayments] = await conn.query(
+          'SELECT id FROM expense_payments WHERE expense_id = ? LIMIT 1',
+          [existingExpense.id]
+        )
+        if (existingPayments.length === 0) {
+          await conn.query(
+            `INSERT INTO expense_payments
+              (expense_id, site_id, supplier_id, bank_account_id, amount, payment_date, payment_method, reference, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              existingExpense.id,
+              siteId,
+              existingExpense.supplier?._id || existingExpense.supplier || null,
+              finalBankAccountId,
+              parsedPaid,
+              existingExpense.date
+                ? new Date(existingExpense.date).toISOString().slice(0, 10)
+                : new Date().toISOString().slice(0, 10),
+              finalPaymentMethod,
+              existingExpense.remark || '',
+              'Approved Manager Expense Payment',
+            ]
+          )
+        }
+      }
+
+      // Update site total_spent
+      if (siteId && calculatedAmount > 0) {
+        await conn.query('UPDATE sites SET total_spent = total_spent + ? WHERE id = ?', [
+          calculatedAmount,
+          siteId,
+        ])
+      }
+
+      // Apply to material if qualifying
+      let appliedMaterialId = null
+      if (shouldApplyToMaterial && siteId) {
+        appliedMaterialId = await Material.applyExpensePurchase(conn, {
+          materialName: expenseCategory,
+          siteId: siteId,
+          supplierId: existingExpense.supplier?._id || existingExpense.supplier || null,
+          quantity: Number(existingExpense.quantity) || 0,
+          unit: existingExpense.unit || 'Units',
+          ratePerUnit: Number(existingExpense.ratePerUnit) || 0,
+          amount: calculatedAmount,
+          paidAmount: parsedPaid,
+          purchaseDate: existingExpense.date
+            ? new Date(existingExpense.date).toISOString().slice(0, 10)
+            : new Date().toISOString().slice(0, 10),
+          category: expenseCategory,
+          notes: existingExpense.remark || '',
+        })
+      }
+
+      // Mark as Approved with approving Admin and timestamp
+      await conn.query(
+        `UPDATE expenses 
+         SET approval_status = 'Approved', 
+             approved_by = ?, 
+             approved_at = NOW(),
+             applied_to_material = ?,
+             material_id = COALESCE(?, material_id)
+         WHERE id = ?`,
+        [
+          req.user?.username || 'Admin',
+          (shouldApplyToMaterial && siteId) ? 1 : 0,
+          appliedMaterialId || null,
+          existingExpense.id,
+        ]
+      )
+
+      await conn.commit()
+      conn.release()
+
+      const updated = await Expense.findById(existingExpense.id)
+      res.json(updated)
+    } catch (err) {
+      await conn.rollback()
+      conn.release()
+      throw err
+    }
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
+ * PUT /api/expenses/:id/reject
+ * Admin only: Rejects a pending manager-submitted expense.
+ * No transaction created, no bank/cash deducted, amounts unchanged.
+ */
+export const rejectExpense = async (req, res, next) => {
+  try {
+    if (req.user?.role !== 'Admin') {
+      return res.status(403).json({ error: 'Only administrators can reject expenses.' })
+    }
+
+    const existingExpense = await Expense.findById(req.params.id)
+    if (!existingExpense) {
+      return res.status(404).json({ error: 'Expense not found' })
+    }
+
+    if (existingExpense.approvalStatus !== 'Pending') {
+      return res.status(400).json({
+        error: `Only pending expenses can be rejected. This expense is already ${existingExpense.approvalStatus}.`,
+      })
+    }
+
+    const pool = getPool()
+    await pool.query(
+      `UPDATE expenses 
+       SET approval_status = 'Rejected', 
+           rejected_by = ?, 
+           rejected_at = NOW() 
+       WHERE id = ?`,
+      [req.user?.username || 'Admin', req.params.id]
+    )
+
+    const updated = await Expense.findById(req.params.id)
+    res.json(updated)
   } catch (error) {
     next(error)
   }

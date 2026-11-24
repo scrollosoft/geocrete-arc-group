@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
-import { Plus, Wallet } from 'lucide-react'
+import { Plus, Wallet, ArrowRightLeft } from 'lucide-react'
 import AddBankModal from './AddBankModal.jsx'
 import EditBankModal from './EditBankModal.jsx'
 import AddCashModal from './AddCashModal.jsx'
 import EditCashModal from './EditCashModal.jsx'
 import ManageCashModal from './ManageCashModal.jsx'
+import BankTransferForm from './BankTransferForm.jsx'
 import TransactionHistory from './TransactionHistory.jsx'
 
 const maskAccountNumber = (accNum) => {
@@ -38,6 +39,7 @@ export default function PaymentsPage({
   const [isAddCashOpen, setIsAddCashOpen] = useState(false)
   const [isEditCashOpen, setIsEditCashOpen] = useState(false)
   const [isManageCashOpen, setIsManageCashOpen] = useState(false)
+  const [isBankTransferOpen, setIsBankTransferOpen] = useState(false)
   const [txnRefreshTrigger, setTxnRefreshTrigger] = useState(0)
 
   const defaultColors = ['#3980FF', '#00B67A', '#07577A', '#FF9900']
@@ -119,6 +121,23 @@ export default function PaymentsPage({
           >
             <Plus size={16} strokeWidth={2.5} />
             <span>Add Bank</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-primary-action"
+            onClick={() => setIsBankTransferOpen((prev) => !prev)}
+            style={{
+              backgroundColor: '#0284C7',
+              borderColor: '#0284C7',
+              color: '#FFFFFF',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <ArrowRightLeft size={15} strokeWidth={2.4} />
+            <span>Bank Transfer</span>
           </button>
         </div>
       </div>
@@ -280,7 +299,24 @@ export default function PaymentsPage({
         )}
       </div>
 
-      {/* 3. Google Pay-Style Transaction History (Includes Bank & Cash Transactions) */}
+      {/* 3. Bank Transfer Form (Opens when Bank Transfer button is clicked) */}
+      {isBankTransferOpen && (
+        <BankTransferForm
+          bankAccounts={bankAccounts}
+          cashAccount={cashAccount}
+          allAccounts={accounts}
+          onClose={() => setIsBankTransferOpen(false)}
+          onTransferSuccess={async () => {
+            if (onRefreshAccounts) {
+              await onRefreshAccounts()
+            }
+            setTxnRefreshTrigger((prev) => prev + 1)
+          }}
+          showNotification={showNotification}
+        />
+      )}
+
+      {/* 4. Google Pay-Style Transaction History (Includes Bank & Cash Transactions) */}
       <TransactionHistory
         accounts={accounts}
         refreshTrigger={txnRefreshTrigger}
