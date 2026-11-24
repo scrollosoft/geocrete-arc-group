@@ -107,32 +107,27 @@ export default function SuppliersPage({
     const customCats = []
 
     rawCats.forEach((rawCat) => {
+      const trimmed = String(rawCat || '').trim()
+      if (!trimmed || trimmed.toLowerCase() === 'other') return
+
       const matchedStd = standardCats.find(
-        (sc) => sc.toLowerCase() === rawCat.toLowerCase()
+        (sc) => sc.toLowerCase() === trimmed.toLowerCase()
       )
       if (matchedStd) {
         if (!stdSelected.includes(matchedStd)) {
           stdSelected.push(matchedStd)
         }
       } else {
-        customCats.push(rawCat)
+        if (!customCats.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+          customCats.push(trimmed)
+        }
       }
     })
 
-    let selectedCategories = [...stdSelected]
-    let customCatVal = (item.customCategory || '').trim()
-
-    if (customCats.length > 0 || customCatVal) {
-      if (!selectedCategories.includes('Other')) {
-        selectedCategories.push('Other')
-      }
-      if (!customCatVal) {
-        const nonOther = customCats.filter((c) => c.toLowerCase() !== 'other')
-        if (nonOther.length > 0) {
-          customCatVal = nonOther.join(', ').replace(/^Other\s*[:\-]\s*/i, '').trim()
-        }
-      }
-    }
+    // All categories available for this supplier: standard categories + custom categories already associated with this supplier + 'Other'
+    const availableCategories = [...standardCats, ...customCats, 'Other']
+    // All categories currently associated with this supplier start as selected
+    const selectedCategories = [...stdSelected, ...customCats]
 
     setEditFormData({
       id: item._id || item.id,
@@ -142,8 +137,9 @@ export default function SuppliersPage({
       phone: item.phone || '',
       email: item.email || '',
       address: item.address || '',
+      availableCategories,
       categories: selectedCategories,
-      customCategory: customCatVal,
+      customCategory: '',
       paymentTerms: item.paymentTerms || 'Immediate',
       status: item.isActive === false ? 'Inactive' : 'Active',
     })
@@ -176,15 +172,27 @@ export default function SuppliersPage({
     const hasOther = (editFormData.categories || []).includes('Other')
     const customCat = (editFormData.customCategory || '').trim()
     if (hasOther && !customCat) {
-      setEditError('Please specify the custom category for "Other".')
+      setEditError('Please enter the material category name for "Other".')
       return
     }
+
+    const selectedWithoutOther = (editFormData.categories || []).filter((c) => c !== 'Other')
+    const finalCategories = [...selectedWithoutOther]
+    if (hasOther && customCat) {
+      const alreadyHas = finalCategories.some((c) => c.toLowerCase() === customCat.toLowerCase())
+      if (!alreadyHas) {
+        finalCategories.push(customCat)
+      }
+    }
+
+    if (finalCategories.length === 0) {
+      setEditError('Please select at least one material category.')
+      return
+    }
+
     setEditLoading(true)
     setEditError('')
     try {
-      const finalCategories = (editFormData.categories || []).map((c) =>
-        c === 'Other' ? (customCat || 'Other') : c
-      )
       const payload = {
         name: editFormData.name.trim(),
         companyName: (editFormData.companyName || editFormData.name).trim(),
@@ -821,7 +829,7 @@ export default function SuppliersPage({
                     Material / Service Categories
                   </label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {AVAILABLE_CATEGORIES.map((cat) => {
+                    {(editFormData.availableCategories || AVAILABLE_CATEGORIES).map((cat) => {
                       const isSel = (editFormData.categories || []).includes(cat)
                       return (
                         <button
