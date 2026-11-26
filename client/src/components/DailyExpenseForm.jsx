@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react'
-import { Calendar, Plus } from 'lucide-react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { Calendar, Plus, Paperclip, X } from 'lucide-react'
 import { expenseService } from '../services/expenseService.js'
+import { fileService } from '../services/fileService.js'
 import WhatsAppSharePromptModal from './WhatsAppSharePromptModal.jsx'
 
 const getTodayString = () => new Date().toISOString().split('T')[0]
@@ -41,6 +42,8 @@ export default function DailyExpenseForm({
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [whatsappExpense, setWhatsappExpense] = useState(null)
+  const [selectedFile, setSelectedFile] = useState(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     if (initialData) {
@@ -109,6 +112,37 @@ export default function DailyExpenseForm({
     if (errorMessage) setErrorMessage('')
   }
 
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const validExts = ['pdf', 'jpg', 'jpeg', 'png']
+    const ext = (file.name.split('.').pop() || '').toLowerCase()
+    const validMimes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+
+    if (!validExts.includes(ext) && !validMimes.includes(file.type)) {
+      setErrorMessage('Please select a valid document (PDF, JPG, JPEG, or PNG).')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
+    if (file.size > 100 * 1024 * 1024) {
+      setErrorMessage('File size exceeds maximum allowed limit of 100 MB.')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
+    setErrorMessage('')
+    setSelectedFile(file)
+  }
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setErrorMessage('')
@@ -170,6 +204,17 @@ export default function DailyExpenseForm({
     try {
       setSubmitting(true)
 
+      let uploadedFile = null
+      if (selectedFile) {
+        try {
+          uploadedFile = await fileService.uploadFile(selectedFile)
+        } catch (uploadErr) {
+          setErrorMessage(uploadErr.message || 'Failed to upload attached file.')
+          setSubmitting(false)
+          return
+        }
+      }
+
       const payload = {
         date: formData.date,
         site: formData.site,
@@ -182,6 +227,9 @@ export default function DailyExpenseForm({
         bankAccountId: numPaid > 0 ? (formData.bankAccountId || undefined) : undefined,
         remark: formData.remark,
         paidAmount: numPaid,
+        attachmentPath: uploadedFile ? uploadedFile.file_name : undefined,
+        attachmentName: uploadedFile ? uploadedFile.original_name : undefined,
+        fileId: uploadedFile ? uploadedFile.id : undefined,
       }
 
       const created = await expenseService.create(payload)
@@ -207,6 +255,10 @@ export default function DailyExpenseForm({
         remark: '',
       })
       setCustomUnit('')
+      setSelectedFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
 
       if (onExpenseCreated) {
         onExpenseCreated(created)
@@ -395,8 +447,8 @@ export default function DailyExpenseForm({
           </div>
         </div>
 
-        {/* Row 3: Bank Account, Remark, Total Amount (read-only), Paid Amount, Submit */}
-        <div className="form-bottom-row form-bottom-row-5col">
+        {/* Row 3: Bank Account, Remark, Upload File (3 fields) */}
+        <div className="form-bottom-row form-bottom-row-3col">
           <div className="form-group">
             <label className="form-label" htmlFor="expense-bank">Bank Account</label>
             <select
@@ -428,6 +480,111 @@ export default function DailyExpenseForm({
             />
           </div>
 
+          <div className="form-group form-file-group">
+            <label className="form-label" htmlFor="expense-file">Upload File</label>
+            <input
+              id="expense-file"
+              type="file"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              accept=".pdf,.jpg,.jpeg,.png,image/jpeg,image/png,application/pdf"
+              onChange={handleFileSelect}
+            />
+            {!selectedFile ? (
+              <button
+                type="button"
+                className="form-input"
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  backgroundColor: '#FFFFFF',
+                  color: '#64748B',
+                  textAlign: 'left',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '8px',
+                  height: '42px',
+                  padding: '0 12px',
+                  fontSize: '13.5px',
+                  width: '100%',
+                }}
+              >
+                <Paperclip size={15} style={{ color: '#0284C7', flexShrink: 0 }} />
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Choose File
+                </span>
+              </button>
+            ) : (
+              <div
+                className="form-input"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#F0F9FF',
+                  border: '1px solid #BAE6FD',
+                  borderRadius: '8px',
+                  height: '42px',
+                  padding: '0 10px',
+                  width: '100%',
+                  gap: '6px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    flex: 1,
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  title={`Click to replace: ${selectedFile.name}`}
+                >
+                  <Paperclip size={14} style={{ color: '#0284C7', flexShrink: 0 }} />
+                  <span
+                    style={{
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      color: '#0369A1',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {selectedFile.name}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: '2px',
+                    cursor: 'pointer',
+                    color: '#94A3B8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                  title="Remove file"
+                  onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = '#94A3B8')}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Row 4: Total Amount (read-only), Paid Amount, Submit (3 fields) */}
+        <div className="form-bottom-row form-bottom-row-3col">
           <div className="form-group">
             <label className="form-label" htmlFor="expense-total-amount">Total Amount (₹)</label>
             <div className="input-with-prefix">
@@ -463,12 +620,12 @@ export default function DailyExpenseForm({
             </div>
           </div>
 
-          <div className="form-group form-submit-group" style={{ minWidth: '125px' }}>
+          <div className="form-group form-submit-group">
             <button
               type="submit"
               className="btn btn-add-expense-submit"
               disabled={submitting}
-              style={{ whiteSpace: 'nowrap' }}
+              style={{ whiteSpace: 'nowrap', height: '42px' }}
             >
               <Plus size={16} style={{ flexShrink: 0 }} />
               <span style={{ whiteSpace: 'nowrap' }}>{submitting ? 'Recording...' : 'Add Expense'}</span>

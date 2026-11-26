@@ -809,7 +809,12 @@ export default function App() {
                       {dashboardTab === 'consulting' && (
                         <ConsultingForm
                           bankAccounts={accounts}
+                          consultingList={consultingList}
                           onConsultingCreated={() => {
+                            loadConsulting()
+                            loadBankAccounts()
+                          }}
+                          onPaymentRecorded={() => {
                             loadConsulting()
                             loadBankAccounts()
                           }}

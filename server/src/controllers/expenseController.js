@@ -65,6 +65,9 @@ export const createExpense = async (req, res, next) => {
       bankAccountId,
       paymentMethod,
       remark,
+      attachmentPath,
+      attachmentName,
+      fileId,
     } = req.body
 
     if (!site) {
@@ -165,9 +168,9 @@ export const createExpense = async (req, res, next) => {
         `INSERT INTO expenses
           (date, site_id, supplier_id, category,
            quantity, unit, rate_per_unit, amount, paid_amount, pending_amount,
-           payment_method, remark, status, applied_to_material, bank_account_id,
+           payment_method, remark, attachment_path, attachment_name, file_id, status, applied_to_material, bank_account_id,
            created_by, created_by_role, approval_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           expenseDate,
           site,
@@ -181,6 +184,9 @@ export const createExpense = async (req, res, next) => {
           calculatedPending,
           finalPaymentMethod,
           remark || '',
+          attachmentPath || null,
+          attachmentName || null,
+          fileId ? Number(fileId) : null,
           expenseStatus,
           (!isPending && shouldApplyToMaterial) ? 1 : 0,
           finalBankAccountId,
@@ -385,6 +391,9 @@ export const updateExpense = async (req, res, next) => {
         paymentMethod: 'payment_method', remark: 'remark', status: 'status',
         appliedToMaterial: 'applied_to_material',
         bankAccountId: 'bank_account_id',
+        attachmentPath: 'attachment_path',
+        attachmentName: 'attachment_name',
+        fileId: 'file_id',
       }
       const sets = []
       const params = []
@@ -394,7 +403,9 @@ export const updateExpense = async (req, res, next) => {
           let val = updateData[apiKey]
           if (apiKey === 'date') val = new Date(val).toISOString().slice(0, 10)
           if (['quantity','ratePerUnit','amount','paidAmount','pendingAmount','appliedToMaterial'].includes(apiKey)) val = Number(val)
-          if ((apiKey === 'supplier' || apiKey === 'bankAccountId') && !val) val = null
+          if ((apiKey === 'supplier' || apiKey === 'bankAccountId' || apiKey === 'fileId') && !val) val = null
+          if (apiKey === 'fileId' && val) val = Number(val)
+          if (['attachmentPath', 'attachmentName'].includes(apiKey) && !val) val = null
           params.push(val)
         }
       }

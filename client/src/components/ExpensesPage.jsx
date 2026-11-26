@@ -12,9 +12,13 @@ import {
   ArrowLeft,
   CheckCircle,
   XCircle,
+  Paperclip,
+  Download,
+  ExternalLink,
 } from 'lucide-react'
 import TablePagination from './TablePagination.jsx'
 import { expenseService, approveExpense, rejectExpense } from '../services/expenseService.js'
+import { fileService } from '../services/fileService.js'
 import { request } from '../services/api.js'
 import AddExpenseModal from './AddExpenseModal.jsx'
 import MakeExpensePaymentModal from './MakeExpensePaymentModal.jsx'
@@ -82,7 +86,9 @@ export default function ExpensesPage({
         (fresh.updatedAt !== viewExpense.updatedAt ||
           fresh.paidAmount !== viewExpense.paidAmount ||
           fresh.pendingAmount !== viewExpense.pendingAmount ||
-          fresh.amount !== viewExpense.amount)
+          fresh.amount !== viewExpense.amount ||
+          fresh.attachmentPath !== viewExpense.attachmentPath ||
+          fresh.attachmentName !== viewExpense.attachmentName)
       ) {
         setViewExpense(fresh)
       }
@@ -641,6 +647,61 @@ export default function ExpensesPage({
                 </p>
               </div>
             )}
+            {(viewExpense.attachmentName || viewExpense.attachmentPath) && (() => {
+              const fileRef = viewExpense.fileId || viewExpense.attachmentPath
+              const viewUrl = fileService.getViewUrl(fileRef)
+              const downloadUrl = fileService.getDownloadUrl(fileRef)
+              const fileName = viewExpense.attachmentName || viewExpense.attachmentPath
+
+              return (
+                <div>
+                  <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Attachment</span>
+                  <div style={{ margin: '4px 0 0 0', display: 'inline-flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <a
+                      href={viewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        color: '#0284C7',
+                        textDecoration: 'none',
+                        fontSize: '14.5px',
+                        fontWeight: 600,
+                      }}
+                      title={fileName}
+                    >
+                      <Paperclip size={14} />
+                      <span style={{ textDecoration: 'underline' }}>{fileName}</span>
+                    </a>
+                    <a
+                      href={downloadUrl}
+                      download={fileName}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '4px 10px',
+                        backgroundColor: '#0284C7',
+                        color: '#FFFFFF',
+                        borderRadius: '6px',
+                        border: 'none',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        textDecoration: 'none',
+                        cursor: 'pointer',
+                        lineHeight: 1,
+                      }}
+                      title="Download file"
+                    >
+                      <Download size={13} />
+                      <span>Download</span>
+                    </a>
+                  </div>
+                </div>
+              )
+            })()}
             <div style={{ gridColumn: '1 / -1' }}>
               <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks / Notes</span>
               <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#334155', lineHeight: '1.5' }}>{viewExpense.remark || viewExpense.description || 'No additional remarks provided.'}</p>
@@ -789,8 +850,11 @@ export default function ExpensesPage({
             sites={sites}
             suppliers={suppliers}
             bankAccounts={bankAccounts}
-            onExpenseUpdated={() => {
+            onExpenseUpdated={(updated) => {
               setEditingExpense(null)
+              if (updated) {
+                setViewExpense(updated)
+              }
               setPaymentRefreshKey((k) => k + 1)
               if (onExpenseChanged) onExpenseChanged()
             }}
@@ -997,7 +1061,7 @@ export default function ExpensesPage({
 
         {(() => {
           const isManagerTab = isManagerUser || expenseTab === 'manager'
-          const colSpanCount = isManagerTab ? 9 : 7
+          const colSpanCount = isManagerTab ? 10 : 8
 
           return (
             <div className="sites-table-scroll">
@@ -1012,6 +1076,7 @@ export default function ExpensesPage({
                     <th className="th-pending">PENDING</th>
                     {isManagerTab && <th className="th-manager">MANAGER</th>}
                     {isManagerTab && <th className="th-status">STATUS</th>}
+                    <th className="th-attachment">ATTACHMENT</th>
                     <th className="th-actions">ACTION</th>
                   </tr>
                 </thead>
@@ -1075,6 +1140,38 @@ export default function ExpensesPage({
                             </td>
                           )
                         })()}
+
+                        <td className="td-attachment">
+                          {item.attachmentName || item.attachmentPath ? (
+                            <a
+                              href={fileService.getViewUrl(item.fileId || item.attachmentPath)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                color: '#0284C7',
+                                textDecoration: 'none',
+                                fontWeight: 500,
+                                fontSize: '12.5px',
+                                maxWidth: '140px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={`View ${item.attachmentName || item.attachmentPath}`}
+                            >
+                              <Paperclip size={13} style={{ flexShrink: 0 }} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {item.attachmentName || item.attachmentPath}
+                              </span>
+                            </a>
+                          ) : (
+                            <span style={{ color: '#94A3B8' }}>—</span>
+                          )}
+                        </td>
 
                         <td className="td-actions">
                           <div className="site-actions-group">

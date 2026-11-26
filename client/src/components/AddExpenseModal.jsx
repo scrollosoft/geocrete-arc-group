@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react'
-import { X, Receipt } from 'lucide-react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { X, Receipt, Paperclip } from 'lucide-react'
 import { expenseService } from '../services/expenseService.js'
 import { materialService } from '../services/materialService.js'
+import { fileService } from '../services/fileService.js'
 import WhatsAppSharePromptModal from './WhatsAppSharePromptModal.jsx'
 
 
@@ -61,6 +62,9 @@ export default function AddExpenseModal({
   const [materialsList, setMaterialsList] = useState([])
   const [whatsappExpense, setWhatsappExpense] = useState(null)
   const [customUnit, setCustomUnit] = useState('')
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [existingAttachment, setExistingAttachment] = useState(null)
+  const fileInputRef = useRef(null)
 
   // Load actual materials when modal opens
   useEffect(() => {
@@ -104,6 +108,16 @@ export default function AddExpenseModal({
         remark: expenseToEdit.remark || '',
       })
       setCustomUnit(hasCustomUnit ? savedUnit : '')
+      if (expenseToEdit.attachmentName || expenseToEdit.attachmentPath) {
+        setExistingAttachment({
+          name: expenseToEdit.attachmentName || expenseToEdit.attachmentPath,
+          path: expenseToEdit.attachmentPath,
+          fileId: expenseToEdit.fileId,
+        })
+      } else {
+        setExistingAttachment(null)
+      }
+      setSelectedFile(null)
       setError('')
     } else {
       setFormData({
@@ -119,6 +133,9 @@ export default function AddExpenseModal({
         bankAccountId: '',
         remark: '',
       })
+      setCustomUnit('')
+      setExistingAttachment(null)
+      setSelectedFile(null)
       setError('')
     }
   }, [isOpen, expenseToEdit, sites])
@@ -220,6 +237,38 @@ export default function AddExpenseModal({
       ? Number(formData.quantity) * Number(formData.ratePerUnit)
       : 0
 
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const validExts = ['pdf', 'jpg', 'jpeg', 'png']
+    const ext = (file.name.split('.').pop() || '').toLowerCase()
+    const validMimes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+
+    if (!validExts.includes(ext) && !validMimes.includes(file.type)) {
+      setError('Please select a valid document (PDF, JPG, JPEG, or PNG).')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
+    if (file.size > 100 * 1024 * 1024) {
+      setError('File size exceeds maximum allowed limit of 100 MB.')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
+    setError('')
+    setSelectedFile(file)
+  }
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null)
+    setExistingAttachment(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -287,6 +336,17 @@ export default function AddExpenseModal({
     try {
       setSubmitting(true)
 
+      let uploadedFile = null
+      if (selectedFile) {
+        try {
+          uploadedFile = await fileService.uploadFile(selectedFile)
+        } catch (uploadErr) {
+          setError(uploadErr.message || 'Failed to upload attached file.')
+          setSubmitting(false)
+          return
+        }
+      }
+
       const payload = {
         date: formData.date || getTodayString(),
         site: formData.site,
@@ -299,6 +359,15 @@ export default function AddExpenseModal({
         bankAccountId: numPaid > 0 ? (formData.bankAccountId || undefined) : undefined,
         paymentMethod: formData.paymentMethod || 'Bank Transfer',
         remark: formData.remark.trim(),
+        attachmentPath: uploadedFile
+          ? uploadedFile.file_name
+          : (existingAttachment ? existingAttachment.path : null),
+        attachmentName: uploadedFile
+          ? uploadedFile.original_name
+          : (existingAttachment ? existingAttachment.name : null),
+        fileId: uploadedFile
+          ? uploadedFile.id
+          : (existingAttachment ? existingAttachment.fileId : null),
       }
 
       if (expenseToEdit) {
@@ -662,6 +731,113 @@ export default function AddExpenseModal({
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Upload File (on right side of Bank Account) */}
+            <div className="form-group">
+              <label className="form-label" style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: '#172033', marginBottom: '6px' }}>
+                Upload File
+              </label>
+              <input
+                id="edit-expense-file"
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                accept=".pdf,.jpg,.jpeg,.png,image/jpeg,image/png,application/pdf"
+                onChange={handleFileSelect}
+              />
+              {!selectedFile && !existingAttachment ? (
+                <button
+                  type="button"
+                  className="form-input"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    backgroundColor: '#FFFFFF',
+                    color: '#64748B',
+                    textAlign: 'left',
+                    border: '1px solid #E5EAF1',
+                    borderRadius: '8px',
+                    height: '42px',
+                    padding: '0 14px',
+                    fontSize: '14px',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <Paperclip size={15} style={{ color: '#0284C7', flexShrink: 0 }} />
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    Choose File
+                  </span>
+                </button>
+              ) : (
+                <div
+                  className="form-input"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: '#F0F9FF',
+                    border: '1px solid #BAE6FD',
+                    borderRadius: '8px',
+                    height: '42px',
+                    padding: '0 12px',
+                    width: '100%',
+                    gap: '6px',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      flex: 1,
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                    title={`Click to replace: ${selectedFile ? selectedFile.name : existingAttachment?.name}`}
+                  >
+                    <Paperclip size={14} style={{ color: '#0284C7', flexShrink: 0 }} />
+                    <span
+                      style={{
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: '#0369A1',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {selectedFile ? selectedFile.name : existingAttachment?.name}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveFile}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: '2px',
+                      cursor: 'pointer',
+                      color: '#94A3B8',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                    title="Remove file"
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = '#94A3B8')}
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* 13. Remark / Notes */}

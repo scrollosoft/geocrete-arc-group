@@ -724,6 +724,14 @@
   grid-template-columns: repeat(5, 1fr);
 }
 
+.form-bottom-row.form-bottom-row-6col {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.form-bottom-row.form-bottom-row-3col {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .form-remark-group {
   grid-column: span 1;
 }
@@ -1413,7 +1421,9 @@
     grid-template-columns: repeat(2, 1fr);
   }
   .form-bottom-row,
-  .form-bottom-row.form-bottom-row-5col {
+  .form-bottom-row.form-bottom-row-5col,
+  .form-bottom-row.form-bottom-row-6col,
+  .form-bottom-row.form-bottom-row-3col {
     grid-template-columns: repeat(2, 1fr);
   }
   .form-remark-group {
@@ -1440,7 +1450,9 @@
     grid-template-columns: 1fr;
   }
   .form-bottom-row,
-  .form-bottom-row.form-bottom-row-5col {
+  .form-bottom-row.form-bottom-row-5col,
+  .form-bottom-row.form-bottom-row-6col,
+  .form-bottom-row.form-bottom-row-3col {
     grid-template-columns: 1fr;
   }
   .form-remark-group,
@@ -5861,7 +5873,9 @@
   }
 
   .form-bottom-row,
-  .form-bottom-row.form-bottom-row-5col {
+  .form-bottom-row.form-bottom-row-5col,
+  .form-bottom-row.form-bottom-row-6col,
+  .form-bottom-row.form-bottom-row-3col {
     grid-template-columns: 1fr;
   }
 

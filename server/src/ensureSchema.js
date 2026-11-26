@@ -55,6 +55,30 @@ export async function ensureSchema() {
     console.log('Added expenses.applied_to_material column')
   }
 
+  if (!(await columnExists(pool, 'expenses', 'attachment_path'))) {
+    await pool.query(
+      `ALTER TABLE expenses
+       ADD COLUMN attachment_path VARCHAR(255) NULL DEFAULT NULL AFTER remark`,
+    )
+    console.log('Added expenses.attachment_path column')
+  }
+
+  if (!(await columnExists(pool, 'expenses', 'attachment_name'))) {
+    await pool.query(
+      `ALTER TABLE expenses
+       ADD COLUMN attachment_name VARCHAR(255) NULL DEFAULT NULL AFTER attachment_path`,
+    )
+    console.log('Added expenses.attachment_name column')
+  }
+
+  if (!(await columnExists(pool, 'expenses', 'file_id'))) {
+    await pool.query(
+      `ALTER TABLE expenses
+       ADD COLUMN file_id INT UNSIGNED NULL DEFAULT NULL AFTER attachment_name`,
+    )
+    console.log('Added expenses.file_id column')
+  }
+
   if (!(await columnExists(pool, 'bank_accounts', 'account_holder_name'))) {
     await pool.query(
       `ALTER TABLE bank_accounts

@@ -54,6 +54,9 @@ const toApi = (row) => {
     pendingAmount: Number(row.pending_amount),
     paymentMethod: row.payment_method || 'Bank Transfer',
     remark:        row.remark || '',
+    attachmentPath: row.attachment_path || null,
+    attachmentName: row.attachment_name || null,
+    fileId:        row.file_id ? String(row.file_id) : null,
     status:        row.status,
     paymentStatus: row.status === 'Pending' ? 'Unpaid' : row.status,
     appliedToMaterial: Boolean(row.applied_to_material),
@@ -189,8 +192,8 @@ export const Expense = {
       `INSERT INTO expenses
         (date, site_id, supplier_id, bank_account_id, category,
          quantity, unit, rate_per_unit, amount, paid_amount, pending_amount,
-         payment_method, remark, status, created_by, created_by_role, approval_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         payment_method, remark, attachment_path, attachment_name, file_id, status, created_by, created_by_role, approval_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.date ? new Date(data.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
         data.site || data.siteId,
@@ -205,6 +208,9 @@ export const Expense = {
         Number(data.pendingAmount) || 0,
         data.paymentMethod || 'Bank Transfer',
         data.remark || '',
+        data.attachmentPath || null,
+        data.attachmentName || null,
+        data.fileId ? Number(data.fileId) : null,
         status,
         createdBy,
         createdByRole,
@@ -233,6 +239,9 @@ export const Expense = {
       pendingAmount: 'pending_amount',
       paymentMethod: 'payment_method',
       remark:        'remark',
+      attachmentPath: 'attachment_path',
+      attachmentName: 'attachment_name',
+      fileId:        'file_id',
       status:        'status',
       paymentStatus: 'status',
       createdBy:      'created_by',

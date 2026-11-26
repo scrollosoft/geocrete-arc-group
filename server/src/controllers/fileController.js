@@ -43,9 +43,15 @@ export async function viewFile(req, res, next) {
   try {
     const { id } = req.params
     const pool = getPool()
-    const [rows] = await pool.query('SELECT * FROM files WHERE id = ?', [id])
+    let [rows] = await pool.query('SELECT * FROM files WHERE id = ? OR file_name = ?', [id, id])
 
     if (!rows.length) {
+      // Check physical file directly as fallback
+      const directPath = path.resolve(uploadsDir, id)
+      if (fs.existsSync(directPath)) {
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(id)}"`)
+        return res.sendFile(directPath)
+      }
       return res.status(404).json({ error: 'File record not found.' })
     }
 
@@ -69,9 +75,13 @@ export async function downloadFile(req, res, next) {
   try {
     const { id } = req.params
     const pool = getPool()
-    const [rows] = await pool.query('SELECT * FROM files WHERE id = ?', [id])
+    let [rows] = await pool.query('SELECT * FROM files WHERE id = ? OR file_name = ?', [id, id])
 
     if (!rows.length) {
+      const directPath = path.resolve(uploadsDir, id)
+      if (fs.existsSync(directPath)) {
+        return res.download(directPath, id)
+      }
       return res.status(404).json({ error: 'File record not found.' })
     }
 
