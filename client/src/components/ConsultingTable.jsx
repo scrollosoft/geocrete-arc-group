@@ -535,7 +535,7 @@ export default function ConsultingTable({
                           <button
                             type="button"
                             className="btn-make-payment"
-                            title="Record Payment"
+                            title="Receive Payment"
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -555,7 +555,7 @@ export default function ConsultingTable({
                             onClick={() => handleOpenMakePayment(item)}
                           >
                             <CreditCard size={13} />
-                            <span>Make Payment</span>
+                            <span>Receive Payment</span>
                           </button>
                         )}
 
