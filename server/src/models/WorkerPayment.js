@@ -539,7 +539,7 @@ export const WorkerPayment = {
       // Handle bank balance adjustments
       if (oldBankId === newBankId) {
         const diff = newAmount - oldAmount
-        if (diff !== 0) {
+        if (diff !== 0 && newBankId) {
           const [[bank]] = await conn.query('SELECT balance, bank_name FROM bank_accounts WHERE id = ? FOR UPDATE', [newBankId])
           if (!bank) throw new Error('Bank account not found.')
           if (diff > 0 && Number(bank.balance) < diff) {

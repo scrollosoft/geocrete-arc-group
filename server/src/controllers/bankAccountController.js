@@ -945,3 +945,24 @@ export const transferFunds = async (req, res, next) => {
     conn.release()
   }
 }
+
+// ── Delete All Transaction History ──────────────────────────────────────────
+export const deleteAllTransactions = async (_req, res, next) => {
+  const pool = getPool()
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    // Delete all payment/transaction records (does NOT touch worker registrations or bank accounts)
+    await conn.execute('DELETE FROM worker_payments')
+    await conn.execute('DELETE FROM expense_payments')
+    await conn.execute('DELETE FROM client_payments')
+    await conn.execute('DELETE FROM cash')
+    await conn.commit()
+    return res.json({ success: true, message: 'All transaction history has been deleted.' })
+  } catch (err) {
+    await conn.rollback()
+    next(err)
+  } finally {
+    conn.release()
+  }
+}

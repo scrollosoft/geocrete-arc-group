@@ -10,6 +10,7 @@ import {
   Receipt,
   ChevronRight,
   Wallet,
+  Trash2,
 } from 'lucide-react'
 import { bankAccountService } from '../services/bankAccountService.js'
 import TransactionDetailModal from './TransactionDetailModal.jsx'
@@ -56,6 +57,10 @@ export default function TransactionHistory({
 
   // Selected transaction for Google Pay detail modal
   const [selectedTxn, setSelectedTxn] = useState(null)
+
+  // Delete all confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const loadTransactions = useCallback(async () => {
     try {
@@ -195,6 +200,20 @@ export default function TransactionHistory({
     setSearchQuery('')
   }
 
+  const handleDeleteAllTransactions = async () => {
+    try {
+      setDeleting(true)
+      await bankAccountService.deleteAllTransactions()
+      setShowDeleteConfirm(false)
+      await loadTransactions()
+    } catch (err) {
+      console.error('Failed to delete all transactions:', err)
+      alert('Failed to delete transaction history. Please try again.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="gpay-history-container">
       {/* 1. Header & Summary Bar */}
@@ -205,6 +224,30 @@ export default function TransactionHistory({
             <span className="gpay-history-count-badge">
               {filteredTransactions.length} {filteredTransactions.length === 1 ? 'Transaction' : 'Transactions'}
             </span>
+            {transactions.length > 0 && (
+              <button
+                type="button"
+                title="Delete All Transaction History"
+                onClick={() => setShowDeleteConfirm(true)}
+                style={{
+                  marginLeft: '10px',
+                  background: 'none',
+                  border: '1px solid #f87171',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: '#ef4444',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                }}
+              >
+                <Trash2 size={13} />
+                Delete All
+              </button>
+            )}
           </div>
           <p className="gpay-history-subtitle">
             Google Pay-style real-time activity across your bank accounts
@@ -515,6 +558,66 @@ export default function TransactionHistory({
         onClose={() => setSelectedTxn(null)}
         transaction={selectedTxn}
       />
+
+      {/* 5. Delete All Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => !deleting && setShowDeleteConfirm(false)}
+        >
+          <div
+            style={{
+              background: '#fff', borderRadius: '12px', padding: '28px 32px',
+              maxWidth: '400px', width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <Trash2 size={22} color="#ef4444" />
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#1e293b' }}>
+                Delete All Transaction History?
+              </h3>
+            </div>
+            <p style={{ margin: '0 0 20px', fontSize: '14px', color: '#64748b', lineHeight: 1.5 }}>
+              This will permanently delete <strong>all</strong> transaction records including
+              worker payments, expense payments, client payments, and cash entries.
+              <br /><br />
+              <strong style={{ color: '#ef4444' }}>This action cannot be undone.</strong>
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setShowDeleteConfirm(false)}
+                style={{
+                  padding: '8px 18px', borderRadius: '7px', border: '1px solid #e2e8f0',
+                  background: '#f8fafc', cursor: 'pointer', fontSize: '14px', fontWeight: 500,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={handleDeleteAllTransactions}
+                style={{
+                  padding: '8px 18px', borderRadius: '7px', border: 'none',
+                  background: '#ef4444', color: '#fff', cursor: deleting ? 'not-allowed' : 'pointer',
+                  fontSize: '14px', fontWeight: 600, opacity: deleting ? 0.7 : 1,
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                }}
+              >
+                <Trash2 size={14} />
+                {deleting ? 'Deleting...' : 'Yes, Delete All'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

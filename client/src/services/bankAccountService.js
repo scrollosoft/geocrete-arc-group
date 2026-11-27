@@ -17,4 +17,6 @@ export const bankAccountService = {
     const qs = new URLSearchParams(cleanParams).toString()
     return request(`/bank-accounts/transactions${qs ? `?${qs}` : ''}`)
   },
+  deleteAllTransactions: () =>
+    request('/bank-accounts/transactions/all', { method: 'DELETE' }),
 }
