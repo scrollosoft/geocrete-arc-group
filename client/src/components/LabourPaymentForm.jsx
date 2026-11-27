@@ -10,6 +10,7 @@ import {
   X,
   User,
   HardHat,
+  Building2,
 } from 'lucide-react'
 import { workerPaymentService } from '../services/workerPaymentService.js'
 import { labourService } from '../services/labourService.js'
@@ -24,19 +25,19 @@ export default function LabourPaymentForm({
   showNotification,
 }) {
   const [workersList, setWorkersList] = useState(initialWorkers)
-  const [selectedWorkerId, setSelectedWorkerId] = useState('')
+  const [selectedWorkerKey, setSelectedWorkerKey] = useState('')
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState('')
   const [workerSearch, setWorkerSearch] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
 
   // Form inputs
-  const [siteId, setSiteId] = useState('')
   const [amount, setAmount] = useState('')
   const [bankAccountId, setBankAccountId] = useState('')
   const [paymentDate, setPaymentDate] = useState(getTodayString())
   const [remarks, setRemarks] = useState('')
 
-  // Live worker financial metrics fetched from payment history
+  // Live worker financial metrics fetched from payment history for selected assignment
   const [liveWorkerPayments, setLiveWorkerPayments] = useState([])
   const [loadingLiveDetails, setLoadingLiveDetails] = useState(false)
 
@@ -63,109 +64,70 @@ export default function LabourPaymentForm({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Currently selected worker object from list
+  // ── Group workers by unique identity (Name + Phone) ──
+  const workerGroups = useMemo(() => {
+    const map = new Map()
+    workersList.forEach((w) => {
+      const key = (w.name || '').trim().toLowerCase()
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          name: w.name,
+          phone: w.phone,
+          assignments: [],
+        })
+      }
+      map.get(key).assignments.push(w)
+    })
+    return Array.from(map.values())
+  }, [workersList])
+
+  // Currently selected worker group
   const selectedWorker = useMemo(() => {
-    if (!selectedWorkerId) return null
-    return (
-      workersList.find(
-        (w) => String(w._id || w.id) === String(selectedWorkerId)
-      ) || null
-    )
-  }, [selectedWorkerId, workersList])
+    if (!selectedWorkerKey) return null
+    return workerGroups.find((g) => g.key === selectedWorkerKey) || null
+  }, [selectedWorkerKey, workerGroups])
 
   // Filtered workers for the searchable dropdown
   const filteredWorkers = useMemo(() => {
-    if (!workerSearch.trim()) return workersList
+    if (!workerSearch.trim()) return workerGroups
     const q = workerSearch.toLowerCase().trim()
-    return workersList.filter((w) => {
-      const name = (w.name || '').toLowerCase()
-      const trade = (w.trade || '').toLowerCase()
-      const siteName = (w.siteName || w.site?.name || '').toLowerCase()
-      const phone = (w.phone || '').toLowerCase()
-      return (
-        name.includes(q) ||
-        trade.includes(q) ||
-        siteName.includes(q) ||
-        phone.includes(q)
+    return workerGroups.filter((g) => {
+      const name = (g.name || '').toLowerCase()
+      const phone = (g.phone || '').toLowerCase()
+      const hasMatchingSiteOrTrade = g.assignments.some(
+        (a) =>
+          (a.trade || '').toLowerCase().includes(q) ||
+          (a.siteName || a.site?.name || '').toLowerCase().includes(q)
       )
+      return name.includes(q) || phone.includes(q) || hasMatchingSiteOrTrade
     })
-  }, [workersList, workerSearch])
+  }, [workerGroups, workerSearch])
 
-  // Auto-populated Construction Site display name
-  const siteDisplayValue = useMemo(() => {
-    if (!selectedWorker) return ''
+  // Construction sites assigned to the selected worker
+  const assignedSites = useMemo(() => {
+    if (!selectedWorker) return []
+    return selectedWorker.assignments
+  }, [selectedWorker])
 
-    // 1. If worker has site object with name
-    if (selectedWorker.site && typeof selectedWorker.site === 'object') {
-      const sName = selectedWorker.site.name || ''
-      const sLoc = selectedWorker.site.location ? ` (${selectedWorker.site.location})` : ''
-      if (sName) return `${sName}${sLoc}`.trim()
-    }
+  // Currently selected worker-site assignment
+  const selectedAssignment = useMemo(() => {
+    if (!selectedAssignmentId || !selectedWorker) return null
+    return (
+      selectedWorker.assignments.find(
+        (a) => String(a._id || a.id) === String(selectedAssignmentId)
+      ) || null
+    )
+  }, [selectedAssignmentId, selectedWorker])
 
-    // 2. If worker has siteName string
-    if (selectedWorker.siteName) {
-      const matched = sites.find(
-        (s) =>
-          (s.name && s.name.toLowerCase() === selectedWorker.siteName.toLowerCase()) ||
-          String(s._id || s.id) === String(selectedWorker.siteId || selectedWorker.site_id)
-      )
-      if (matched && matched.location && !selectedWorker.siteName.includes('(')) {
-        return `${matched.name} (${matched.location})`
-      }
-      return selectedWorker.siteName
-    }
-
-    // 3. If worker has site ID string/number
-    const rawSiteId =
-      selectedWorker.siteId ||
-      selectedWorker.site_id ||
-      (typeof selectedWorker.site === 'string' || typeof selectedWorker.site === 'number'
-        ? String(selectedWorker.site)
-        : '')
-    if (rawSiteId) {
-      const matched = sites.find((s) => String(s._id || s.id) === String(rawSiteId))
-      if (matched) {
-        return `${matched.name}${matched.location ? ` (${matched.location})` : ''}`
-      }
-    }
-    return ''
-  }, [selectedWorker, sites])
-
-  // When worker is selected, auto-populate site and fetch latest payment history
+  // Fetch live payment records for the selected worker-site assignment
   useEffect(() => {
-    if (!selectedWorker) {
-      setSiteId('')
+    if (!selectedAssignment) {
       setLiveWorkerPayments([])
       return
     }
 
-    // Auto-populate site ID
-    let assignedSiteId =
-      selectedWorker.siteId ||
-      selectedWorker.site_id ||
-      selectedWorker.site?._id ||
-      selectedWorker.site?.id ||
-      (typeof selectedWorker.site === 'string' || typeof selectedWorker.site === 'number'
-        ? String(selectedWorker.site)
-        : '') ||
-      ''
-
-    if (!assignedSiteId && selectedWorker.siteName) {
-      const matched = sites.find(
-        (s) => s.name && s.name.toLowerCase() === selectedWorker.siteName.toLowerCase()
-      )
-      if (matched) {
-        assignedSiteId = String(matched._id || matched.id)
-      }
-    }
-    setSiteId(assignedSiteId)
-
-    // Clear previous errors/success
-    setErrorMessage('')
-    setSuccessMessage('')
-
-    // Fetch fresh payment records for this worker to ensure 100% database accuracy
-    const wid = selectedWorker._id || selectedWorker.id
+    const wid = selectedAssignment._id || selectedAssignment.id
     if (wid) {
       setLoadingLiveDetails(true)
       workerPaymentService
@@ -181,47 +143,46 @@ export default function LabourPaymentForm({
         .catch(() => setLiveWorkerPayments([]))
         .finally(() => setLoadingLiveDetails(false))
     }
-  }, [selectedWorkerId])
+  }, [selectedAssignmentId, selectedAssignment])
 
-  // Derived financial values for selected worker
+  // Derived financial values for the selected worker-site assignment
   const totalAmount = useMemo(() => {
-    if (!selectedWorker) return 0
+    if (!selectedAssignment) return 0
     return Number(
-      selectedWorker.totalAmount !== undefined
-        ? selectedWorker.totalAmount
-        : selectedWorker.wagesEarned !== undefined
-        ? selectedWorker.wagesEarned
-        : selectedWorker.dailyRate || 0
+      selectedAssignment.totalAmount !== undefined
+        ? selectedAssignment.totalAmount
+        : selectedAssignment.wagesEarned !== undefined
+        ? selectedAssignment.wagesEarned
+        : selectedAssignment.dailyRate || 0
     )
-  }, [selectedWorker])
+  }, [selectedAssignment])
 
   const advancePayment = useMemo(() => {
-    if (!selectedWorker) return 0
+    if (!selectedAssignment) return 0
     return Number(
-      selectedWorker.advanceAmount !== undefined
-        ? selectedWorker.advanceAmount
-        : selectedWorker.advancePaid || 0
+      selectedAssignment.advanceAmount !== undefined
+        ? selectedAssignment.advanceAmount
+        : selectedAssignment.advancePaid || 0
     )
-  }, [selectedWorker])
+  }, [selectedAssignment])
 
-  // Total paid: calculate from live payment history if fetched, or fallback to worker record
+  // Total paid: calculate from live payment history if fetched, or fallback to assignment record
   const totalPaidAmount = useMemo(() => {
-    if (!selectedWorker) return 0
+    if (!selectedAssignment) return 0
     if (liveWorkerPayments.length > 0) {
-      // Sum all recorded amounts
       return liveWorkerPayments.reduce(
         (sum, p) => sum + Number(p.amount !== undefined ? p.amount : p.advance || 0),
         0
       )
     }
-    return Number(selectedWorker.totalPaid || 0)
-  }, [selectedWorker, liveWorkerPayments])
+    return Number(selectedAssignment.totalPaid || 0)
+  }, [selectedAssignment, liveWorkerPayments])
 
   // Pending Amount = Total Amount - Total Paid Amount
   const pendingAmount = useMemo(() => {
-    if (!selectedWorker) return 0
+    if (!selectedAssignment) return 0
     return Math.max(0, totalAmount - totalPaidAmount)
-  }, [totalAmount, totalPaidAmount, selectedWorker])
+  }, [totalAmount, totalPaidAmount, selectedAssignment])
 
   // Selected bank object
   const selectedBank = useMemo(() => {
@@ -233,19 +194,43 @@ export default function LabourPaymentForm({
     )
   }, [bankAccountId, bankAccounts])
 
+  const handleSelectWorker = (workerGroup) => {
+    setSelectedWorkerKey(workerGroup.key)
+    setSelectedAssignmentId('')
+    setLiveWorkerPayments([])
+    setIsDropdownOpen(false)
+    setWorkerSearch('')
+    setErrorMessage('')
+    setSuccessMessage('')
+  }
+
+  const handleClearWorker = () => {
+    setSelectedWorkerKey('')
+    setSelectedAssignmentId('')
+    setLiveWorkerPayments([])
+    setWorkerSearch('')
+    setIsDropdownOpen(false)
+    setErrorMessage('')
+  }
+
   // Form submission
   const handleSubmit = async (e) => {
     e.preventDefault()
     setErrorMessage('')
     setSuccessMessage('')
 
-    if (!selectedWorkerId || !selectedWorker) {
-      setErrorMessage('Please select a worker.')
+    if (!selectedWorker) {
+      setErrorMessage('Please select a Worker Name.')
+      return
+    }
+
+    if (!selectedAssignmentId || !selectedAssignment) {
+      setErrorMessage('Please select a Construction Site assigned to this worker.')
       return
     }
 
     if (!bankAccountId) {
-      setErrorMessage('Please select a bank account.')
+      setErrorMessage('Please select a Bank Account.')
       return
     }
 
@@ -282,9 +267,16 @@ export default function LabourPaymentForm({
     try {
       setSubmitting(true)
 
+      const rawSiteId =
+        selectedAssignment.siteId ||
+        selectedAssignment.site_id ||
+        selectedAssignment.site?._id ||
+        selectedAssignment.site?.id ||
+        null
+
       const payload = {
-        workerId: selectedWorkerId,
-        siteId: siteId || null,
+        workerId: selectedAssignment._id || selectedAssignment.id,
+        siteId: rawSiteId,
         bankAccountId,
         amount: numAmount,
         paymentDate: paymentDate || getTodayString(),
@@ -293,9 +285,10 @@ export default function LabourPaymentForm({
         createdBy: 'Admin',
       }
 
-      const res = await workerPaymentService.create(payload)
+      await workerPaymentService.create(payload)
 
-      const successMsg = `Payment of ₹${numAmount.toLocaleString('en-IN')} recorded successfully for ${selectedWorker.name}!`
+      const assignedSiteName = selectedAssignment.siteName || selectedAssignment.site?.name || 'site'
+      const successMsg = `Payment of ₹${numAmount.toLocaleString('en-IN')} recorded successfully for ${selectedWorker.name} at ${assignedSiteName}!`
       setSuccessMessage(successMsg)
 
       if (showNotification) {
@@ -323,17 +316,20 @@ export default function LabourPaymentForm({
         console.error('Failed to reload fresh labour after payment:', err)
       }
 
-      // Re-fetch fresh live payments for the selected worker to update metrics immediately
-      try {
-        const freshPaymentsRes = await workerPaymentService.getByWorker(selectedWorkerId)
-        const list = Array.isArray(freshPaymentsRes?.data)
-          ? freshPaymentsRes.data
-          : Array.isArray(freshPaymentsRes)
-          ? freshPaymentsRes
-          : []
-        setLiveWorkerPayments(list)
-      } catch (err) {
-        console.error('Failed to refresh worker payments:', err)
+      // Re-fetch fresh live payments for the selected worker assignment
+      const wid = selectedAssignment._id || selectedAssignment.id
+      if (wid) {
+        try {
+          const freshPaymentsRes = await workerPaymentService.getByWorker(wid)
+          const list = Array.isArray(freshPaymentsRes?.data)
+            ? freshPaymentsRes.data
+            : Array.isArray(freshPaymentsRes)
+            ? freshPaymentsRes
+            : []
+          setLiveWorkerPayments(list)
+        } catch (err) {
+          console.error('Failed to refresh worker payments:', err)
+        }
       }
     } catch (err) {
       console.error('Failed to record labour payment:', err)
@@ -388,7 +384,7 @@ export default function LabourPaymentForm({
 
       <form onSubmit={handleSubmit} className="daily-expense-form">
         <div className="dashboard-worker-form-grid">
-          {/* 1. Worker Name (Searchable Dropdown) */}
+          {/* Step 1: Worker Name (Searchable Dropdown) */}
           <div className="form-group" ref={dropdownRef} style={{ position: 'relative' }}>
             <label className="form-label labour-form-label">
               Worker Name <span style={{ color: '#EF4444' }}>*</span>
@@ -438,8 +434,7 @@ export default function LabourPaymentForm({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation()
-                    setSelectedWorkerId('')
-                    setWorkerSearch('')
+                    handleClearWorker()
                   }}
                   title="Clear selected worker"
                   style={{
@@ -490,22 +485,25 @@ export default function LabourPaymentForm({
                 }}
               >
                 {filteredWorkers.length > 0 ? (
-                  filteredWorkers.map((w) => {
-                    const isSelected =
-                      String(w._id || w.id) === String(selectedWorkerId)
-                    const pending = Math.max(
-                      0,
-                      Number(w.totalAmount || w.wagesEarned || w.dailyRate || 0) -
-                        Number(w.totalPaid || 0)
+                  filteredWorkers.map((g) => {
+                    const isSelected = selectedWorkerKey === g.key
+                    const totalPending = g.assignments.reduce(
+                      (sum, a) =>
+                        sum +
+                        Math.max(
+                          0,
+                          Number(a.totalAmount || a.wagesEarned || a.dailyRate || 0) -
+                            Number(a.totalPaid || 0)
+                        ),
+                      0
+                    )
+                    const siteNames = Array.from(
+                      new Set(g.assignments.map((a) => a.siteName || a.site?.name).filter(Boolean))
                     )
                     return (
                       <div
-                        key={w._id || w.id}
-                        onClick={() => {
-                          setSelectedWorkerId(String(w._id || w.id))
-                          setIsDropdownOpen(false)
-                          setWorkerSearch('')
-                        }}
+                        key={g.key}
+                        onClick={() => handleSelectWorker(g)}
                         style={{
                           padding: '10px 14px',
                           borderBottom: '1px solid #F1F5F9',
@@ -535,7 +533,7 @@ export default function LabourPaymentForm({
                               textOverflow: 'ellipsis',
                             }}
                           >
-                            {w.name}
+                            {g.name}
                           </div>
                           <div
                             style={{
@@ -544,8 +542,11 @@ export default function LabourPaymentForm({
                               marginTop: '1px',
                             }}
                           >
-                            {w.trade || 'Worker'}
-                            {w.siteName ? ` · ${w.siteName}` : ''}
+                            {g.assignments.length === 1
+                              ? (g.assignments[0]?.trade || 'Worker')
+                              : `${g.assignments.length} Sites`}
+                            {siteNames.length > 0 ? ` · ${siteNames.join(', ')}` : ''}
+                            {g.phone && g.phone !== 'N/A' ? ` · ${g.phone}` : ''}
                           </div>
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -555,11 +556,11 @@ export default function LabourPaymentForm({
                               fontWeight: 600,
                               padding: '2px 8px',
                               borderRadius: '12px',
-                              backgroundColor: pending > 0 ? '#FEF2F2' : '#F0FDF4',
-                              color: pending > 0 ? '#DC2626' : '#16A34A',
+                              backgroundColor: totalPending > 0 ? '#FEF2F2' : '#F0FDF4',
+                              color: totalPending > 0 ? '#DC2626' : '#16A34A',
                             }}
                           >
-                            {pending > 0 ? `₹${pending.toLocaleString('en-IN')} pending` : 'Paid'}
+                            {totalPending > 0 ? `₹${totalPending.toLocaleString('en-IN')} pending` : 'Paid'}
                           </span>
                         </div>
                       </div>
@@ -581,13 +582,13 @@ export default function LabourPaymentForm({
             )}
           </div>
 
-          {/* 2. Worker Trade / Role (Read-only) */}
+          {/* Step 3 (Populated once site is chosen): Worker Trade / Role (Read-only) */}
           <div className="form-group">
             <label className="form-label labour-form-label">Worker Trade / Role</label>
             <input
               type="text"
               className="form-input expense-total-readonly"
-              value={selectedWorker ? selectedWorker.trade || '—' : ''}
+              value={selectedAssignment ? selectedAssignment.trade || '—' : ''}
               readOnly
               placeholder="Auto-populated trade"
               style={{
@@ -599,40 +600,46 @@ export default function LabourPaymentForm({
             />
           </div>
 
-          {/* 3. Construction Site (Auto-populated) */}
+          {/* Step 2: Construction Site (Dropdown filtered to worker's assigned sites) */}
           <div className="form-group">
-            <label className="form-label labour-form-label">Construction Site</label>
-            {selectedWorker && !siteDisplayValue ? (
-              <select
-                className="form-select"
-                value={siteId}
-                onChange={(e) => setSiteId(e.target.value)}
-              >
-                <option value="">Select construction site...</option>
-                {sites.map((s) => (
-                  <option key={s._id || s.id} value={s._id || s.id}>
-                    {s.name} {s.location ? `(${s.location})` : ''}
+            <label className="form-label labour-form-label">
+              Construction Site <span style={{ color: '#EF4444' }}>*</span>
+            </label>
+            <select
+              className="form-select"
+              value={selectedAssignmentId}
+              disabled={!selectedWorker}
+              onChange={(e) => {
+                setSelectedAssignmentId(e.target.value)
+                setErrorMessage('')
+              }}
+              style={{
+                backgroundColor: !selectedWorker ? '#F8FAFC' : '#FFFFFF',
+                cursor: !selectedWorker ? 'not-allowed' : 'pointer',
+                borderColor: selectedWorker && !selectedAssignmentId ? '#0284C7' : undefined,
+              }}
+              required
+            >
+              <option value="">
+                {!selectedWorker
+                  ? 'Select worker first...'
+                  : assignedSites.length === 0
+                  ? 'No sites assigned to this worker'
+                  : 'Select assigned site...'}
+              </option>
+              {assignedSites.map((a) => {
+                const aSiteName = a.siteName || a.site?.name || 'Assigned Site'
+                const aTrade = a.trade ? ` (${a.trade})` : ''
+                return (
+                  <option key={a._id || a.id} value={String(a._id || a.id)}>
+                    {aSiteName}{aTrade}
                   </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                className="form-input expense-total-readonly"
-                value={siteDisplayValue}
-                readOnly
-                placeholder="Auto-populated site"
-                style={{
-                  backgroundColor: '#F8FAFC',
-                  borderColor: '#E2E8F0',
-                  color: '#334155',
-                  cursor: 'default',
-                }}
-              />
-            )}
+                )
+              })}
+            </select>
           </div>
 
-          {/* 4. Total Amount (₹) (Read-only) */}
+          {/* Step 3: Total Amount (₹) (Read-only, populated for selected site assignment) */}
           <div className="form-group">
             <label className="form-label labour-form-label">Total Amount (₹)</label>
             <div className="input-with-currency-wrap">
@@ -640,11 +647,7 @@ export default function LabourPaymentForm({
               <input
                 type="text"
                 className="form-input input-with-prefix"
-                value={
-                  selectedWorker
-                    ? totalAmount.toLocaleString('en-IN')
-                    : ''
-                }
+                value={selectedAssignment ? totalAmount.toLocaleString('en-IN') : ''}
                 readOnly
                 placeholder="0"
                 style={{
@@ -658,7 +661,7 @@ export default function LabourPaymentForm({
             </div>
           </div>
 
-          {/* 5. Advance Payment (₹) (Read-only) */}
+          {/* Step 3: Advance Payment (₹) (Read-only, populated for selected site assignment) */}
           <div className="form-group">
             <label className="form-label labour-form-label">Advance Payment (₹)</label>
             <div className="input-with-currency-wrap">
@@ -666,11 +669,7 @@ export default function LabourPaymentForm({
               <input
                 type="text"
                 className="form-input input-with-prefix"
-                value={
-                  selectedWorker
-                    ? advancePayment.toLocaleString('en-IN')
-                    : ''
-                }
+                value={selectedAssignment ? advancePayment.toLocaleString('en-IN') : ''}
                 readOnly
                 placeholder="0"
                 style={{
@@ -684,7 +683,7 @@ export default function LabourPaymentForm({
             </div>
           </div>
 
-          {/* 6. Total Paid Amount (₹) (Read-only) */}
+          {/* Step 3: Total Paid Amount (₹) (Read-only, populated for selected site assignment) */}
           <div className="form-group">
             <label className="form-label labour-form-label">Total Paid Amount (₹)</label>
             <div className="input-with-currency-wrap">
@@ -692,11 +691,7 @@ export default function LabourPaymentForm({
               <input
                 type="text"
                 className="form-input input-with-prefix"
-                value={
-                  selectedWorker
-                    ? totalPaidAmount.toLocaleString('en-IN')
-                    : ''
-                }
+                value={selectedAssignment ? totalPaidAmount.toLocaleString('en-IN') : ''}
                 readOnly
                 placeholder="0"
                 style={{
@@ -710,7 +705,7 @@ export default function LabourPaymentForm({
             </div>
           </div>
 
-          {/* 7. Pending Amount (₹) (Read-only) */}
+          {/* Step 3: Pending Amount (₹) (Read-only, populated for selected site assignment) */}
           <div className="form-group">
             <label className="form-label labour-form-label">Pending Amount (₹)</label>
             <div className="input-with-currency-wrap">
@@ -718,11 +713,7 @@ export default function LabourPaymentForm({
               <input
                 type="text"
                 className="form-input input-with-prefix"
-                value={
-                  selectedWorker
-                    ? pendingAmount.toLocaleString('en-IN')
-                    : ''
-                }
+                value={selectedAssignment ? pendingAmount.toLocaleString('en-IN') : ''}
                 readOnly
                 placeholder="0"
                 style={{
@@ -736,7 +727,7 @@ export default function LabourPaymentForm({
             </div>
           </div>
 
-          {/* 8. Payment Amount (₹) */}
+          {/* Editable Field 1: Payment Amount (₹) – Required */}
           <div className="form-group">
             <div
               style={{
@@ -748,7 +739,7 @@ export default function LabourPaymentForm({
               <label className="form-label labour-form-label">
                 Payment Amount (₹) <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              {selectedWorker && pendingAmount > 0 && (
+              {pendingAmount > 0 && selectedAssignment && (
                 <button
                   type="button"
                   onClick={() => setAmount(String(pendingAmount))}
@@ -756,14 +747,14 @@ export default function LabourPaymentForm({
                     background: 'none',
                     border: 'none',
                     color: '#0284C7',
-                    fontSize: '11px',
+                    fontSize: '11.5px',
                     fontWeight: 600,
                     cursor: 'pointer',
                     padding: 0,
-                    marginBottom: '4px',
+                    textDecoration: 'underline',
                   }}
                 >
-                  Pay full pending
+                  Pay Full Pending (₹{pendingAmount.toLocaleString('en-IN')})
                 </button>
               )}
             </div>
@@ -771,76 +762,69 @@ export default function LabourPaymentForm({
               <span className="input-currency-prefix">₹</span>
               <input
                 type="number"
-                name="amount"
                 className="form-input input-with-prefix"
-                placeholder={pendingAmount > 0 ? `e.g. ${pendingAmount}` : '0'}
+                placeholder="0"
                 min="1"
-                max={pendingAmount > 0 ? pendingAmount : undefined}
                 step="any"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                disabled={!selectedWorker}
+                onChange={(e) => {
+                  setAmount(e.target.value)
+                  if (errorMessage) setErrorMessage('')
+                }}
+                required
               />
             </div>
           </div>
 
-          {/* 9. Bank Account */}
+          {/* Editable Field 2: Bank Account – Required */}
           <div className="form-group">
             <label className="form-label labour-form-label">
               Bank Account <span style={{ color: '#EF4444' }}>*</span>
             </label>
             <select
-              name="bankAccountId"
               className="form-select"
               value={bankAccountId}
-              onChange={(e) => setBankAccountId(e.target.value)}
+              onChange={(e) => {
+                setBankAccountId(e.target.value)
+                if (errorMessage) setErrorMessage('')
+              }}
+              required
             >
               <option value="">Select bank account...</option>
               {bankAccounts.map((b) => (
-                <option key={b.id || b._id} value={b.id || b._id}>
-                  {b.bankName || b.bank_name} (₹{Number(b.balance || 0).toLocaleString('en-IN')})
+                <option key={b._id || b.id} value={b._id || b.id}>
+                  {b.bankName || b.bank_name} (Bal: ₹
+                  {Number(b.balance || 0).toLocaleString('en-IN')})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* 10. Payment Date */}
+          {/* Editable Field 3: Payment Date – Required */}
           <div className="form-group">
             <label className="form-label labour-form-label">
               Payment Date <span style={{ color: '#EF4444' }}>*</span>
             </label>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <div className="input-with-icon">
               <input
                 type="date"
-                name="paymentDate"
                 className="form-input"
                 value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
+                onChange={(e) => {
+                  setPaymentDate(e.target.value)
+                  if (errorMessage) setErrorMessage('')
+                }}
                 required
               />
-              <Calendar
-                size={16}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  color: '#94A3B8',
-                  pointerEvents: 'none',
-                }}
-              />
+              <Calendar size={16} className="input-icon-right" />
             </div>
           </div>
 
-          {/* 11. Remarks (Optional) — Spanning 2 columns */}
-          <div
-            className="form-group"
-            style={{
-              gridColumn: 'span 2',
-            }}
-          >
+          {/* Editable Field 4: Remarks (Optional) */}
+          <div className="form-group" style={{ gridColumn: 'span 2' }}>
             <label className="form-label labour-form-label">Remarks (Optional)</label>
             <input
               type="text"
-              name="remarks"
               className="form-input"
               placeholder="e.g. Weekly wage payment, advance adjustment..."
               value={remarks}
@@ -849,31 +833,26 @@ export default function LabourPaymentForm({
           </div>
         </div>
 
-        {/* 12. Submit Button */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+        {/* Action Button */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
           <button
             type="submit"
             className="btn btn-primary-action"
-            disabled={submitting || !selectedWorker}
+            disabled={submitting}
             style={{
               backgroundColor: '#16A34A',
               borderColor: '#16A34A',
-              color: '#FFFFFF',
+              minWidth: '160px',
               display: 'inline-flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '8px',
-              padding: '10px 24px',
-              fontWeight: 600,
-              fontSize: '13.5px',
-              borderRadius: '8px',
-              cursor: submitting || !selectedWorker ? 'not-allowed' : 'pointer',
-              opacity: !selectedWorker ? 0.7 : 1,
             }}
           >
             {submitting ? (
               <>
                 <Loader2 size={16} className="spin-animate" />
-                <span>Recording Payment...</span>
+                <span>Recording...</span>
               </>
             ) : (
               <>

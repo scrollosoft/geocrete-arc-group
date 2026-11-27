@@ -37,20 +37,20 @@ export default function PaymentsPage({
   const [isAddBankOpen, setIsAddBankOpen] = useState(false)
   const [editingBank, setEditingBank] = useState(null)
   const [isAddCashOpen, setIsAddCashOpen] = useState(false)
-  const [isEditCashOpen, setIsEditCashOpen] = useState(false)
+  const [editingCash, setEditingCash] = useState(null)
   const [isManageCashOpen, setIsManageCashOpen] = useState(false)
   const [isBankTransferOpen, setIsBankTransferOpen] = useState(false)
   const [txnRefreshTrigger, setTxnRefreshTrigger] = useState(0)
 
   const defaultColors = ['#3980FF', '#00B67A', '#07577A', '#FF9900']
 
-  // Separate Cash account from Bank accounts
-  const cashAccount = (accounts || []).find((a) => a.isCash || a.id === 'cash')
-  const bankAccounts = (accounts || []).filter((a) => !a.isCash && a.id !== 'cash')
+  // Separate Cash accounts from Bank accounts
+  const cashAccounts = (accounts || []).filter((a) => a.isCash || String(a.bankName || '').toLowerCase().includes('cash') || a.id === 'cash')
+  const bankAccounts = (accounts || []).filter((a) => !a.isCash && !String(a.bankName || '').toLowerCase().includes('cash') && a.id !== 'cash')
 
   // Calculate empty bank slots to fill the standard row layout
   const displayBankAccounts = bankAccounts.slice(0, 4)
-  const emptySlotsCount = Math.max(0, 3 - displayBankAccounts.length)
+  const emptySlotsCount = Math.max(0, 3 - (displayBankAccounts.length + cashAccounts.length - 1))
 
   const handleBankCreated = async () => {
     if (onRefreshAccounts) {
@@ -154,20 +154,21 @@ export default function PaymentsPage({
           ))
         ) : (
           <>
-            {/* Cash Account Card */}
-            {cashAccount && (
+            {/* Cash Account Cards */}
+            {cashAccounts.map((cAccount, idx) => (
               <div
+                key={cAccount._id || cAccount.id || `cash-${idx}`}
                 className="payment-bank-card payment-cash-card"
-                onClick={() => setIsEditCashOpen(true)}
+                onClick={() => setEditingCash(cAccount)}
                 style={{
                   borderTop: '3.5px solid #10B981',
                   cursor: 'pointer',
                 }}
-                title="Click to edit or delete cash"
+                title="Click to edit or delete cash account"
               >
                 <div className="payment-bank-card-top">
                   <span className="payment-bank-tag" style={{ color: '#047857', fontWeight: 700 }}>
-                    CASH ACCOUNT
+                    {cAccount.accountNumberTag || (cashAccounts.length > 1 ? `CASH ACCOUNT #${String(idx + 1).padStart(2, '0')}` : 'CASH ACCOUNT')}
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <button
@@ -175,7 +176,7 @@ export default function PaymentsPage({
                       className="payment-cash-manage-btn"
                       onClick={(e) => {
                         e.stopPropagation()
-                        setIsEditCashOpen(true)
+                        setEditingCash(cAccount)
                       }}
                       title="Manage cash (Edit / Delete)"
                       style={{
@@ -199,14 +200,14 @@ export default function PaymentsPage({
                         backgroundColor: '#10B98115',
                       }}
                     >
-                      CASH
+                      {cAccount.accountCode || (cashAccounts.length > 1 ? `C${idx + 1}` : 'CASH')}
                     </span>
                   </div>
                 </div>
 
-                <div className="payment-bank-name" title="Cash in Hand" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div className="payment-bank-name" title={cAccount.bankName === 'Cash Added' ? 'Cash in Hand' : (cAccount.bankName || 'Cash in Hand')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Wallet size={16} style={{ color: '#10B981', flexShrink: 0 }} />
-                  <span>Cash in Hand</span>
+                  <span>{cAccount.bankName === 'Cash Added' ? 'Cash in Hand' : (cAccount.bankName || 'Cash in Hand')}</span>
                 </div>
 
                 <div className="payment-bank-meta">
@@ -219,11 +220,11 @@ export default function PaymentsPage({
                 <div className="payment-bank-balance-wrap">
                   <span className="payment-bank-balance-label">Available Cash</span>
                   <span className="payment-bank-balance-value" style={{ color: '#047857' }}>
-                    {formatBalance(cashAccount.balance)}
+                    {formatBalance(cAccount.balance)}
                   </span>
                 </div>
               </div>
-            )}
+            ))}
 
             {/* Bank Account Cards */}
             {displayBankAccounts.map((account, index) => {
@@ -360,9 +361,9 @@ export default function PaymentsPage({
 
       {/* Edit / Delete Cash Modal */}
       <EditCashModal
-        isOpen={isEditCashOpen}
-        onClose={() => setIsEditCashOpen(false)}
-        cashAccount={cashAccount}
+        isOpen={Boolean(editingCash)}
+        onClose={() => setEditingCash(null)}
+        cashAccount={editingCash}
         onCashUpdated={handleCashChanged}
         onCashDeleted={handleCashChanged}
         showNotification={showNotification}

@@ -50,47 +50,44 @@ export default function EditBankModal({
   }
 
   const validate = () => {
+    // Bank Name is the only required field
     if (!formData.bankName.trim()) {
       return 'Bank name is required.'
     }
 
+    // IFSC Code — optional, validate format only if provided
     const trimmedIfsc = formData.ifscCode.trim().toUpperCase()
-    if (!trimmedIfsc) {
-      return 'IFSC code is required.'
-    }
-    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/
-    if (!ifscRegex.test(trimmedIfsc)) {
-      return 'Invalid IFSC code format (must be 11 characters e.g. HDFC0001234).'
-    }
-
-    if (!formData.accountHolderName.trim()) {
-      return 'Account holder name is required.'
+    if (trimmedIfsc) {
+      const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/
+      if (!ifscRegex.test(trimmedIfsc)) {
+        return 'Invalid IFSC code format (must be 11 characters e.g. HDFC0001234).'
+      }
     }
 
+    // Account Number — optional, validate format & duplicate only if provided
     const trimmedAccNum = String(formData.accountNumber).trim()
-    if (!trimmedAccNum) {
-      return 'Account number is required.'
-    }
-    const accRegex = /^\d{9,18}$/
-    if (!accRegex.test(trimmedAccNum)) {
-      return 'Account number must be between 9 and 18 digits.'
+    if (trimmedAccNum) {
+      const accRegex = /^\d{9,18}$/
+      if (!accRegex.test(trimmedAccNum)) {
+        return 'Account number must be between 9 and 18 digits.'
+      }
+
+      const currentId = String(account._id || account.id || '')
+      const isDuplicate = existingAccounts.some((acc) => {
+        const otherId = String(acc._id || acc.id || '')
+        return otherId !== currentId && String(acc.accountNumber || '').trim() === trimmedAccNum
+      })
+      if (isDuplicate) {
+        return 'Another bank account with this account number already exists.'
+      }
     }
 
-    const currentId = String(account._id || account.id || '')
-    const isDuplicate = existingAccounts.some((acc) => {
-      const otherId = String(acc._id || acc.id || '')
-      return otherId !== currentId && String(acc.accountNumber || '').trim() === trimmedAccNum
-    })
-    if (isDuplicate) {
-      return 'Another bank account with this account number already exists.'
-    }
-
-    if (formData.balance === '' || formData.balance === null || formData.balance === undefined) {
-      return 'Balance is required.'
-    }
-    const numBalance = Number(formData.balance)
-    if (isNaN(numBalance) || numBalance < 0) {
-      return 'Balance must be 0 or a positive number.'
+    // Balance — optional, validate only if provided
+    if (formData.balance !== '' && formData.balance !== null && formData.balance !== undefined) {
+      const numBalance = Number(formData.balance)
+      if (isNaN(numBalance) || numBalance < 0) {
+        return 'Balance must be 0 or a positive number.'
+      }
     }
 
     return null
@@ -110,10 +107,10 @@ export default function EditBankModal({
       setSubmitting(true)
       const payload = {
         bankName: formData.bankName.trim(),
-        ifscCode: formData.ifscCode.trim().toUpperCase(),
-        accountHolderName: formData.accountHolderName.trim(),
-        accountNumber: String(formData.accountNumber).trim(),
-        balance: Number(formData.balance),
+        ifscCode: formData.ifscCode ? formData.ifscCode.trim().toUpperCase() : '',
+        accountHolderName: formData.accountHolderName ? formData.accountHolderName.trim() : '',
+        accountNumber: formData.accountNumber ? String(formData.accountNumber).trim() : '',
+        balance: formData.balance !== '' && formData.balance !== null && formData.balance !== undefined ? Number(formData.balance) : 0,
       }
 
       const accountId = account._id || account.id
@@ -213,9 +210,7 @@ export default function EditBankModal({
 
               {/* 2. IFSC Code */}
               <div className="form-group">
-                <label className="form-label">
-                  IFSC Code <span style={{ color: '#EF4444' }}>*</span>
-                </label>
+                <label className="form-label">IFSC Code</label>
                 <input
                   type="text"
                   name="ifscCode"
@@ -230,9 +225,7 @@ export default function EditBankModal({
 
               {/* 3. Account Holder Name */}
               <div className="form-group">
-                <label className="form-label">
-                  Account Holder Name <span style={{ color: '#EF4444' }}>*</span>
-                </label>
+                <label className="form-label">Account Holder Name</label>
                 <input
                   type="text"
                   name="accountHolderName"
@@ -245,9 +238,7 @@ export default function EditBankModal({
 
               {/* 4. Account Number */}
               <div className="form-group">
-                <label className="form-label">
-                  Account Number <span style={{ color: '#EF4444' }}>*</span>
-                </label>
+                <label className="form-label">Account Number</label>
                 <input
                   type="text"
                   name="accountNumber"
@@ -260,9 +251,7 @@ export default function EditBankModal({
 
               {/* 5. Balance */}
               <div className="form-group">
-                <label className="form-label">
-                  Balance (₹) <span style={{ color: '#EF4444' }}>*</span>
-                </label>
+                <label className="form-label">Balance (₹)</label>
                 <input
                   type="number"
                   name="balance"

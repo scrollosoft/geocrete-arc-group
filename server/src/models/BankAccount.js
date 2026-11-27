@@ -3,6 +3,11 @@ import { withId, fmtDate } from './helpers.js'
 
 const toApi = (row) => {
   if (!row) return null
+  const isCash = Boolean(
+    row.is_cash ||
+    row.account_number === 'CASH' ||
+    String(row.bank_name || '').toLowerCase().includes('cash')
+  )
   return {
     ...withId(row),
     accountNumber:     row.account_number,
@@ -15,6 +20,7 @@ const toApi = (row) => {
     credit:            Number(row.credit),
     accentColor:       row.accent_color,
     isActive:          Boolean(row.is_active),
+    isCash,
     createdAt:         fmtDate(row.created_at),
     updatedAt:         fmtDate(row.updated_at),
     // remove raw snake_case keys

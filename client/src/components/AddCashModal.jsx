@@ -41,7 +41,7 @@ export default function AddCashModal({
       const res = await cashService.add({
         date: date || getToday(),
         amount: numAmount,
-        description: 'Cash Added',
+        description: 'Cash in Hand',
       })
 
       if (showNotification) {

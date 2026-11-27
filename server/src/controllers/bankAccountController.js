@@ -1,30 +1,34 @@
 import { BankAccount } from '../models/BankAccount.js'
 import { getPool } from '../config/db.js'
-import { calculateLiveCashSummary } from './cashController.js'
+import {
+  calculateLiveCashSummary,
+  updateCashAccount,
+  deleteCashAccount,
+  getCashAccountConfig,
+} from './cashController.js'
 
 export const getBankAccounts = async (_req, res, next) => {
   try {
-    const accounts = await BankAccount.findActive()
-    const cashSummary = await calculateLiveCashSummary(getPool())
+    const pool = getPool()
+    let accounts = await BankAccount.findActive()
 
-    const cashAccount = {
-      id: 'cash',
-      _id: 'cash',
-      bankName: 'Cash',
-      bank_name: 'Cash',
-      accountHolderName: 'Cash Account',
-      accountNumber: 'CASH',
-      accountNumberTag: 'CASH ACCOUNT',
-      accountCode: 'CASH',
-      balance: cashSummary.balance,
-      isCash: true,
-      accentColor: '#10B981',
-      credit: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    const hasCash = accounts.some((a) => a.isCash)
+    if (!hasCash) {
+      const cashConfig = await getCashAccountConfig(pool)
+      if (cashConfig.is_active !== false) {
+        const cashSummary = await calculateLiveCashSummary(pool)
+        const initBalance = cashConfig.balance !== null ? cashConfig.balance : cashSummary.balance
+        await pool.query(
+          `INSERT INTO bank_accounts
+            (account_number, account_number_tag, bank_name, account_holder_name, ifsc_code, account_code, balance, credit, accent_color, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+          ['CASH', 'CASH ACCOUNT', 'Cash in Hand', 'Cash Account', '', 'CASH', initBalance, 0, '#10B981']
+        )
+        accounts = await BankAccount.findActive()
+      }
     }
 
-    res.json([...accounts, cashAccount])
+    res.json(accounts)
   } catch (error) {
     next(error)
   }
@@ -61,45 +65,40 @@ export const createBankAccount = async (req, res, next) => {
       return res.status(400).json({ error: 'Bank name is required' })
     }
 
-    // 2. IFSC Code validation (Standard Indian IFSC: 4 alphabetic, 0, 6 alphanumeric)
+    // 2. IFSC Code validation (Standard Indian IFSC: 4 alphabetic, 0, 6 alphanumeric) - Optional
     const trimmedIfsc = (ifscCode || '').trim().toUpperCase()
-    if (!trimmedIfsc) {
-      return res.status(400).json({ error: 'IFSC code is required' })
-    }
-    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/
-    if (!ifscRegex.test(trimmedIfsc)) {
-      return res.status(400).json({ error: 'Invalid IFSC code format (must be 11 characters e.g. HDFC0001234)' })
+    if (trimmedIfsc) {
+      const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/
+      if (!ifscRegex.test(trimmedIfsc)) {
+        return res.status(400).json({ error: 'Invalid IFSC code format (must be 11 characters e.g. HDFC0001234)' })
+      }
     }
 
-    // 3. Account Holder Name validation
+    // 3. Account Holder Name validation (Optional)
     const trimmedHolder = (accountHolderName || '').trim()
-    if (!trimmedHolder) {
-      return res.status(400).json({ error: 'Account holder name is required' })
-    }
 
-    // 4. Account Number validation (preserve leading zeros, standard format 9 to 18 digits)
+    // 4. Account Number validation (Optional: standard format 9 to 18 digits)
     const trimmedAccNum = String(accountNumber !== undefined && accountNumber !== null ? accountNumber : '').trim()
-    if (!trimmedAccNum) {
-      return res.status(400).json({ error: 'Account number is required' })
-    }
-    const accNumRegex = /^\d{9,18}$/
-    if (!accNumRegex.test(trimmedAccNum)) {
-      return res.status(400).json({ error: 'Account number must be between 9 and 18 digits' })
+    if (trimmedAccNum) {
+      const accNumRegex = /^\d{9,18}$/
+      if (!accNumRegex.test(trimmedAccNum)) {
+        return res.status(400).json({ error: 'Account number must be between 9 and 18 digits' })
+      }
+
+      // Prevent duplicate account creation
+      const existing = await BankAccount.findByAccountNumber(trimmedAccNum)
+      if (existing) {
+        return res.status(400).json({ error: 'A bank account with this account number already exists' })
+      }
     }
 
-    // Prevent duplicate account creation
-    const existing = await BankAccount.findByAccountNumber(trimmedAccNum)
-    if (existing) {
-      return res.status(400).json({ error: 'A bank account with this account number already exists' })
-    }
-
-    // 5. Initial Deposit / Opening Balance validation (allow zero, reject negative/invalid)
-    if (balance === undefined || balance === null || balance === '') {
-      return res.status(400).json({ error: 'Initial deposit / opening balance is required' })
-    }
-    const numBalance = Number(balance)
-    if (isNaN(numBalance) || numBalance < 0) {
-      return res.status(400).json({ error: 'Opening balance must be 0 or a positive number' })
+    // 5. Initial Deposit / Opening Balance validation (Optional: defaults to 0, reject negative/invalid if provided)
+    let numBalance = 0
+    if (balance !== undefined && balance !== null && balance !== '') {
+      numBalance = Number(balance)
+      if (isNaN(numBalance) || numBalance < 0) {
+        return res.status(400).json({ error: 'Opening balance must be 0 or a positive number' })
+      }
     }
 
     const account = await BankAccount.create({
@@ -121,6 +120,9 @@ export const createBankAccount = async (req, res, next) => {
 
 export const updateBankAccount = async (req, res, next) => {
   try {
+    if (req.params.id === 'cash') {
+      return updateCashAccount(req, res, next)
+    }
     const account = await BankAccount.update(req.params.id, req.body)
     if (!account) {
       return res.status(404).json({ error: 'Bank account not found' })
@@ -133,6 +135,9 @@ export const updateBankAccount = async (req, res, next) => {
 
 export const deleteBankAccount = async (req, res, next) => {
   try {
+    if (req.params.id === 'cash') {
+      return deleteCashAccount(req, res, next)
+    }
     const account = await BankAccount.delete(req.params.id)
     if (!account) {
       return res.status(404).json({ error: 'Bank account not found' })

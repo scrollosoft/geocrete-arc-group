@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Plus, Loader2, AlertCircle, Calendar } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Plus, Loader2, AlertCircle, Calendar, ChevronDown, Check, X } from 'lucide-react'
 import { otherTransactionService } from '../services/otherTransactionService.js'
 
 export default function OtherForm({
@@ -21,6 +21,42 @@ export default function OtherForm({
 
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+
+  // Searchable Ledger dropdown state
+  const [ledgers, setLedgers] = useState([])
+  const [isLedgerOpen, setIsLedgerOpen] = useState(false)
+  const ledgerDropdownRef = useRef(null)
+
+  useEffect(() => {
+    let isMounted = true
+    const loadLedgers = async () => {
+      try {
+        const list = await otherTransactionService.getLedgers()
+        if (isMounted && Array.isArray(list)) {
+          setLedgers(list)
+        }
+      } catch (err) {
+        console.error('Failed to load ledgers:', err)
+      }
+    }
+    loadLedgers()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  // Close ledger dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (ledgerDropdownRef.current && !ledgerDropdownRef.current.contains(event.target)) {
+        setIsLedgerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
 
   const selectedBank = bankAccounts.find(
     (b) => String(b.id || b._id) === String(formData.bankAccountId)
@@ -55,6 +91,23 @@ export default function OtherForm({
     if (errorMessage) setErrorMessage('')
   }
 
+  // Filter ledgers based on user input
+  const trimmedInput = (formData.ledgerName || '').trim().toLowerCase()
+  const filteredLedgers = ledgers.filter((l) =>
+    l.toLowerCase().includes(trimmedInput)
+  )
+  const isExactMatch = ledgers.some((l) => l.toLowerCase() === trimmedInput)
+
+  const handleSelectLedger = (ledger) => {
+    setFormData((prev) => ({ ...prev, ledgerName: ledger }))
+    setIsLedgerOpen(false)
+  }
+
+  const handleClearLedger = () => {
+    setFormData((prev) => ({ ...prev, ledgerName: '' }))
+    setIsLedgerOpen(false)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setErrorMessage('')
@@ -84,6 +137,7 @@ export default function OtherForm({
 
     const isCash = String(formData.bankAccountId || '').toLowerCase() === 'cash' || selectedBank?.isCash
     const payloadBankAccountId = isCash ? 'cash' : Number(formData.bankAccountId)
+    const submittedLedger = formData.ledgerName.trim()
 
     setSubmitting(true)
     try {
@@ -93,9 +147,14 @@ export default function OtherForm({
         bankAccountId: payloadBankAccountId,
         paymentMethod: isCash ? 'Cash' : (formData.paymentMethod || 'UPI'),
         paymentType: formData.paymentType,
-        ledgerName: formData.ledgerName.trim(),
+        ledgerName: submittedLedger,
         note: formData.note.trim(),
       })
+
+      // Add to local ledgers list if it's new
+      if (submittedLedger && !ledgers.some((l) => l.toLowerCase() === submittedLedger.toLowerCase())) {
+        setLedgers((prev) => [...prev, submittedLedger].sort((a, b) => a.localeCompare(b)))
+      }
 
       if (showNotification) {
         showNotification({
@@ -239,17 +298,155 @@ export default function OtherForm({
             </select>
           </div>
 
-          {/* Ledger Name */}
-          <div className="form-group">
+          {/* Ledger Name (Searchable Combobox) */}
+          <div className="form-group" ref={ledgerDropdownRef} style={{ position: 'relative' }}>
             <label className="form-label">Ledger Name (Optional)</label>
-            <input
-              type="text"
-              name="ledgerName"
-              className="form-input"
-              placeholder="e.g. Office Expenses, Petty Cash"
-              value={formData.ledgerName}
-              onChange={handleChange}
-            />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input
+                type="text"
+                name="ledgerName"
+                className="form-input"
+                placeholder="Search or enter ledger name..."
+                value={formData.ledgerName}
+                autoComplete="off"
+                onChange={(e) => {
+                  handleChange(e)
+                  setIsLedgerOpen(true)
+                }}
+                onFocus={() => setIsLedgerOpen(true)}
+                style={{ paddingRight: '56px' }}
+              />
+              <div style={{ position: 'absolute', right: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {formData.ledgerName && (
+                  <button
+                    type="button"
+                    onClick={handleClearLedger}
+                    title="Clear ledger"
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      color: '#94A3B8',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsLedgerOpen((prev) => !prev)}
+                  title="Toggle ledger list"
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    padding: '2px',
+                    color: '#64748B',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <ChevronDown
+                    size={16}
+                    style={{
+                      transform: isLedgerOpen ? 'rotate(180deg)' : 'none',
+                      transition: 'transform 0.15s ease',
+                    }}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Dropdown Menu */}
+            {isLedgerOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  zIndex: 50,
+                  marginTop: '4px',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '6px',
+                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                  maxHeight: '220px',
+                  overflowY: 'auto',
+                }}
+              >
+                {/* Option to create new ledger if typed text is not empty and not an exact match */}
+                {formData.ledgerName.trim() && !isExactMatch && (
+                  <div
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      handleSelectLedger(formData.ledgerName.trim())
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      backgroundColor: '#F0FDF4',
+                      borderBottom: '1px solid #E2E8F0',
+                      color: '#166534',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>Create new ledger: &quot;{formData.ledgerName.trim()}&quot;</span>
+                  </div>
+                )}
+
+                {filteredLedgers.length > 0 ? (
+                  filteredLedgers.map((ledger) => {
+                    const isSelected = ledger.toLowerCase() === (formData.ledgerName || '').trim().toLowerCase()
+                    return (
+                      <div
+                        key={ledger}
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          handleSelectLedger(ledger)
+                        }}
+                        style={{
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          fontSize: '13px',
+                          color: '#1E293B',
+                          backgroundColor: isSelected ? '#EFF6FF' : '#ffffff',
+                          transition: 'background-color 0.1s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) e.currentTarget.style.backgroundColor = '#F8FAFC'
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) e.currentTarget.style.backgroundColor = '#ffffff'
+                        }}
+                      >
+                        <span style={{ fontWeight: isSelected ? 600 : 400 }}>{ledger}</span>
+                        {isSelected && <Check size={14} style={{ color: '#2563EB' }} />}
+                      </div>
+                    )
+                  })
+                ) : !formData.ledgerName.trim() ? (
+                  <div style={{ padding: '12px', fontSize: '12px', color: '#94A3B8', textAlign: 'center' }}>
+                    No ledgers saved yet. Type a name to create one.
+                  </div>
+                ) : isExactMatch ? null : (
+                  <div style={{ padding: '8px 12px', fontSize: '12px', color: '#64748B', textAlign: 'center' }}>
+                    Click above to create &quot;{formData.ledgerName.trim()}&quot;
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Note */}
