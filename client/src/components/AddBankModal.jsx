@@ -103,10 +103,10 @@ export default function AddBankModal({
       setSubmitting(true)
       const payload = {
         bankName: formData.bankName.trim(),
-        ifscCode: formData.ifscCode.trim().toUpperCase(),
-        accountHolderName: formData.accountHolderName.trim(),
-        accountNumber: String(formData.accountNumber).trim(),
-        balance: Number(formData.balance),
+        ifscCode: formData.ifscCode ? formData.ifscCode.trim().toUpperCase() : '',
+        accountHolderName: formData.accountHolderName ? formData.accountHolderName.trim() : '',
+        accountNumber: formData.accountNumber ? String(formData.accountNumber).trim() : '',
+        balance: formData.balance !== '' && formData.balance !== null && formData.balance !== undefined ? Number(formData.balance) : 0,
       }
 
       const newAccount = await bankAccountService.create(payload)

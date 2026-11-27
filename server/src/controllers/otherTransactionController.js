@@ -38,6 +38,78 @@ const formatOtherTransactionRow = (row) => {
 }
 
 /**
+ * Helper to persist a unique ledger name in settings
+ */
+const persistLedgerName = async (connOrPool, ledgerName) => {
+  const clean = (ledgerName || '').trim()
+  if (!clean) return
+  try {
+    const [rows] = await connOrPool.query(
+      "SELECT value_json FROM settings WHERE key_name = 'other_ledgers'"
+    )
+    let list = []
+    if (rows.length > 0) {
+      const val = rows[0].value_json
+      list = Array.isArray(val) ? val : (typeof val === 'string' ? JSON.parse(val) : [])
+    }
+    if (!list.some((item) => String(item).toLowerCase() === clean.toLowerCase())) {
+      list.push(clean)
+      await connOrPool.query(
+        `INSERT INTO settings (key_name, value_json)
+         VALUES ('other_ledgers', ?)
+         ON DUPLICATE KEY UPDATE value_json = VALUES(value_json)`,
+        [JSON.stringify(list)]
+      )
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * GET /api/other-transactions/ledgers
+ * Return all distinct ledger names from transactions and settings
+ */
+export const getOtherLedgers = async (_req, res, next) => {
+  try {
+    const pool = getPool()
+    let saved = []
+    try {
+      const [settingsRows] = await pool.query(
+        "SELECT value_json FROM settings WHERE key_name = 'other_ledgers'"
+      )
+      if (settingsRows.length > 0) {
+        const val = settingsRows[0].value_json
+        saved = Array.isArray(val) ? val : (typeof val === 'string' ? JSON.parse(val) : [])
+      }
+    } catch {
+      // ignore
+    }
+
+    const [rows] = await pool.query(`
+      SELECT DISTINCT title FROM client_payments WHERE title LIKE 'Other%' OR title LIKE 'Other -%'
+    `)
+    const fromTxns = rows.map((r) => {
+      const title = r.title || ''
+      if (title.startsWith('Other - Send - ')) return title.slice('Other - Send - '.length).trim()
+      if (title.startsWith('Other - Receive - ')) return title.slice('Other - Receive - '.length).trim()
+      return ''
+    }).filter(Boolean)
+
+    const set = new Set()
+    for (const item of [...saved, ...fromTxns]) {
+      const trimmed = String(item || '').trim()
+      if (trimmed) set.add(trimmed)
+    }
+
+    const list = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+    res.json(list)
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
  * GET /api/other-transactions
  * List all Other transactions
  */
@@ -142,6 +214,10 @@ export const createOtherTransaction = async (req, res, next) => {
     const txnTitle = cleanLedger ? `${baseTxnTitle} - ${cleanLedger}` : baseTxnTitle
 
     await conn.beginTransaction()
+
+    if (cleanLedger) {
+      await persistLedgerName(conn, cleanLedger)
+    }
 
     // 1. Insert transaction into client_payments
     const [result] = await conn.query(`
@@ -275,10 +351,26 @@ export const updateOtherTransaction = async (req, res, next) => {
       : (['UPI', 'Cheque', 'Cash'].includes(paymentMethod) ? paymentMethod : (paymentMethod || existing.payment_method || 'UPI'))
     const cleanNote = note !== undefined ? (note || '').trim() : (existing.reference || '')
 
+    const cleanLedger = ledgerName !== undefined
+      ? (ledgerName || '').trim()
+      : (() => {
+          const rawTitle = existing.title || ''
+          const oldBase = oldIsSend ? 'Other - Send' : 'Other - Receive'
+          if (rawTitle.startsWith(oldBase + ' - ')) {
+            return rawTitle.slice((oldBase + ' - ').length).trim()
+          }
+          return ''
+        })()
+
     const newType = newIsSend ? 'debit' : 'credit'
-    const newTitle = newIsSend ? 'Other - Send' : 'Other - Receive'
+    const baseTxnTitle = newIsSend ? 'Other - Send' : 'Other - Receive'
+    const newTitle = cleanLedger ? `${baseTxnTitle} - ${cleanLedger}` : baseTxnTitle
 
     await conn.beginTransaction()
+
+    if (cleanLedger) {
+      await persistLedgerName(conn, cleanLedger)
+    }
 
     // 1. Reverse old transaction effect on bank_accounts
     if (oldBankId) {

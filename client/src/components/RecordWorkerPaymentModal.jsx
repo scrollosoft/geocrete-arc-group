@@ -15,9 +15,13 @@ const PAYMENT_TYPES = [
 export default function RecordWorkerPaymentModal({ onClose, worker, workers = [], sites = [], onSuccess }) {
   const today = new Date().toISOString().slice(0, 10)
 
+  const assignments = worker?.assignments || []
+  const hasMultipleSites = assignments.length > 1
+  const initialAssignment = hasMultipleSites ? assignments[0] : (assignments[0] || worker)
+
   const [form, setForm] = useState({
-    workerId: worker?._id || worker?.id || '',
-    siteId: worker?.siteId || worker?.site_id || worker?.site?._id || worker?.site?.id || (typeof worker?.site === 'string' ? worker?.site : '') || '',
+    workerId: initialAssignment?._id || initialAssignment?.id || worker?._id || worker?.id || '',
+    siteId: initialAssignment?.siteId || initialAssignment?.site_id || initialAssignment?.site?._id || initialAssignment?.site?.id || (typeof initialAssignment?.site === 'string' ? initialAssignment?.site : '') || '',
     bankAccountId: '',
     amount: '',
     paymentDate: today,
@@ -30,7 +34,9 @@ export default function RecordWorkerPaymentModal({ onClose, worker, workers = []
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState(false)
 
-  const activeWorker = worker || workers.find((w) => String(w._id || w.id) === String(form.workerId)) || null
+  const activeWorker = assignments.length > 0
+    ? (assignments.find((a) => String(a._id || a.id) === String(form.workerId)) || assignments[0])
+    : (worker || workers.find((w) => String(w._id || w.id) === String(form.workerId)) || null)
   const outstanding = Number(activeWorker?.outstanding || 0)
   const selectedBank = banks.find((b) => String(b._id || b.id) === String(form.bankAccountId))
 
@@ -148,6 +154,37 @@ export default function RecordWorkerPaymentModal({ onClose, worker, workers = []
         {/* Form */}
         <form onSubmit={handleSubmit}>
           <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+            {/* Construction Site Selection if Worker is assigned to multiple sites */}
+            {hasMultipleSites && (
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                  Select Construction Site <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <select
+                  value={form.workerId}
+                  onChange={(e) => {
+                    const selId = e.target.value
+                    const selAssignment = assignments.find((a) => String(a._id || a.id) === String(selId))
+                    const selSiteId = selAssignment?.siteId || selAssignment?.site_id || selAssignment?.site?._id || selAssignment?.site?.id || ''
+                    setForm((prev) => ({
+                      ...prev,
+                      workerId: selId,
+                      siteId: selSiteId,
+                    }))
+                    setSaveError('')
+                  }}
+                  style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '14px', color: '#172033', background: '#fff' }}
+                  required
+                >
+                  {assignments.map((a) => (
+                    <option key={a._id || a.id} value={a._id || a.id}>
+                      {a.siteName || a.site?.name || 'Assigned Site'} ({a.trade || 'Worker'}) — Pending: ₹{Number(a.outstanding || 0).toLocaleString('en-IN')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Select Worker (if not preselected) */}
             {!worker && (

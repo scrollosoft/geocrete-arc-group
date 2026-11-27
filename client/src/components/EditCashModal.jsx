@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, Wallet, Trash2, Loader2 } from 'lucide-react'
+import { X, Wallet, Trash2 } from 'lucide-react'
 import { cashService } from '../services/cashService.js'
 
 export default function EditCashModal({
@@ -10,69 +10,34 @@ export default function EditCashModal({
   onCashDeleted,
   showNotification,
 }) {
-  const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
-  const [records, setRecords] = useState([])
-  const [selectedRecordId, setSelectedRecordId] = useState(null)
   const [formData, setFormData] = useState({
     amount: '',
     date: new Date().toISOString().slice(0, 10),
     description: 'Cash in Hand',
   })
 
+  // Populate existing money whenever modal opens
   useEffect(() => {
     if (isOpen) {
       setError('')
       setSubmitting(false)
       setDeleting(false)
-      setLoading(true)
-
-      cashService
-        .getAll()
-        .then((res) => {
-          const list = Array.isArray(res?.records) ? res.records : []
-          setRecords(list)
-          if (list.length > 0) {
-            const first = list[0]
-            setSelectedRecordId(first.id)
-            setFormData({
-              amount: String(first.amount || ''),
-              date: first.date ? first.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
-              description: first.description || 'Cash in Hand',
-            })
-          } else {
-            setSelectedRecordId(null)
-            setFormData({
-              amount: String(cashAccount?.balance || '0'),
-              date: new Date().toISOString().slice(0, 10),
-              description: 'Cash in Hand',
-            })
-          }
-        })
-        .catch((err) => {
-          setError(err.message || 'Failed to load cash data')
-        })
-        .finally(() => {
-          setLoading(false)
-        })
+      const existingMoney =
+        cashAccount?.balance !== undefined && cashAccount?.balance !== null
+          ? String(cashAccount.balance)
+          : ''
+      setFormData({
+        amount: existingMoney,
+        date: new Date().toISOString().slice(0, 10),
+        description: 'Cash in Hand',
+      })
     }
   }, [isOpen, cashAccount])
 
   if (!isOpen) return null
-
-  const handleRecordSelect = (recId) => {
-    setSelectedRecordId(recId)
-    const found = records.find((r) => String(r.id) === String(recId))
-    if (found) {
-      setFormData({
-        amount: String(found.amount || ''),
-        date: found.date ? found.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
-        description: found.description || 'Cash in Hand',
-      })
-    }
-  }
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -85,31 +50,25 @@ export default function EditCashModal({
     setError('')
 
     const numAmount = Number(formData.amount)
-    if (!formData.amount || isNaN(numAmount) || numAmount <= 0) {
-      setError('Please enter a valid cash amount greater than zero.')
+    if (formData.amount === '' || isNaN(numAmount) || numAmount < 0) {
+      setError('Please enter a valid cash amount (0 or positive).')
       return
     }
 
     try {
       setSubmitting(true)
-      if (selectedRecordId) {
-        await cashService.update(selectedRecordId, {
-          amount: numAmount,
-          date: formData.date,
-          description: formData.description.trim() || 'Cash in Hand',
-        })
-      } else {
-        await cashService.add({
-          amount: numAmount,
-          date: formData.date,
-          description: formData.description.trim() || 'Cash in Hand',
-        })
-      }
+      const targetId = cashAccount?._id || cashAccount?.id
+      // Directly update the cash account money value without creating a transaction or "Cash Added" entry
+      await cashService.updateAccount({
+        id: targetId,
+        balance: numAmount,
+        description: formData.description.trim() || 'Cash in Hand',
+      })
 
       if (showNotification) {
         showNotification({
           type: 'success',
-          message: 'Cash in Hand updated successfully!',
+          message: 'Cash account balance updated successfully!',
         })
       }
 
@@ -118,25 +77,27 @@ export default function EditCashModal({
       }
       onClose()
     } catch (err) {
-      setError(err.message || 'Failed to update cash')
+      setError(err.message || 'Failed to update cash balance')
     } finally {
       setSubmitting(false)
     }
   }
 
   const handleDelete = async () => {
-    // Direct delete without browser alert
+    const confirmed = window.confirm('Are you sure you want to delete this cash account?')
+    if (!confirmed) return
+
     try {
       setDeleting(true)
       setError('')
-      if (selectedRecordId) {
-        await cashService.delete(selectedRecordId)
-      }
+      const targetId = cashAccount?._id || cashAccount?.id
+      // Delete the whole cash account
+      await cashService.deleteAccount(targetId)
 
       if (showNotification) {
         showNotification({
           type: 'success',
-          message: 'Cash entry deleted successfully!',
+          message: 'Cash account deleted successfully!',
         })
       }
 
@@ -145,7 +106,7 @@ export default function EditCashModal({
       }
       onClose()
     } catch (err) {
-      setError(err.message || 'Failed to delete cash')
+      setError(err.message || 'Failed to delete cash account')
     } finally {
       setDeleting(false)
     }
@@ -163,7 +124,7 @@ export default function EditCashModal({
             <div>
               <h3 className="modal-title">Edit Cash Account</h3>
               <p className="modal-subtitle">
-                Update available cash in hand or delete cash entry.
+                Update available cash in hand or delete cash account.
               </p>
             </div>
           </div>
@@ -182,92 +143,66 @@ export default function EditCashModal({
           <div className="modal-body">
             {error && <div className="modal-error">{error}</div>}
 
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '32px 0', color: '#70829F' }}>
-                <Loader2 size={24} className="spin" style={{ margin: '0 auto 8px auto' }} />
-                <p style={{ margin: 0, fontSize: '13px' }}>Loading cash details...</p>
+            <div className="modal-form-grid">
+              {/* Account Type (Read-only badge) */}
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Account Type</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value="Cash in Hand (Physical Cash)"
+                  readOnly
+                  style={{ background: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' }}
+                />
               </div>
-            ) : (
-              <div className="modal-form-grid">
-                {/* Entry Selector if multiple records exist */}
-                {records.length > 1 && (
-                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                    <label className="form-label">Select Cash Entry to Edit</label>
-                    <select
-                      className="form-input"
-                      value={selectedRecordId || ''}
-                      onChange={(e) => handleRecordSelect(e.target.value)}
-                    >
-                      {records.map((r, i) => (
-                        <option key={r.id} value={r.id}>
-                          Entry #{i + 1}: ₹{Number(r.amount).toLocaleString('en-IN')} (
-                          {r.date ? r.date.slice(0, 10) : '-'})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
 
-                {/* Account Type (Read-only badge) */}
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label className="form-label">Account Type</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value="Cash in Hand (Physical Cash)"
-                    readOnly
-                    style={{ background: '#F8FAFC', color: '#64748B', cursor: 'not-allowed' }}
-                  />
-                </div>
-
-                {/* Date */}
-                <div className="form-group">
-                  <label className="form-label">
-                    Date <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <input
-                    type="date"
-                    name="date"
-                    className="form-input"
-                    value={formData.date}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-
-                {/* Available Cash Amount */}
-                <div className="form-group">
-                  <label className="form-label">
-                    Cash Amount (₹) <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <input
-                    type="number"
-                    name="amount"
-                    className="form-input"
-                    placeholder="e.g. 500000"
-                    min="1"
-                    step="any"
-                    value={formData.amount}
-                    onChange={handleChange}
-                    required
-                    autoFocus
-                  />
-                </div>
-
-                {/* Description */}
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label className="form-label">Description / Note</label>
-                  <input
-                    type="text"
-                    name="description"
-                    className="form-input"
-                    placeholder="e.g. Cash in Hand, Initial Cash Deposit"
-                    value={formData.description}
-                    onChange={handleChange}
-                  />
-                </div>
+              {/* Date */}
+              <div className="form-group">
+                <label className="form-label">
+                  Date <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <input
+                  type="date"
+                  name="date"
+                  className="form-input"
+                  value={formData.date}
+                  onChange={handleChange}
+                  required
+                />
               </div>
-            )}
+
+              {/* Available Cash Amount */}
+              <div className="form-group">
+                <label className="form-label">
+                  Cash Amount (₹) <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <input
+                  type="number"
+                  name="amount"
+                  className="form-input"
+                  placeholder="e.g. 500000"
+                  min="0"
+                  step="any"
+                  value={formData.amount}
+                  onChange={handleChange}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              {/* Description */}
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Description / Note</label>
+                <input
+                  type="text"
+                  name="description"
+                  className="form-input"
+                  placeholder="e.g. Cash in Hand, Initial Cash Deposit"
+                  value={formData.description}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Modal Footer with Delete on Left and Cancel/Save on Right */}
@@ -275,7 +210,7 @@ export default function EditCashModal({
             <button
               type="button"
               onClick={handleDelete}
-              disabled={submitting || deleting || loading || (!selectedRecordId && records.length === 0)}
+              disabled={submitting || deleting}
               style={{
                 backgroundColor: '#FEF2F2',
                 color: '#DC2626',
@@ -287,10 +222,10 @@ export default function EditCashModal({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                cursor: submitting || deleting || loading ? 'not-allowed' : 'pointer',
+                cursor: submitting || deleting ? 'not-allowed' : 'pointer',
                 transition: 'all 0.15s ease',
               }}
-              title="Delete this cash entry"
+              title="Delete this cash account"
             >
               <Trash2 size={15} />
               <span>{deleting ? 'Deleting...' : 'Delete Cash'}</span>
@@ -308,7 +243,7 @@ export default function EditCashModal({
               <button
                 type="submit"
                 className="btn btn-primary-action"
-                disabled={submitting || deleting || loading}
+                disabled={submitting || deleting}
                 style={{ backgroundColor: '#10B981', borderColor: '#10B981' }}
               >
                 {submitting ? 'Saving...' : 'Save Changes'}
@@ -320,4 +255,3 @@ export default function EditCashModal({
     </div>
   )
 }
-
